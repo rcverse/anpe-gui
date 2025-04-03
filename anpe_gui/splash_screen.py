@@ -4,141 +4,192 @@ Splash screen for the ANPE GUI application.
 
 import os
 import time
-from PyQt6.QtWidgets import QSplashScreen, QApplication
+from PyQt6.QtWidgets import (QSplashScreen, QApplication, QProgressBar, 
+                             QLabel, QVBoxLayout, QWidget)
 from PyQt6.QtGui import QPixmap, QPainter, QColor, QFont
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 
 
 class SplashScreen(QSplashScreen):
     """
-    Custom splash screen with loading animation for the ANPE GUI application.
+    Custom splash screen with banner and progress bar.
     """
+    
+    loading_finished = pyqtSignal()
     
     def __init__(self, banner_path=None):
         """
         Initialize the splash screen.
-        
-        Args:
-            banner_path: Path to the banner image. If None, tries to locate it automatically.
         """
         # Find the banner image
-        if banner_path is None:
-            # Try to locate the banner in standard locations
-            possible_paths = [
-                "pics/banner.png",  # From project root
-                "../pics/banner.png",  # One level up
-                "../../pics/banner.png",  # Two levels up
-                os.path.join(os.path.dirname(__file__), "../pics/banner.png"),  # Relative to this file
-                os.path.join(os.path.dirname(__file__), "../../pics/banner.png"),  # Relative to this file
-                "c:/Users/b162274/Desktop/ANPE_public/pics/banner.png"  # Absolute path (if known)
-            ]
-            
-            for path in possible_paths:
-                if os.path.exists(path):
-                    banner_path = path
-                    break
+        actual_banner_path = self._find_banner(banner_path)
         
-        # Use the banner or create a blank pixmap if not found
-        if banner_path and os.path.exists(banner_path):
-            pixmap = QPixmap(banner_path)
+        # Load or create fallback banner
+        if actual_banner_path:
+            pixmap = QPixmap(actual_banner_path)
+            # Resize if too large, maintaining aspect ratio
+            if pixmap.width() > 400 or pixmap.height() > 200:
+                pixmap = pixmap.scaled(400, 200, Qt.AspectRatioMode.KeepAspectRatio, 
+                                       Qt.TransformationMode.SmoothTransformation)
         else:
-            # Create a fallback banner if image not found
-            pixmap = QPixmap(600, 200)
-            pixmap.fill(QColor("#1a5276"))  # Fill with primary color
-            
-            # Create a painter to add text
-            painter = QPainter(pixmap)
-            painter.setPen(QColor("white"))
-            font = QFont("Arial", 24, QFont.Weight.Bold)
-            painter.setFont(font)
-            painter.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignCenter, "ANPE\nAnother Noun Phrase Extractor")
-            painter.end()
+            pixmap = self._create_fallback_banner()
         
         super().__init__(pixmap)
+        self.pixmap_height = pixmap.height()
+        self.pixmap_width = pixmap.width()
         
-        # Initialization properties
+        # Window flags
         self.setWindowFlags(Qt.WindowType.WindowStaysOnTopHint | 
                            Qt.WindowType.FramelessWindowHint)
-        self.loading_progress = 0
-        self.loading_steps = ["Loading UI...", 
-                             "Initializing extractors...", 
-                             "Setting up components...", 
-                             "Starting application..."]
-        self.current_step = 0
         
+        # Setup content widget below banner
+        self.setup_content_area()
+        
+        # Set fixed size for the entire splash window
+        content_height = self.content_widget.sizeHint().height()
+        total_height = self.pixmap_height + content_height
+        self.setFixedSize(self.pixmap_width, total_height)
+        
+        # Loading state
+        self.loading_progress = 0
+        self.status_label.setText("Initializing...")
+
         # Center the splash screen
+        self._center_on_screen()
+
+    def _find_banner(self, provided_path):
+        """Locate the banner image file."""
+        if provided_path and os.path.exists(provided_path):
+            return provided_path
+            
+        possible_paths = [
+            "pics/banner.png",
+            "../pics/banner.png",
+            os.path.join(os.path.dirname(__file__), "../pics/banner.png"),
+            "c:/Users/b162274/Desktop/ANPE_public/pics/banner.png"
+        ]
+        for path in possible_paths:
+            if os.path.exists(path):
+                return path
+        return None
+
+    def _create_fallback_banner(self):
+        """Create a fallback banner if the image is not found."""
+        pixmap = QPixmap(400, 100) # Smaller fallback size
+        pixmap.fill(QColor("#1a5276")) # Blue background
+        painter = QPainter(pixmap)
+        painter.setPen(QColor("white"))
+        font = QFont("Arial", 16, QFont.Weight.Bold)
+        painter.setFont(font)
+        painter.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignCenter, 
+                         "ANPE\nAnother Noun Phrase Extractor")
+        painter.end()
+        return pixmap
+
+    def setup_content_area(self):
+        """Set up the widget holding progress bar and status text."""
+        self.content_widget = QWidget(self)
+        self.content_layout = QVBoxLayout(self.content_widget)
+        self.content_layout.setContentsMargins(20, 10, 20, 15) # Margins for content area
+        self.content_layout.setSpacing(8)
+
+        # Status label
+        self.status_label = QLabel("Loading...")
+        self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.status_label.setStyleSheet("color: #333;")
+
+        # Progress bar
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(0)
+        self.progress_bar.setTextVisible(False) # No text inside bar
+        self.progress_bar.setFixedHeight(12) # Slimmer progress bar
+        self.progress_bar.setStyleSheet("""
+            QProgressBar {
+                border: 1px solid #bbb;
+                border-radius: 3px;
+                background: #f0f0f0;
+            }
+            QProgressBar::chunk {
+                background-color: #3498db; /* Blue accent */
+                border-radius: 2px;
+            }
+        """)
+        
+        self.content_layout.addWidget(self.status_label)
+        self.content_layout.addWidget(self.progress_bar)
+
+        # Position the content widget below the pixmap
+        self.content_widget.setGeometry(0, self.pixmap_height, 
+                                      self.pixmap_width, self.content_widget.sizeHint().height())
+
+    def _center_on_screen(self):
+        """Center the splash screen on the primary display."""
         screen = QApplication.primaryScreen().geometry()
         self.move(screen.center() - self.rect().center())
-    
+
+    # Override drawContents to prevent default drawing over our content widget
     def drawContents(self, painter):
+        pass # We handle drawing via the content widget
+
+    def showMessage(self, message, alignment=Qt.AlignmentFlag.AlignLeft, color=QColor("black")):
+        """Display a message (overrides QSplashScreen method)."""
+        # Use our custom label instead
+        self.status_label.setText(message)
+        # self.repaint() # Not needed as label updates automatically
+
+    def set_progress(self, value, status_message=None):
+        """Update the progress bar and status message."""
+        self.loading_progress = value
+        self.progress_bar.setValue(value)
+        if status_message:
+            self.status_label.setText(status_message)
+        QApplication.processEvents() # Ensure UI updates immediately
+
+    def start_loading_animation(self, app):
         """
-        Draw the splash screen contents.
-        
-        Args:
-            painter: QPainter to use for drawing
-        """
-        # Draw the base pixmap
-        super().drawContents(painter)
-        
-        # Draw loading progress
-        message = self.loading_steps[min(self.current_step, len(self.loading_steps) - 1)]
-        
-        # Draw loading bar background
-        bar_width = self.width() - 40
-        bar_height = 20
-        bar_x = 20
-        bar_y = self.height() - 40
-        
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QColor(0, 0, 0, 50))  # Translucent black
-        painter.drawRoundedRect(bar_x, bar_y, bar_width, bar_height, 5, 5)
-        
-        # Draw loading bar progress
-        progress_width = int(bar_width * (self.loading_progress / 100))
-        painter.setBrush(QColor("#3498db"))  # Accent color
-        painter.drawRoundedRect(bar_x, bar_y, progress_width, bar_height, 5, 5)
-        
-        # Draw loading text
-        painter.setPen(QColor("white"))
-        font = QFont("Arial", 10)
-        painter.setFont(font)
-        painter.drawText(bar_x, bar_y - 10, message)
-        painter.drawText(bar_x + bar_width - 40, bar_y + bar_height + 15, 
-                        f"{self.loading_progress}%")
-    
-    def start_loading_animation(self, app, main_window_callback):
-        """
-        Start the loading animation, then show the main window when complete.
-        
-        Args:
-            app: QApplication instance
-            main_window_callback: Function to create and show the main window
+        Simulate loading process and emit signal when done.
+        (Callback is removed, uses signal instead)
         """
         self.show()
         app.processEvents()
         
-        # Define animation update function
-        def update_progress():
-            # Update progress
-            if self.loading_progress < 100:
-                step_increment = 100 / len(self.loading_steps)
-                
-                # Advance to next step if needed
-                if self.loading_progress >= (self.current_step + 1) * step_increment:
-                    self.current_step += 1
-                
-                # Regular increment
-                self.loading_progress += 1
-                self.repaint()
-                app.processEvents()
-                
-                # Continue timer
-                QTimer.singleShot(30, update_progress)
+        loading_steps = [
+            (20, "Loading UI..."),
+            (40, "Initializing core components..."),
+            (60, "Setting up ANPE extractor..."),
+            (80, "Finalizing setup..."),
+            (100, "Starting application...")
+        ]
+
+        def update_step(step_index=0):
+            if step_index < len(loading_steps):
+                progress, message = loading_steps[step_index]
+                self.set_progress(progress, message)
+                # Simulate work for this step
+                QTimer.singleShot(400, lambda: update_step(step_index + 1))
             else:
-                # Open main window when loading completes
-                self.finish(main_window_callback())
+                # Loading finished
+                self.loading_finished.emit()
+                self.close()
         
-        # Start the progress updates
-        QTimer.singleShot(200, update_progress)
+        # Start the first step
+        QTimer.singleShot(200, lambda: update_step(0))
         
-        return self 
+        # We don't return self anymore as it's not needed for chaining the old way
+        # return self
+
+# Example of how to use it in app.py (if needed)
+# if __name__ == '__main__':
+#     app = QApplication(sys.argv)
+#     splash = SplashScreen()
+#     
+#     def create_main():
+#         # Replace with actual MainWindow creation
+#         main_win = QLabel("Main Window Placeholder") 
+#         main_win.resize(800, 600)
+#         main_win.show()
+#         return main_win
+#         
+#     splash.start_loading_animation(app, create_main)
+#     sys.exit(app.exec()) 

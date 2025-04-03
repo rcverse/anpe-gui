@@ -1,190 +1,433 @@
 """
-Theme and styling for the ANPE GUI application.
+Theme constants and stylesheet definitions for the ANPE GUI application.
+Uses a cohesive blue theme.
 """
-from PyQt6.QtGui import QColor, QPalette
-from PyQt6.QtCore import Qt
 
-# Color scheme constants
-PRIMARY_COLOR = "#1a5276"      # Dark blue
-SECONDARY_COLOR = "#2980b9"    # Medium blue
-ACCENT_COLOR = "#3498db"       # Light blue
-BACKGROUND_COLOR = "#f5f9fc"   # Very light blue
-TEXT_COLOR = "#2c3e50"         # Dark slate
-SUCCESS_COLOR = "#27ae60"      # Green
-WARNING_COLOR = "#f39c12"      # Orange
-ERROR_COLOR = "#c0392b"        # Red
+# --- Color Palette (Simplified Grey/White Style) --- 
+PRIMARY_COLOR = "#005A9C"     # Dark blue for key elements
+SECONDARY_COLOR = "#003F7A"   # Darker blue accent
+ACCENT_COLOR = "#00AEEF"     # Bright accent (e.g., progress bar chunk)
+BACKGROUND_COLOR = "#FFFFFF" # White background
+TEXT_COLOR = "#212529"       # Standard dark text
+HOVER_COLOR = "#004C8C"    
+PRESSED_COLOR = "#003366"   
+DISABLED_COLOR = "#E0E0E0"   # Light grey for disabled/inactive elements
+BORDER_COLOR = "#CCCCCC"    # Standard grey border
+ERROR_COLOR = "#DC3545"       # Red for errors
+SUCCESS_COLOR = "#28A745"     # Green for success
+WARNING_COLOR = "#FFC107"     # Yellow for warnings
+INFO_COLOR = "#17A2B8"        # Teal for info
 
-# Application stylesheet
-STYLESHEET = f"""
-QMainWindow, QDialog {{
-    background-color: {BACKGROUND_COLOR};
-}}
 
-QTabWidget::pane {{
-    border: 1px solid #d0d0d0;
-    background-color: white;
-}}
+# --- Base Stylesheet --- 
+def get_stylesheet():
+    return f"""
+    /* General Styling */
+    QWidget {{
+        background-color: {BACKGROUND_COLOR};
+        color: {TEXT_COLOR};
+        font-family: Segoe UI, Arial, sans-serif; 
+        font-size: 9pt; /* Slightly smaller base font */
+    }}
 
-QTabBar::tab {{
-    background-color: #e0e0e0;
-    border: 1px solid #c0c0c0;
-    border-bottom: none;
-    padding: 8px 15px;
-    min-width: 100px;
-    border-top-left-radius: 4px;
-    border-top-right-radius: 4px;
-    margin-right: 2px;
-}}
+    QMainWindow {{
+        background-color: {BACKGROUND_COLOR};
+    }}
 
-QTabBar::tab:selected {{
-    background-color: {ACCENT_COLOR};
-    color: white;
-}}
+    QFrame[frameShape="4"], /* HLine */
+    QFrame[frameShape="5"] /* VLine */
+    {{
+        background-color: {BORDER_COLOR};
+        border: none;
+    }}
 
-QTabBar::tab:hover:!selected {{
-    background-color: #e8e8e8;
-}}
+    /* Headings and Labels */
+    QLabel {{
+        background-color: transparent; /* Ensure labels don't obscure background */
+        padding: 2px;
+    }}
+    QLabel[heading="true"] {{
+        font-size: 18pt;
+        font-weight: bold;
+        color: {PRIMARY_COLOR};
+        padding-bottom: 5px;
+    }}
+     QLabel[subheading="true"] {{
+        font-size: 12pt;
+        font-weight: bold;
+        color: {SECONDARY_COLOR};
+        padding-top: 5px;
+        padding-bottom: 3px;
+    }}
 
-QPushButton {{
-    background-color: {SECONDARY_COLOR};
-    color: white;
-    border: none;
-    border-radius: 4px;
-    padding: 6px 12px;
-    min-height: 25px;
-}}
+    /* Buttons */
+    QPushButton {{
+        background-color: {PRIMARY_COLOR};
+        color: white;
+        border: 1px solid {SECONDARY_COLOR};
+        padding: 5px 10px; /* Reduced padding */
+        border-radius: 3px; /* Slightly smaller radius */
+        min-width: 70px; /* Adjust min width */
+    }}
+    QPushButton:hover {{
+        background-color: {HOVER_COLOR};
+        border: 1px solid {PRIMARY_COLOR};
+    }}
+    QPushButton:pressed {{
+        background-color: {PRESSED_COLOR};
+    }}
+    QPushButton:disabled {{
+        background-color: {DISABLED_COLOR};
+        color: #888888;
+        border: 1px solid #AAAAAA;
+    }}
+    QPushButton[checkable="true"]:checked {{
+        background-color: {SECONDARY_COLOR}; /* Darker blue when checked */
+        color: white; /* Ensure text remains white */
+        border: 1px solid {PRIMARY_COLOR};
+        font-weight: bold; /* Make text bold when checked */
+    }}
+    QPushButton[checkable="true"]:!checked {{
+        background-color: {BACKGROUND_COLOR}; /* Match background when unchecked */
+        color: {PRIMARY_COLOR}; /* Use primary text color */
+        border: 1px solid {BORDER_COLOR}; /* Standard border */
+    }}
+    QPushButton[checkable="true"]:!checked:hover {{
+        background-color: #E8E8E8; /* Light grey hover for unchecked */
+        border: 1px solid {SECONDARY_COLOR};
+    }}
 
-QPushButton:hover {{
-    background-color: {ACCENT_COLOR};
-}}
+    /* Specific Buttons (e.g., for Add/Remove) */
+    FileListWidget QPushButton,
+    StructureFilterWidget QPushButton {{
+        padding: 5px 10px; /* Slightly smaller padding */
+        min-width: 60px;
+    }}
 
-QPushButton:pressed {{
-    background-color: {PRIMARY_COLOR};
-}}
+    /* Input Fields */
+    QLineEdit, QTextEdit, QSpinBox {{
+        background-color: white;
+        border: 1px solid {BORDER_COLOR};
+        padding: 4px;
+        border-radius: 2px;
+        min-height: 18px; /* Ensure minimum height */
+    }}
+    QLineEdit:focus, QTextEdit:focus, QSpinBox:focus {{
+        border: 1px solid {PRIMARY_COLOR};
+    }}
+    QLineEdit:disabled, QTextEdit:disabled, QSpinBox:disabled {{
+        background-color: #EEEEEE;
+        color: #777777;
+    }}
+    /* SpinBox Specific Styling */
+    QSpinBox {{
+        padding: 2px;
+        border: 1px solid {BORDER_COLOR};
+        border-radius: 3px;
+        min-width: 60px; /* Ensure some minimum width */
+    }}
+    QSpinBox::up-button {{
+        subcontrol-origin: border;
+        subcontrol-position: top right; 
+        width: 16px; 
+        border-left: 1px solid {BORDER_COLOR};
+        border-bottom: 1px solid {BORDER_COLOR};
+        border-top-right-radius: 3px; 
+        background-color: #E0E0E0; /* Light gray background */
+    }}
+    QSpinBox::up-button:hover {{
+        background-color: #D0D0D0;
+    }}
+    QSpinBox::up-arrow {{
+        image: url(:/qt-project.org/styles/commonstyle/images/standardbutton-up-16.png); /* Use standard Qt arrow */
+        width: 9px;
+        height: 9px;
+    }}
+    QSpinBox::down-button {{
+        subcontrol-origin: border;
+        subcontrol-position: bottom right;
+        width: 16px;
+        border-left: 1px solid {BORDER_COLOR};
+        border-top: 1px solid {BORDER_COLOR};
+        border-bottom-right-radius: 3px;
+        background-color: #E0E0E0;
+    }}
+    QSpinBox::down-button:hover {{
+        background-color: #D0D0D0;
+    }}
+    QSpinBox::down-arrow {{
+        image: url(:/qt-project.org/styles/commonstyle/images/standardbutton-down-16.png); /* Use standard Qt arrow */
+        width: 9px;
+        height: 9px;
+    }}
 
-QPushButton:disabled {{
-    background-color: #cccccc;
-    color: #666666;
-}}
+    /* Checkboxes and Radio Buttons */
+    QCheckBox, QRadioButton {{ spacing: 4px; }}
+    QCheckBox::indicator, QRadioButton::indicator {{ width: 14px; height: 14px; }}
+    QCheckBox::indicator:unchecked {{
+        border: 1px solid {BORDER_COLOR};
+        background-color: white;
+        border-radius: 2px;
+    }}
+    /* Remove custom checked style to allow native rendering with checkmark */
+    /* QCheckBox::indicator:checked {{
+        border: 2px solid {PRIMARY_COLOR}; 
+        background-color: transparent; 
+        border-radius: 2px; 
+    }} */
+     QCheckBox::indicator:disabled {{
+        border: 1px solid #AAAAAA;
+        background-color: #DDDDDD;
+    }}
+     QRadioButton::indicator:unchecked {{
+        border: 1px solid {SECONDARY_COLOR};
+        background-color: white;
+        border-radius: 8px; /* Circle */
+    }}
+    QRadioButton::indicator:checked {{
+        background-color: {PRIMARY_COLOR};
+        border: 1px solid {SECONDARY_COLOR};
+        image: url(icons/radio_dot_white.svg); /* Needs an icon */
+        border-radius: 8px;
+    }}
+    QRadioButton::indicator:disabled {{
+        border: 1px solid #AAAAAA;
+        background-color: #DDDDDD;
+        border-radius: 8px;
+    }}
 
-QLineEdit, QTextEdit, QSpinBox, QComboBox {{
-    border: 1px solid #c0c0c0;
-    border-radius: 3px;
-    padding: 4px;
-    background-color: white;
-}}
+    /* Group Boxes */
+    QGroupBox {{
+        border: 1px solid {BORDER_COLOR};
+        border-radius: 4px;
+        margin-top: 8px; /* Further reduced margin */
+        padding: 8px; /* Reduced padding */
+    }}
+    QGroupBox::title {{
+        subcontrol-origin: margin;
+        subcontrol-position: top left;
+        padding: 0 4px 0 4px; /* Reduced padding */
+        left: 8px; 
+        background-color: {BACKGROUND_COLOR}; 
+        color: {PRIMARY_COLOR};
+        font-weight: bold;
+    }}
+    /* Remove custom checked style for groupbox indicator */
+    /* QGroupBox[checkable="true"]::indicator:checked {{
+        border: 2px solid {PRIMARY_COLOR}; 
+        background-color: transparent; 
+        border-radius: 2px; 
+    }} */
+    # Keep unchecked style consistent if needed
+    QGroupBox[checkable="true"]::indicator:unchecked {{
+         border: 1px solid {BORDER_COLOR};
+         background-color: white;
+         border-radius: 2px;
+         margin-right: 3px; /* Align with checkbox */
+    }}
 
-QLineEdit:focus, QTextEdit:focus {{
-    border: 1px solid {ACCENT_COLOR};
-}}
+    /* Combo Boxes */
+    QComboBox {{
+        border: 1px solid {BORDER_COLOR};
+        padding: 5px;
+        background-color: white;
+        min-width: 100px;
+        border-radius: 3px;
+    }}
+    QComboBox:disabled {{
+        background-color: #EEEEEE;
+        color: #777777;
+    }}
+    QComboBox::drop-down {{
+        subcontrol-origin: padding;
+        subcontrol-position: top right;
+        width: 20px;
+        border-left-width: 1px;
+        border-left-color: {BORDER_COLOR};
+        border-left-style: solid;
+        border-top-right-radius: 3px;
+        border-bottom-right-radius: 3px;
+        background-color: {PRIMARY_COLOR};
+    }}
+    QComboBox::down-arrow {{
+        image: url(icons/arrow_down_white.svg); /* Needs an icon */
+        width: 12px;
+        height: 12px;
+    }}
+    QComboBox QAbstractItemView {{ /* Style for the dropdown list */
+        border: 1px solid {BORDER_COLOR};
+        background-color: white;
+        selection-background-color: {PRIMARY_COLOR};
+        selection-color: white;
+        padding: 2px;
+    }}
 
-QGroupBox {{
-    border: 1px solid #d0d0d0;
-    border-radius: 5px;
-    margin-top: 20px;
-    font-weight: bold;
-    background-color: white;
-}}
+    /* List Widgets */
+    QListWidget {{
+        border: 1px solid {BORDER_COLOR};
+        padding: 3px;
+        background-color: white;
+        border-radius: 3px;
+    }}
+    QListWidget::item {{
+        padding: 4px;
+    }}
+    QListWidget::item:selected {{
+        background-color: {PRIMARY_COLOR};
+        color: white;
+    }}
+    QListWidget::item:hover {{
+        background-color: {HOVER_COLOR}30; /* Light hover background */
+    }}
 
-QGroupBox::title {{
-    subcontrol-origin: margin;
-    subcontrol-position: top left;
-    padding: 0 5px;
-    background-color: white;
-    color: {PRIMARY_COLOR};
-}}
+    /* Tab Bar Styling */
+    QTabWidget::pane {{ /* The container for the tab pages */
+        border-top: 1px solid {BORDER_COLOR};
+        margin-top: -1px; /* Overlap with tab bar border */
+    }}
+    QTabBar {{
+        qproperty-drawBase: 0; /* Turn off the default tab bar base */
+        border-bottom: 1px solid {BORDER_COLOR}; /* Add border below tabs */
+        margin-left: 5px; /* Space before first tab */
+    }}
+    QTabBar::tab {{
+        background: {DISABLED_COLOR}; /* Background for unselected tabs */
+        color: #666666; /* Text color for unselected tabs */
+        border: 1px solid {BORDER_COLOR};
+        border-bottom: none; /* No border at the bottom */
+        border-top-left-radius: 4px;
+        border-top-right-radius: 4px;
+        padding: 8px 15px; /* Increased padding */
+        min-height: 25px; /* Ensure minimum height */
+        margin-right: 2px; /* Space between tabs */
+    }}
+    QTabBar::tab:hover {{
+        background: #E0E0E0; /* Lighter background on hover */
+        color: #333333;
+    }}
+    QTabBar::tab:selected {{
+        background: {BACKGROUND_COLOR}; /* Match window background for selected */
+        color: {PRIMARY_COLOR}; /* Primary color text for selected */
+        border: 1px solid {BORDER_COLOR};
+        border-bottom: 1px solid {BACKGROUND_COLOR}; /* Overlap pane border */
+        margin-bottom: -1px; /* Pull tab down slightly */
+    }}
+    /* Style for tabs not selected but in a selected window */
+    QTabBar::tab:!selected {{
+        margin-top: 2px; /* Push non-selected tabs down slightly */
+    }}
 
-QLabel {{
-    color: {TEXT_COLOR};
-}}
+    /* Scroll Bars */
+    QScrollBar:vertical {{
+        border: 1px solid {BORDER_COLOR};
+        background: {BACKGROUND_COLOR}; 
+        width: 10px; 
+        margin: 10px 0 10px 0; 
+    }}
+    QScrollBar::handle:vertical {{
+        background: #A0A0A0; 
+        min-height: 20px;
+        border-radius: 5px;
+    }}
+    QScrollBar::handle:vertical:hover {{
+        background: #808080; 
+    }}
+    QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+        border: none;
+        background: none; 
+        height: 10px;
+    }}
+    /* QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{ background: none; }} */
 
-QLabel[heading="true"] {{
-    font-size: 14pt;
-    font-weight: bold;
-    color: {PRIMARY_COLOR};
-    margin-bottom: 10px;
-}}
+    QScrollBar:horizontal {{
+        border: 1px solid {BORDER_COLOR};
+        background: {BACKGROUND_COLOR};
+        height: 10px;
+        margin: 0 10px 0 10px;
+    }}
+    QScrollBar::handle:horizontal {{
+        background: #A0A0A0;
+        min-width: 20px;
+        border-radius: 5px;
+    }}
+    QScrollBar::handle:horizontal:hover {{
+        background: #808080;
+    }}
+    QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
+        border: none;
+        background: none;
+        width: 10px;
+    }}
+    /* QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {{ background: none; }} */
 
-QLabel[subheading="true"] {{
-    font-size: 12pt;
-    color: {SECONDARY_COLOR};
-    margin-top: 5px;
-    margin-bottom: 5px;
-}}
+    /* Splitter */
+    QSplitter::handle {{
+        background-color: {BORDER_COLOR};
+        height: 4px; 
+    }}
+    QSplitter::handle:horizontal {{
+        width: 4px;
+        height: 1px; 
+    }}
+     QSplitter::handle:vertical {{
+        height: 4px;
+        width: 1px; 
+    }}
+    QSplitter::handle:hover {{
+        background-color: {SECONDARY_COLOR};
+    }}
 
-QCheckBox::indicator {{
-    width: 16px;
-    height: 16px;
-    border: 1px solid #c0c0c0;
-    border-radius: 3px;
-}}
+    /* Progress Bar */
+    QProgressBar {{
+        border: 1px solid {BORDER_COLOR};
+        border-radius: 5px;
+        text-align: center;
+        background-color: white;
+        height: 18px;
+    }}
+    QProgressBar::chunk {{
+        background-color: {PRIMARY_COLOR};
+        border-radius: 5px;
+        width: 10px; /* Width of the moving chunk for indeterminate */
+        margin: 1px;
+    }}
 
-QCheckBox::indicator:checked {{
-    background-color: {ACCENT_COLOR};
-    border: 1px solid {ACCENT_COLOR};
-    image: url(:/images/checkmark.png);  /* Would need to add this image */
-}}
+    /* Status Bar */
+    StatusBar QWidget {{
+        background-color: {SECONDARY_COLOR}; /* Darker background for status bar */
+        color: white;
+    }}
+    StatusBar QLabel {{
+        color: white;
+        padding: 2px 5px;
+    }}
+    StatusBar QProgressBar {{
+        max-height: 14px;
+        margin: 2px;
+    }}
+    StatusBar QProgressBar::chunk {{
+        background-color: {ACCENT_COLOR};
+    }}
 
-QProgressBar {{
-    border: 1px solid #c0c0c0;
-    border-radius: 3px;
-    background-color: white;
-    text-align: center;
-}}
+    /* Enhanced Log Panel */
+    EnhancedLogPanel QTextEdit {{
+        background-color: #FEFEFE; /* Slightly off-white */
+        font-family: Consolas, monospace;
+        font-size: 9pt;
+    }}
+    EnhancedLogPanel QPushButton {{
+        min-width: 40px; /* Smaller buttons for log panel */
+        padding: 3px 8px;
+    }}
+    EnhancedLogPanel QComboBox {{
+         min-width: 60px;
+         padding: 3px 5px;
+    }}
 
-QProgressBar::chunk {{
-    background-color: {ACCENT_COLOR};
-    width: 10px;
-}}
+    /* Tooltip Styling (Optional but nice) */
+    # ... (Tooltip styles if any) ...
 
-/* Special styling for step indicators */
-QFrame#StepIndicator {{
-    background-color: #e0e0e0;
-    border-radius: 15px;
-    padding: 10px;
-}}
-
-QFrame#StepIndicator[active="true"] {{
-    background-color: {ACCENT_COLOR};
-}}
-
-QFrame#StepIndicator QLabel {{
-    color: {TEXT_COLOR};
-}}
-
-QFrame#StepIndicator[active="true"] QLabel {{
-    color: white;
-    font-weight: bold;
-}}
-
-/* Splitter styling */
-QSplitter::handle {{
-    background-color: #d0d0d0;
-}}
-
-QSplitter::handle:horizontal {{
-    width: 2px;
-}}
-
-QSplitter::handle:vertical {{
-    height: 2px;
-}}
-
-/* File list styling */
-QListView {{
-    border: 1px solid #c0c0c0;
-    background-color: white;
-}}
-
-QListView::item {{
-    padding: 4px;
-}}
-
-QListView::item:selected {{
-    background-color: {ACCENT_COLOR};
-    color: white;
-}}
-"""
+    """
 
 def apply_theme(app):
     """
@@ -194,7 +437,7 @@ def apply_theme(app):
         app: QApplication instance
     """
     # Set the application style sheet
-    app.setStyleSheet(STYLESHEET)
+    app.setStyleSheet(get_stylesheet())
     
     # Set default palette colors
     palette = app.palette()
