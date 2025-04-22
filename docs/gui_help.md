@@ -3,52 +3,47 @@
 Welcome to the ANPE (Another Noun Phrase Extractor) GUI! This application provides a user-friendly interface to the core ANPE library, allowing you to easily extract noun phrases from text without needing to write code.
 
 ## Starting the app
-When you start the app, ANPE will automatically check for required language models in the background. During this initialization phase:
+When you start the app, ANPE will automatically check for required language models in the background. 
 
-- The "Process" button will be temporarily disabled
-- The status bar at the bottom will show "Checking ANPE models..."
-- Required models include spaCy English model, Benepar parsing model, and NLTK tokenizer data
+If any essential model *types* are missing, the status bar will display a warning (e.g., "Missing required models: spaCy model(s), NLTK data. Use 'Manage Models' (⚙️ icon) to install.") and the "Process" button will remain disabled.
 
-If all required models are present, the status will change to "ANPE Ready" and the "Process" button will become enabled, allowing you to begin extraction.
-
-If any models are missing, a *setup wizard* will appear to guide you through downloading and installing the required components. This one-time setup requires an internet connection and approximately 120MB of disk space. You can also access model management later via the <button>Settings</button> icon in the top-right corner.
+Model installation and management are handled through the <button>Settings</button> dialog, accessible via the gear icon (<q>⚙️</q>) in the top-right corner. This dialog requires an internet connection for downloading models.
 
 ## Usage
-The application is organized into two main tabs: <option>Input</option> and <option>Output</option>.
+The application is organized into two main tabs: <option>Input</option> and <option>Output</option>. A toggleable log panel is also available at the bottom, showing detailed processing messages.
 
 ### Input Tab
 This is where you prepare your text and configure the extraction process.
 
 #### Input Options
-You can choose between two ways to provide text:
+You can choose between two ways to provide text using the toggle buttons at the top:
 
 1.  **File Input**
-This tab allows you to batch process multiple files or simply process single file.
-    *   The <button>Add Files</button> button: Select individual <format>.txt</format> files
-    *   The <button>Add Directory</button> button: Add all <format>.txt</format> files within a selected folder
-    *   The <button>Remove/Clear All</button> options: Manage the list of files to process
+    This mode allows you to batch process multiple files or simply process a single file.
+    *   <button>Add Files</button>: Select individual <format>.txt</format> files.
+    *   <button>Add Directory</button>: Add all <format>.txt</format> files within a selected folder.
+    *   <button>Remove Selected</button> / <button>Clear All</button>: Manage the list of files to process.
 
 2.  **Text Input**
-This tab allows you to type text directly into the editor for quick analysis.
-    *   The <button>Paste</button> button: Insert text from your clipboard
-    *   The <button>Clear</button> button: Empty the text input area
-   
+    This mode allows you to type or paste text directly into the editor for quick analysis.
+    *   <button>Paste</button>: Insert text from your clipboard.
+    *   <button>Clear</button>: Empty the text input area.
 
 #### Configuration
-Fine-tune the extraction process:
+Fine-tune the extraction process using the options on the right side:
 
 *   **General Settings**:
-    *   The <option>Include nested phrases</option> option: Captures noun phrases embedded within larger ones
-    *   The <option>Add metadata to output</option> option: Includes length and structures information for each phrase
-    *   The <option>Do not treat newlines as sentence boundaries</option> option: Controls how line breaks are interpreted Check this box will ignore line breaker as sentence boundaries; suitable when processing files with irregular line breaking.
+    *   <option>Include nested phrases</option>: Captures noun phrases embedded within larger ones.
+    *   <option>Add metadata to output</option>: Includes length and structure information for each phrase.
+    *   <option>Do not treat newlines as sentence boundaries</option>: Controls how line breaks are interpreted. Check this box to ignore line breaks as sentence boundaries; suitable when processing files with irregular line breaking.
 
 *   **Filtering Options**:
-    *   The <option>Min Length</option> and <option>Max Length</option> settings: Specify the word count limits for phrases
-    *   The <option>Do not accept Pronouns</option> option: Controls whether single-word pronouns are included
+    *   <option>Min Length</option> and <option>Max Length</option>: Specify the word count limits for phrases.
+    *   <option>Do not accept Pronouns</option>: Controls whether single-word pronouns are included.
 
 *   **Structure Filtering**:
-    *   Enable the main toggle to activate structure filtering
-    *   Select specific structures from the list
+    *   Enable the main toggle (<option>Filter by Structure</option>) to activate structure filtering.
+    *   Select specific structures from the list to *include* in the output. Only phrases matching at least one selected structure will be kept.
         *   **<option>Determiner</option>**: Phrases starting with articles or determiners (e.g., 'the cat', 'a house').
         *   **<option>Adjectival Modifier</option>**: Phrases containing adjectives that describe the noun (e.g., 'red car', 'beautiful day').
         *   **<option>Prepositional Modifier</option>**: Phrases where a prepositional phrase follows the noun (e.g., 'book on the table').
@@ -61,60 +56,84 @@ Fine-tune the extraction process:
         *   **<option>Reduced Relative Clause</option>**: A relative clause modifying a noun, but without the relative pronoun (e.g., 'the book *written by him*').
         *   **<option>Nonfinite Complement</option>**: A phrase (often starting with 'to' or ending in '-ing') that completes the meaning of a noun (e.g., 'the *decision to leave*').
         *   **<option>Finite Complement</option>**: A full clause (often starting with 'that' or 'whether') that completes the meaning of a noun (e.g., 'the *idea that he left*').
-        *   **<option>Pronoun</option>**: Phrases consisting only of a pronoun (e.g., 'he', 'it', 'they').
+        *   **<option>Pronoun</option>**: Phrases consisting only of a pronoun (e.g., 'he', 'it', 'they'). Note: Use the "Do not accept Pronouns" filter option to exclude these if needed, regardless of structure filtering.
         *   **<option>Standalone Noun</option>**: Phrases consisting only of a single noun or proper noun (e.g., 'book', 'John').
         *   **<option>Others</option>**: Any other identified noun phrase structures not fitting the above categories.
 
 #### Control Buttons
-*   The <button>Process</button> button: Starts the noun phrase extraction based on your input and configuration. Processing runs in the background to keep the GUI responsive.
-*   The <button>Reset</button> button: Clears all input fields, file lists, and configuration settings
-*   The <button>Default</button> button: Reverts settings and filtering options to defaults
+Located below the configuration area:
+*   <button>Process</button>: Starts the noun phrase extraction based on your input and configuration. Processing runs in the background to keep the GUI responsive. The status bar and log panel show progress.
+*   <button>Reset</button>: Clears all input fields (text area, file list) and resets configuration settings to their defaults.
+*   <button>Default</button>: Reverts only the filtering options (lengths, structure selections) to their defaults, leaving input untouched.
 
 ### Output Tab
 This tab displays the results of the extraction process.
 
 #### Viewing Results
-*   The main area shows the extracted noun phrases formatted according to your settings
-*   If processing multiple files, a dropdown menu appears above the results
-*   If nested phrases were included, the display will by default collapsed all nested NP; click on the NP entry to show the nested NP.
+*   The main area shows the extracted noun phrases, formatted according to your settings.
+*   If processing multiple files (batch mode), a dropdown menu appears above the results area, allowing you to select which file's results to view.
+*   If nested phrases were included (<option>Include nested phrases</option> was checked), the display will show the hierarchical structure. By default, nested phrases might be collapsed; click on a parent phrase entry to expand or collapse its children.
 
 #### Detached Results Viewer
-*   Click the <button>⇱</button> button in the upper-right corner of the results to open the results in a detached window
-*   The detached window provides a larger, resizable view that can be moved independently
-*   All functionality from the main view is preserved, including:
-    *   Search filtering to find specific phrases
-    *   Sorting options (by order, length, and structure)
-    *   Expanding/collapsing nested phrases
+*   Click the <button>⇱</button> button (Detach) in the upper-right corner of the results area to open the results in a separate, resizable window.
+*   This detached window provides a larger view that can be moved independently.
+*   All functionality from the main view is preserved:
+    *   Search filter box to quickly find specific phrases.
+    *   Sorting options (by appearance order, length, or structure).
+    *   Expanding/collapsing nested phrases.
 *   Keyboard shortcuts in the detached window:
-    *   <kbd>Ctrl+E</kbd>: Expand all items
-    *   <kbd>Ctrl+C</kbd>: Collapse all items
-    *   <kbd>Ctrl+F</kbd>: Focus the search filter
+    *   <kbd>Ctrl+E</kbd>: Expand all items.
+    *   <kbd>Ctrl+C</kbd>: Collapse all items.
+    *   <kbd>Ctrl+F</kbd>: Focus the search filter input box.
 
 #### Exporting Results
-*   Click the <button>Export</button> button to save the results; if there are multiple files, it will export all results automatically.
-*   Choose an output format:
-    *   <format>TXT</format>: Human-readable, plain text list
-    *   <format>CSV</format>: Comma-Separated Values for spreadsheets
-    *   <format>JSON</format>: Best for programmatic use, preserving hierarchy
-*   Select a destination directory to save the file(s)
+*   Click the <button>Export</button> button (located below the results area) to save the currently displayed results (or all results in batch mode).
+*   **Export Options**:
+    *   Choose an output format: <format>TXT</format>, <format>CSV</format>, or <format>JSON</format>.
+    *   Optionally, enter a prefix to add to the beginning of the exported filename(s).
+    *   Select a destination directory to save the file(s).
+*   **Batch Export**: If you processed multiple files, clicking Export saves results for *all* processed files, each to its own output file in the chosen directory and format.
+*   **Single Export**: If you processed text input or a single file, one output file is saved.
 
 #### Filename Structure
-Exported files are named automatically to ensure uniqueness and provide context:
-*   **Batch Export:**
-    `[prefix_]original_filename_anpe_results_YYYYMMDD_HHMMSS.format`
-*   **Single Export:**
-    `[prefix_]anpe_text_results_YYYYMMDD_HHMMSS.format`
+Exported files are named automatically:
+*   **Batch Export File:** `[prefix_]original_filename_anpe_results_YYYYMMDD_HHMMSS.format`
+*   **Text Input Export:** `[prefix_]anpe_text_results_YYYYMMDD_HHMMSS.format`
+*   **Single File Export:** `[prefix_]original_filename_anpe_results_YYYYMMDD_HHMMSS.format`
 
 Where:
-*   `[prefix_]` is the optional prefix you enter in the Export Options.
+*   `[prefix_]` is the optional prefix you entered.
 *   `original_filename` is the name of the input file (without extension).
 *   `YYYYMMDD_HHMMSS` is the timestamp of the export.
-*   `format` is the selected format (txt, csv, json).
+*   `format` is the selected format extension (txt, csv, json).
 
+### Status Bar & Log Panel
+*   **Status Bar**: Located at the very bottom of the window. It displays the current state of the application (e.g., "ANPE Ready", "Processing...", "Export Complete", error messages). Click on the status message to toggle the Log Panel.
+*   **Log Panel**: A toggleable panel appearing above the status bar. It shows more detailed logs about processing steps, model loading, potential warnings, and errors. Useful for troubleshooting.
 
+### Settings Dialog (⚙️ Icon)
+Click the gear icon (<q>⚙️</q>) in the top-right corner to open the Settings dialog. This allows you to manage models, update the core library, and view application information.
+
+#### Models Page
+*   **Usage Preference**: If you have multiple spaCy or Benepar models installed, you can select which one ANPE should use by default.
+*   **Model Status & Management**:
+    *   View the installation status of different spaCy models (e.g., `en_core_web_sm`, `md`, `lg`, `trf`), Benepar models (`benepar_en3`, `benepar_en3_large`), and NLTK data (`punkt`).
+    *   Buttons allow you to <button>Install</button> or <button>Uninstall</button> individual models or NLTK data. Requires an internet connection.
+    *   A <button>Refresh Status</button> button re-checks your environment for installed models.
+    *   A <button>Clean Models</button> tool helps remove potentially corrupted or outdated model cache files. Use this if you suspect model-related issues.
+
+#### Core Page
+*   **ANPE Library Version**: Displays the currently installed version of the underlying `anpe` Python library.
+*   **Check for Updates**: Queries the Python Package Index (PyPI) to see if a newer version of the `anpe` library is available.
+*   **Update Core**: If an update is available, this button allows you to upgrade the `anpe` library directly using `pip`. Requires an internet connection and potentially administrator privileges depending on your Python setup.
+
+#### About Page
+*   Displays version information for the ANPE GUI and the core `anpe` library.
+*   Provides links to the project's GitHub repository and contact information.
+*   Includes license details for the GUI and its dependencies.
 
 ## Tips
-### Choose the right format
+### Choose the right export format
 *   **<format>TXT</format> Format (.txt)**
     *   Outputs noun phrases in a human-readable, plain text format.
     *   Nested phrases are shown using indentation.

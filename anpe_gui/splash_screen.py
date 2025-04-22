@@ -4,12 +4,27 @@ Splash screen for the ANPE GUI application.
 
 import os
 import time
+import logging # Added logging
 from PyQt6.QtWidgets import (QSplashScreen, QApplication, QProgressBar, 
                              QLabel, QVBoxLayout, QWidget)
 from PyQt6.QtGui import QPixmap, QPainter, QColor, QFont, QLinearGradient, QBrush, QRegion, QPainterPath, QPen
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QCoreApplication, QPropertyAnimation, QEasingCurve, QPointF, pyqtProperty, QRect, QRectF
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QCoreApplication, QPropertyAnimation, QEasingCurve, QPointF, pyqtProperty, QRect, QRectF, QThread, QObject, pyqtSlot # Added QThread, QObject, pyqtSlot
 from anpe_gui.theme import PRIMARY_COLOR  # Import the primary color
 from anpe_gui.version import __version__ as gui_version  # Import GUI version directly from version.py
+
+# Attempt to import ExtractorInitializer (might fail if ANPE isn't installed)
+try:
+    from anpe_gui.main_window import ExtractorInitializer # Import from MainWindow module
+    INITIALIZER_AVAILABLE = True
+except ImportError as e:
+    INITIALIZER_AVAILABLE = False
+    logging.warning(f"Could not import ExtractorInitializer for splash screen: {e}")
+    # Define a dummy if needed, though we might just skip the check
+    class ExtractorInitializer(QObject):
+        initialized = pyqtSignal(object)
+        error = pyqtSignal(str)
+        def run(self): self.error.emit("ANPE Core not available")
+
 try:
     from anpe import __version__ as core_version  # Import core version
 except ImportError:
@@ -18,12 +33,13 @@ except ImportError:
 
 class SplashScreen(QSplashScreen):
     """
-    Custom splash screen with banner and progress bar.
+    Custom splash screen with banner, progress bar, and actual initialization.
     """
+    # Emits the final status dictionary or None on error when check is done
+    initialization_complete = pyqtSignal(object)
     
-    loading_finished = pyqtSignal()
-    # Signal emitted when fade-out is complete and the splash can truly close
-    fade_out_complete = pyqtSignal() 
+    # Signal emitted when fade-out is complete and the splash can truly close (Kept from previous logic)
+    fade_out_complete = pyqtSignal()
     
     def __init__(self, banner_path=None):
         """
@@ -51,17 +67,10 @@ class SplashScreen(QSplashScreen):
         total_height = self.pixmap_height + content_height
         self.setFixedSize(self.pixmap_width, total_height)
         
-        # --- Apply rounded corners mask ---
-        mask_region = QRegion(self.rect(), QRegion.RegionType.Rectangle)
-        # Create rectangle for mask, slightly smaller to avoid border artifacts if any
-        mask_rect = self.rect().adjusted(1, 1, -1, -1) 
-        mask_path = QPainterPath()
-        mask_path.addRoundedRect(QRectF(mask_rect), self.border_radius, self.border_radius)
-        self.setMask(QRegion(mask_path.toFillPolygon().toPolygon()))
-        # --- End Apply rounded corners mask ---
-        
-        # Loading state
-        self.loading_progress = 0
+        # Initialization state
+        self.init_thread = None
+        self.init_worker = None
+        self.final_init_status = None # To store the result
         self.status_label.setText("Initializing...")
 
         # Animation setup
@@ -219,17 +228,17 @@ class SplashScreen(QSplashScreen):
     def setup_content_area(self):
         """Set up the widget holding progress bar and status text with improved styles."""
         self.content_widget = QWidget(self)
-        # Set background to white and add rounded *bottom* corners matching the mask
+        # Set background to white. Removed rounded bottom corners.
         self.content_widget.setStyleSheet(f"""
             background-color: white; 
-            border-bottom-left-radius: {self.border_radius}px; 
-            border-bottom-right-radius: {self.border_radius}px;
-            border-top-left-radius: 0px; /* Ensure top corners are square */
+            border-bottom-left-radius: 0px; /* Ensure square */
+            border-bottom-right-radius: 0px; /* Ensure square */
+            border-top-left-radius: 0px; 
             border-top-right-radius: 0px;
         """) 
         self.content_layout = QVBoxLayout(self.content_widget)
-        self.content_layout.setContentsMargins(25, 15, 25, 20) 
-        self.content_layout.setSpacing(10)
+        self.content_layout.setContentsMargins(25, 10, 25, 15) # Reduced top/bottom margins
+        self.content_layout.setSpacing(5) # Reduced spacing
 
         # Status label
         self.status_label = QLabel("Loading...")
@@ -237,34 +246,14 @@ class SplashScreen(QSplashScreen):
         # Use a slightly larger, darker font
         self.status_label.setStyleSheet("color: #444; font-size: 10pt;")
 
-        # Progress bar
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setRange(0, 100)
-        self.progress_bar.setValue(0)
-        self.progress_bar.setTextVisible(False)
-        self.progress_bar.setFixedHeight(10) # Slightly thinner
-        # Updated stylesheet: white background, keep gradient chunk, adjust radius
-        progress_bar_radius = max(0, self.border_radius - 5) # Slightly smaller radius for inset look
-        self.progress_bar.setStyleSheet(f"""
-            QProgressBar {{
-                border: 1px solid #cccccc;
-                border-radius: {progress_bar_radius}px; 
-                background-color: white; /* Changed background to white */
-                height: 10px; 
-            }}
-            QProgressBar::chunk {{
-                background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #3498db, stop:1 #5dade2); 
-                border-radius: {max(0, progress_bar_radius - 1)}px; /* Inner radius */
-                margin: 0.5px; 
-            }}
-        """)
-        
         self.content_layout.addWidget(self.status_label)
-        self.content_layout.addWidget(self.progress_bar)
 
         # Position the content widget below the pixmap
+        # Adjust height calculation since progress bar is removed
+        self.content_widget.adjustSize() # Recalculate size based on content (just the label now)
+        content_height_hint = self.content_widget.sizeHint().height()
         self.content_widget.setGeometry(0, self.pixmap_height, 
-                                      self.pixmap_width, self.content_widget.sizeHint().height())
+                                      self.pixmap_width, content_height_hint)
 
     def _center_on_screen(self):
         """Center the splash screen on the primary display."""
@@ -281,39 +270,7 @@ class SplashScreen(QSplashScreen):
         self.status_label.setText(message)
         # self.repaint() # Not needed as label updates automatically
 
-    def set_progress(self, value, status_message=None):
-        """Update the progress bar and status message."""
-        self.loading_progress = value
-        
-        # Add a smooth transition effect for better visual experience
-        current = self.progress_bar.value()
-        
-        # Create smooth step animation if needed
-        if abs(current - value) > 10:
-            # Animate in 5 steps
-            steps = 5
-            step_size = (value - current) / steps
-            
-            def update_step(step=1):
-                if step <= steps:
-                    intermediate_value = int(current + (step_size * step))
-                    self.progress_bar.setValue(intermediate_value)
-                    # Continue animation with next step
-                    QTimer.singleShot(30, lambda: update_step(step + 1))
-                else:
-                    # Final step - set exact value
-                    self.progress_bar.setValue(value)
-            
-            # Start animation
-            update_step()
-        else:
-            # Small change, update directly
-            self.progress_bar.setValue(value)
-        
-        if status_message:
-            self.status_label.setText(status_message)
-            
-        QCoreApplication.processEvents() # Ensure UI updates immediately
+    # Removed set_progress method - progress will be handled by init logic
 
     def _fade(self, start_value, end_value, duration, on_finish=None):
         """Helper function to create and run fade animation."""
@@ -346,55 +303,84 @@ class SplashScreen(QSplashScreen):
         """Fade the splash screen out."""
         # Ensure we start from full opacity for the fade-out effect
         current_opacity = self.windowOpacity()
-        self._fade(current_opacity, 0.0, duration, self._on_fade_out_complete)
+        # Connect the fade animation's finished signal to actually close the window
+        self._fade(current_opacity, 0.0, duration, self._on_fade_out_complete) 
 
     def _on_fade_out_complete(self):
         """Called when the fade-out animation finishes."""
+        logging.debug("Splash fade out complete.")
         self.fade_out_complete.emit() # Emit signal *before* closing
         self.close() # Actually close the window now
         self._fade_animation = None # Clean up animation object
 
-    def start_loading_animation(self, app):
-        """
-        Simulate loading process, show with fade-in, and fade out when done.
-        """
-        self.fade_in() # Show with fade-in instead of self.show()
-        app.processEvents()
-        
-        loading_steps = [
-            (20, "Loading UI..."),
-            (40, "Initializing core components..."),
-            (60, "Setting up ANPE extractor..."),
-            (80, "Finalizing setup..."),
-            (100, "Starting application...")
-        ]
+    # --- Initialization Logic --- 
 
-        def update_step(step_index=0):
-            if step_index < len(loading_steps):
-                progress, message = loading_steps[step_index]
-                self.set_progress(progress, message)
-                # Simulate work for this step
-                QTimer.singleShot(400, lambda: update_step(step_index + 1))
-            else:
-                # Loading finished - emit signal first
-                self.loading_finished.emit()
-                # Don't close immediately, start fade-out instead
-                self.fade_out() 
+    def start_initialization(self):
+        """
+        Starts the actual initialization process in a background thread.
+        """
+        self.fade_in() # Show splash with fade-in
+        QCoreApplication.processEvents() # Process events to ensure it's shown
         
-        # Start the first step
-        QTimer.singleShot(200 + 300, lambda: update_step(0)) # Add fade-in duration delay
+        # Set initial status message
+        self.showMessage("Initializing ANPE...")
 
-# Example of how to use it in app.py (if needed)
-# if __name__ == '__main__':
-#     app = QApplication(sys.argv)
-#     splash = SplashScreen()
-#     
-#     def create_main():
-#         # Replace with actual MainWindow creation
-#         main_win = QLabel("Main Window Placeholder") 
-#         main_win.resize(800, 600)
-#         main_win.show()
-#         return main_win
-#         
-#     splash.start_loading_animation(app, create_main)
-#     sys.exit(app.exec()) 
+        if not INITIALIZER_AVAILABLE:
+            logging.error("ExtractorInitializer not available. Skipping ANPE check.")
+            # Handle case where ANPE core check cannot run
+            # Create a default error status
+            error_status = {
+                'spacy_models': [], 'benepar_models': [], 'nltk_present': False,
+                'error': "ANPE core library not found or import failed."
+            }
+            # Emit completion signal with error status after a short delay
+            QTimer.singleShot(1000, lambda: self._emit_completion(error_status))
+            return
+
+        # Proceed with background check
+        self.init_thread = QThread()
+        self.init_worker = ExtractorInitializer()
+        self.init_worker.moveToThread(self.init_thread)
+        
+        # Connect worker signals to splash screen slots
+        self.init_worker.initialized.connect(self._on_init_success)
+        self.init_worker.error.connect(self._on_init_error)
+        self.init_thread.started.connect(self.init_worker.run)
+        
+        # Clean up thread when worker finishes or errors out
+        self.init_worker.initialized.connect(self.init_thread.quit)
+        self.init_worker.error.connect(self.init_thread.quit)
+        self.init_thread.finished.connect(self.init_thread.deleteLater)
+        self.init_worker.initialized.connect(self.init_worker.deleteLater) # Clean up worker
+        self.init_worker.error.connect(self.init_worker.deleteLater) # Clean up worker
+
+        logging.debug("Splash Screen: Starting initialization thread.")
+        self.init_thread.start()
+
+    @pyqtSlot(object) # Receives the status dictionary 
+    def _on_init_success(self, status_dict):
+        """Slot called when the background initialization check completes successfully."""
+        logging.info(f"Splash Screen: Initialization check successful. Status: {status_dict}")
+        self.final_init_status = status_dict
+        self.showMessage("ANPE initialization successful.") # Refined message
+        self._emit_completion(self.final_init_status)
+        
+    @pyqtSlot(str)
+    def _on_init_error(self, error_message):
+        """Slot called when the background initialization check fails."""
+        logging.error(f"Splash Screen: Initialization check failed: {error_message}")
+        # Create a status dictionary representing the error
+        error_status = {
+            'spacy_models': [], 'benepar_models': [], 'nltk_present': False,
+            'error': error_message
+        }
+        self.final_init_status = error_status
+        self.showMessage(f"Initialization failed: {error_message.split(':')[0]}...") # Show short error
+        self._emit_completion(self.final_init_status)
+
+    def _emit_completion(self, status):
+        """Emits the final signal and prepares for fade-out (but doesn't start it yet)."""
+        logging.debug(f"Splash screen emitting initialization_complete with status: {status}")
+        self.initialization_complete.emit(status)
+        # The fade_out will be triggered externally by the main application logic
+        # after the main window is created and shown.

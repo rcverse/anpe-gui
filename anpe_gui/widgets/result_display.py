@@ -480,8 +480,9 @@ class ResultDisplayWidget(QWidget):
         
         # --- Eject Button ---
         self.eject_button = QToolButton()
-        self.eject_button.setText("⇱")  # Unicode external link symbol
+        # self.eject_button.setText("⇱")  # Use icon instead of text
         self.eject_button.setToolTip("Open results in a separate window")
+        self.eject_button.setIcon(ResourceManager.get_icon("external-link.svg")) # Set the icon
         self.eject_button.clicked.connect(self._eject_results)
         self.eject_button.setVisible(False)  # Initially hidden like other buttons
         self.eject_button.setFixedSize(QSize(24, 24))  # Fixed size for the button
@@ -792,25 +793,6 @@ class ResultDisplayWidget(QWidget):
             self.detached_window.sort_length_button.setVisible(metadata_enabled)
             self.detached_window.sort_structure_button.setVisible(metadata_enabled)
             
-            # Only stretch the Structures column if it's visible
-            if metadata_enabled:
-                header.setSectionResizeMode(AnpeResultModel.COL_STRUCT, QHeaderView.ResizeMode.Stretch)
-            else:
-                # If no metadata, make the NP column stretch
-                header.setSectionResizeMode(AnpeResultModel.COL_NP, QHeaderView.ResizeMode.Stretch)
-            
-            # Make other columns interactive (resizable by user)
-            header.setSectionResizeMode(AnpeResultModel.COL_ID, QHeaderView.ResizeMode.Interactive)
-            if not metadata_enabled:
-                # If no metadata, ensure NP can stretch
-                header.setSectionResizeMode(AnpeResultModel.COL_NP, QHeaderView.ResizeMode.Stretch)
-            else:
-                # With metadata, NP is resizable but not stretching
-                header.setSectionResizeMode(AnpeResultModel.COL_NP, QHeaderView.ResizeMode.Interactive)
-                header.setSectionResizeMode(AnpeResultModel.COL_LEN, QHeaderView.ResizeMode.Interactive)
-                
-            header.setSortIndicatorShown(False)
-            
             # Set initial column widths
             header.resizeSection(AnpeResultModel.COL_ID, 50)
             header.resizeSection(AnpeResultModel.COL_NP, 350)
@@ -833,7 +815,38 @@ class ResultDisplayWidget(QWidget):
             self.detached_window.show()
             
         else:
-            # Window exists, just show it and bring to front
+            # --- Window exists, ensure UI state matches main window ---
+            header = self.detached_window.tree_view.header()
+            metadata_enabled = not self.tree_view.isColumnHidden(AnpeResultModel.COL_LEN)
+
+            # Show/hide columns based on metadata_enabled flag
+            self.detached_window.tree_view.setColumnHidden(AnpeResultModel.COL_LEN, not metadata_enabled)
+            self.detached_window.tree_view.setColumnHidden(AnpeResultModel.COL_STRUCT, not metadata_enabled)
+
+            # Show/hide buttons based on metadata_enabled flag
+            self.detached_window.sort_order_button.setVisible(metadata_enabled)
+            self.detached_window.sort_length_button.setVisible(metadata_enabled)
+            self.detached_window.sort_structure_button.setVisible(metadata_enabled)
+
+            # Update header resize modes based on visibility
+            if metadata_enabled:
+                header.setSectionResizeMode(AnpeResultModel.COL_STRUCT, QHeaderView.ResizeMode.Stretch)
+                header.setSectionResizeMode(AnpeResultModel.COL_NP, QHeaderView.ResizeMode.Interactive) # Reset NP if metadata is now visible
+                header.setSectionResizeMode(AnpeResultModel.COL_LEN, QHeaderView.ResizeMode.Interactive)
+            else:
+                header.setSectionResizeMode(AnpeResultModel.COL_NP, QHeaderView.ResizeMode.Stretch)
+                # No need to explicitly set COL_STRUCT/COL_LEN resize mode if they are hidden
+
+            # Ensure filter is synchronized (if it changed while window was hidden)
+            current_filter = self.filter_input.text()
+            if self.detached_window.filter_input.text() != current_filter:
+                 self.detached_window.filter_input.setText(current_filter)
+                 # The textChanged signal will trigger the filter update in the detached window
+
+            # Update button styles (especially length arrow)
+            self.detached_window.update_button_styles()
+
+            # --- Show and bring to front ---
             self.detached_window.show()
             self.detached_window.raise_()
             self.detached_window.activateWindow()

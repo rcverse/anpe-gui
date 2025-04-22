@@ -21,7 +21,7 @@ ERROR_COLOR = "#DC3545"       # Red for errors
 SUCCESS_COLOR = "#28A745"     # Green for success
 WARNING_COLOR = "#FFC107"     # Yellow for warnings
 INFO_COLOR = "#17A2B8"        # Teal for info
-LIGHT_HOVER_BLUE = "#EFF5FB" # Very light blue for hover effects (updated)
+LIGHT_HOVER_BLUE = "#D6EAF8" # Light blue for hover effects (updated)
 
 def get_scroll_bar_style(vertical_width=8, horizontal_height=8, handle_min_size=20, border_radius=4):
     """
@@ -219,22 +219,24 @@ def get_stylesheet():
 
     /* Danger Button Style (for Uninstall/Clean) */
     QPushButton[danger="true"] {{
-        background-color: {ERROR_COLOR}; /* Red background */
-        color: white; /* White text */
-        border: 1px solid #C04A44; /* Slightly darker red border */
+        background-color: white; /* White background */
+        color: {ERROR_COLOR}; /* Red text */
+        border: 1px solid {ERROR_COLOR}; /* Red border */
     }}
     QPushButton[danger="true"]:hover {{
-        background-color: #C82333; /* Darker red hover */
-        border-color: #B02A37;
+        background-color: #FFF0F1; /* Very light red hover */
+        color: #A51F2D; /* Darker red text on hover */
+        border-color: #C82333; /* Darker red border on hover */
     }}
     QPushButton[danger="true"]:pressed {{
-        background-color: #A51F2D; /* Even darker red pressed */
-        border-color: #8E1B26;
+        background-color: #FADBD8; /* Slightly darker light red pressed */
+        color: #8E1B26; /* Even darker red text */
+        border-color: #A51F2D; /* Darker red border */
     }}
     QPushButton[danger="true"]:disabled {{
-        background-color: #F8D7DA; /* Very light red disabled */
-        color: #721C24; /* Dark red text disabled */
-        border-color: #F5C6CB;
+        background-color: #F5F5F5; /* Use a neutral disabled background */
+        color: #AAAAAA; /* Grey text */
+        border-color: #DDDDDD; /* Grey border */
     }}
 
     /* Specific Buttons (e.g., for Add/Remove) */
@@ -379,19 +381,23 @@ def get_stylesheet():
     QComboBox QAbstractItemView {{
         background-color: {BACKGROUND_COLOR};
         border: 1px solid {BORDER_COLOR};
-        padding: 0px; /* Remove internal padding */
+        padding: 2px 0px; /* Add slight vertical padding to view */
         outline: 0px; /* Remove focus outline */
+        border-radius: 2px; /* Add slight rounding */
     }}
     /* Style individual items */
     QComboBox QAbstractItemView::item {{
-        padding: 3px 8px; /* Reduced top/bottom padding */
+        padding: 5px 10px; /* Increased padding for taller items */
         background-color: {BACKGROUND_COLOR}; /* Default background */
         color: {TEXT_COLOR}; /* Default text */
-        min-height: 18px; /* Reduced min height */
+        min-height: 22px; /* Increased min height */
         outline: 0;
     }}
-    QComboBox QAbstractItemView::item:selected {{
-        background-color: {LIGHT_HOVER_BLUE};
+    /* Removed :selected style for dropdown items to avoid hover conflicts */
+    /* Style hovered items (not selected) */
+    QComboBox QAbstractItemView::item:hover {{
+        background-color: {LIGHT_HOVER_BLUE}; /* Light blue hover */
+        color: {TEXT_COLOR}; /* Keep default text color on hover */
         outline: 0;
     }}
 

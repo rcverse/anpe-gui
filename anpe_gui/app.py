@@ -8,20 +8,21 @@ import os
 from pathlib import Path
 import logging
 from PyQt6.QtWidgets import QApplication
-from PyQt6.QtCore import QTimer # Original import
+from PyQt6.QtCore import QTimer, pyqtSlot, QObject # Added pyqtSlot, QObject
 from PyQt6.QtGui import QFont # Original import
 from anpe_gui.main_window import MainWindow
 from anpe_gui.splash_screen import SplashScreen
 from anpe_gui.theme import apply_theme
 from anpe_gui.resource_manager import ResourceManager
-from anpe.utils.setup_models import check_all_models_present # Assuming this function exists
-# from anpe_gui.setup_wizard import SetupWizard # REMOVED: Assuming this class will be created
 
-# Import resource module
-import anpe_gui.resources_rc
+
+# Variable to hold the main window instance
+main_window_instance = None
 
 def main():
     """Launch the main application."""
+    global main_window_instance # Allow modification of the global variable
+    
     # Configure High-DPI scaling via environment variables
     # These must be set before QApplication is created
     # Note: In PyQt6, high-DPI scaling is enabled by default
@@ -34,8 +35,8 @@ def main():
     app.setApplicationName("ANPE GUI")
     app.setOrganizationName("ANPE")
     
-    # Initialize resource manager
-    ResourceManager.initialize()
+    # REMOVED: Initialize resource manager (no longer needed)
+    # ResourceManager.initialize()
     
     # Adjust default font slightly based on screen DPI
     screen = app.primaryScreen()
@@ -53,111 +54,38 @@ def main():
     
     apply_theme(app)
 
-    main_window = None
-    # setup_wizard = None # REMOVED: Keep track of the wizard instance
-
-    # --- SplashScreen Setup ---
+    # --- SplashScreen Setup & Initialization --- 
     splash = SplashScreen()
-    # --- Start Splash Animation Immediately ---
-    splash.start_loading_animation(app)
-    print("APP: Splash animation initiated immediately after creation.")
-
-    # --- Function to launch the main window ---
-    def launch_main_window():
-        nonlocal main_window
-        if main_window is None:
+    
+    # --- Slot to handle completion of splash screen initialization --- 
+    @pyqtSlot(object) # Decorator to mark as a slot accepting an object (the status dict)
+    def on_initialization_complete(status_dict):
+        """Creates and shows the main window after splash initialization is done."""
+        global main_window_instance
+        logging.info(f"APP: SplashScreen initialization complete. Status: {status_dict}")
+        
+        if main_window_instance is None:
             print("APP: Creating MainWindow instance...")
-            main_window = MainWindow()
+            main_window_instance = MainWindow(initial_model_status=status_dict)
             print("APP: MainWindow instance created.")
-        if main_window:
-            main_window.fade_in() 
+        
+        if main_window_instance:
+            print("APP: Fading in MainWindow...")
+            main_window_instance.fade_in()
+        
+        # Fade out splash screen AFTER main window is potentially shown
+        print("APP: Fading out SplashScreen...")
+        splash.fade_out()
 
-    # --- Function called after splash screen (or directly if setup needed) ---
-    def proceed_after_splash_or_setup():
-        nonlocal main_window # Reference the main_window instance
+    # --- Connect Splash Signal --- 
+    splash.initialization_complete.connect(on_initialization_complete)
+    print("APP: Connected splash initialization_complete signal.")
 
-        print("APP: Checking if models are present...")
-        models_present = check_all_models_present() # Check for models
-        print(f"APP: Models present: {models_present}")
+    # --- Start Splash Initialization (this also shows the splash screen) --- 
+    splash.start_initialization()
+    print("APP: Splash initialization started (includes fade-in).")
 
-        if models_present:
-            print("APP: Models found. Preparing to launch main window.")
-            if splash: 
-                # Connect splash fade-out completion to launching main window
-                # Ensure we connect only once if this function could be called multiple times
-                try: 
-                    splash.fade_out_complete.disconnect(launch_main_window)
-                except TypeError:
-                    pass # No connection existed
-                splash.fade_out_complete.connect(launch_main_window)
-                # The splash screen will call fade_out() itself when its loading is done
-                # We no longer close it here or launch the window directly
-                print("APP: Waiting for splash fade out...")
-            else: # If no splash was shown (e.g., during development/testing)
-                launch_main_window()
-        else:
-            print("APP: Models not found. Launching Setup Wizard.")
-            # --- MODIFIED: Instead of wizard, show message and launch main window in disabled state ---
-            print("APP: Models not found. Will show message and launch main window (partially disabled).")
-            # Ensure splash is closed before showing message/main window
-            def show_message_and_main_window():
-                # Message box is now handled inside MainWindow's init error handler
-                # QMessageBox.warning(None, "Models Missing", 
-                #                     "Required ANPE models (spaCy, Benepar, NLTK) are missing.\n" 
-                #                     "Please use 'Manage Models' (gear icon) in the main window to install them.")
-                # Launch the main window directly, it will handle its own state
-                launch_main_window() 
-            
-            if splash:
-                try:
-                    splash.fade_out_complete.disconnect() # Disconnect previous connections
-                except TypeError:
-                    pass
-                splash.fade_out_complete.connect(show_message_and_main_window)
-                print("APP: Waiting for splash fade out before showing message/main window...")
-                # Splash fade_out is triggered internally
-            else:
-                # No splash, show message and launch main window directly
-                show_message_and_main_window()
-            # -------------------------------------------------------------------------------------
-
-            # --- OLD WIZARD LOGIC (REMOVED) --- 
-            # if splash:
-            #     # Ensure splash is closed *before* showing wizard. 
-            #     # Since fade_out handles close, connect fade_out_complete to showing wizard.
-            #     # We need a small helper function or lambda to show the wizard
-            #     def show_wizard_after_splash():
-            #         nonlocal setup_wizard
-            #         if setup_wizard is None: # Create wizard only once
-            #             setup_wizard = SetupWizard()
-            #             setup_wizard.setup_complete.connect(launch_main_window) # Wizard success launches main window (with fade-in)
-            #             setup_wizard.setup_cancelled.connect(app.quit)
-            #         setup_wizard.show()
-            #     
-            #     try:
-            #         splash.fade_out_complete.disconnect() # Disconnect any previous connections
-            #     except TypeError:
-            #         pass
-            #     splash.fade_out_complete.connect(show_wizard_after_splash)
-            #     # Splash fade_out is triggered internally when loading finishes
-            #     print("APP: Waiting for splash fade out before showing wizard...")
-            # 
-            # else: # No splash, show wizard directly
-            #     if setup_wizard is None: 
-            #         setup_wizard = SetupWizard()
-            #         setup_wizard.setup_complete.connect(launch_main_window)
-            #         setup_wizard.setup_cancelled.connect(app.quit)
-            #     setup_wizard.show()
-
-    # --- Connect Splash Signal ---
-    # Splash loading finished triggers the check/proceed logic
-    splash.loading_finished.connect(proceed_after_splash_or_setup)
-
-    # --- Start Splash (Moved earlier) ---
-    # splash.start_loading_animation(app) # No longer needed here
-    # print("APP: Splash animation started (includes fade-in).") # Commented out old message
-
-    # --- Start Event Loop ---
+    # --- Start Event Loop --- 
     exit_code = app.exec()
     sys.exit(exit_code)
 

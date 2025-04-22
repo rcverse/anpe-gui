@@ -3,6 +3,7 @@ Dialog for managing ANPE settings, including core updates,
 model usage preferences, and model installation/management.
 """
 
+import anpe
 import sys
 import logging
 import nltk # Need nltk for the status check part (will move to page)
@@ -21,6 +22,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QIcon, QPixmap
 
 from anpe_gui.theme import ERROR_COLOR, PRIMARY_COLOR, get_scroll_bar_style, LIGHT_HOVER_BLUE # Import theme elements
+from anpe_gui.resource_manager import ResourceManager # ADDED THIS IMPORT
 # from anpe_gui.setup_wizard import SetupWizard # No longer needed here
 
 # Assuming these utilities exist and work as expected
@@ -36,13 +38,14 @@ try:
         select_best_spacy_model, select_best_benepar_model
     )
     CORE_PACKAGE_NAME = "anpe" # Define the package name
-    ANPE_AVAILABLE = True
+    # ANPE_AVAILABLE = True # Removed: Assume core is always available for this dialog
 except ImportError as e:
     logging.error(f"Failed to import ANPE utilities for Settings Dialog: {e}")
-    ANPE_AVAILABLE = False
+    # ANPE_AVAILABLE = False # Removed
     # Define dummy maps and functions if core package is missing
-    SPACY_MODEL_MAP = {"md": "en_core_web_md"}
-    BENEPAR_MODEL_MAP = {"default": "benepar_en3"}
+    # These remain useful for displaying model names even if install/check fails
+    SPACY_MODEL_MAP = {"sm": "en_core_web_sm", "md": "en_core_web_md", "lg": "en_core_web_lg", "trf": "en_core_web_trf"} # Keep dummies for UI display
+    BENEPAR_MODEL_MAP = {"default": "benepar_en3", "large": "benepar_en3_large"} # Keep dummies for UI display
     CORE_PACKAGE_NAME = "anpe"
     def check_spacy_model(*args, **kwargs): return False
     def check_benepar_model(*args, **kwargs): return False
@@ -440,7 +443,6 @@ class ModelsPage(QWidget):
         
         self.setup_ui()
         self.connect_signals()
-        # REMOVED: QTimer.singleShot(200, self.refresh_status)
         
         # Update UI using the initial status passed from MainWindow
         if self.initial_model_status:
@@ -557,9 +559,9 @@ class ModelsPage(QWidget):
             desc_label.setStyleSheet(desc_style)
             desc_label.setWordWrap(True)
             action_button = QPushButton("Checking...")
-            action_button.setFixedWidth(90) # Slightly narrower buttons
-            action_button.setFixedHeight(24) # Slightly shorter buttons
-            action_button.setProperty("model_alias", model_info['alias'])  
+            action_button.setFixedWidth(80) # Reduced width
+            action_button.setFixedHeight(24)
+            action_button.setProperty("model_alias", model_info['alias'])
             action_button.setProperty("model_type", model_info['type'])
             action_button.clicked.connect(self.run_model_action)
             
@@ -609,7 +611,7 @@ class ModelsPage(QWidget):
             desc_label.setStyleSheet(desc_style)
             desc_label.setWordWrap(True)
             action_button = QPushButton("Checking...")
-            action_button.setFixedWidth(90)
+            action_button.setFixedWidth(80)
             action_button.setFixedHeight(24)
             action_button.setProperty("model_alias", model_info['alias'])
             action_button.setProperty("model_type", model_info['type'])
@@ -662,10 +664,9 @@ class ModelsPage(QWidget):
         nltk_desc_label.setStyleSheet(desc_style)
         nltk_desc_label.setWordWrap(True)
         self.nltk_action_button = QPushButton("Checking...")
-        self.nltk_action_button.setFixedWidth(90)
+        self.nltk_action_button.setFixedWidth(80) # Reduced width
         self.nltk_action_button.setFixedHeight(24)
         self.nltk_action_button.setProperty("model_type", "nltk")
-        # Removed setStyleSheet here
         self.nltk_action_button.clicked.connect(self.run_model_action)
         
         grid_layout.addWidget(nltk_name_label, current_row, 0, Qt.AlignmentFlag.AlignVCenter)
@@ -706,15 +707,13 @@ class ModelsPage(QWidget):
 
         # Global Action Buttons (Refresh, Clean)
         self.refresh_button = QPushButton("Refresh Status")
-        self.refresh_button.setFixedWidth(100)
-        self.refresh_button.setFixedHeight(26)  
-        # Removed setStyleSheet here - will use default button style
+        self.refresh_button.setFixedHeight(26)
+        # Removed setStyleSheet here - uses global theme
         
         self.clean_button = QPushButton("Clean All") # Shorter text
-        self.clean_button.setFixedWidth(80)
-        self.clean_button.setFixedHeight(26)  
-        self.clean_button.setProperty("danger", True) # Apply danger style
-        # Removed setStyleSheet here
+        self.clean_button.setFixedWidth(80) # Reduced width
+        self.clean_button.setFixedHeight(26)
+        self.clean_button.setProperty("danger", True) # Apply danger style (now outline)
         self.clean_button.setToolTip("Clean All ANPE-related Models")
         
         button_widget = QWidget()
@@ -744,9 +743,17 @@ class ModelsPage(QWidget):
         """Load saved model usage preferences and set combo boxes.
         Must be called AFTER _update_usage_combos populates the items.
         """
+        logging.debug(f"Attempting to load usage settings. Settings file: {self.settings.fileName()}")
         spacy_pref = self.settings.value("modelUsage/spacyModel", "(Auto-detect)")
         benepar_pref = self.settings.value("modelUsage/beneparModel", "(Auto-detect)")
+        logging.debug(f"  Read from QSettings: spaCy='{spacy_pref}', Benepar='{benepar_pref}'")
         
+        # Log current items in combo boxes for debugging
+        spacy_items = [self.spacy_usage_combo.itemText(i) for i in range(self.spacy_usage_combo.count())]
+        benepar_items = [self.benepar_usage_combo.itemText(i) for i in range(self.benepar_usage_combo.count())]
+        logging.debug(f"  Current spaCy combo items: {spacy_items}")
+        logging.debug(f"  Current Benepar combo items: {benepar_items}")
+
         # Check if saved preference is actually in the current list of items
         spacy_index = self.spacy_usage_combo.findText(spacy_pref)
         if spacy_index != -1:
@@ -774,6 +781,7 @@ class ModelsPage(QWidget):
         
         self.settings.setValue("modelUsage/spacyModel", spacy_pref)
         self.settings.setValue("modelUsage/beneparModel", benepar_pref)
+        self.settings.sync() # Force writing to persistent storage
         logging.info(f"Saved usage settings: spaCy={spacy_pref}, Benepar={benepar_pref}")
         self.model_usage_changed.emit() # Signal that usage pref changed
 
@@ -807,12 +815,6 @@ class ModelsPage(QWidget):
         self.spacy_usage_combo.blockSignals(False)
         self.benepar_usage_combo.blockSignals(False)
         
-        # Trigger save explicitly IF the selection actually changed due to repopulation
-        # (e.g., previously selected model was uninstalled)
-        if self.spacy_usage_combo.currentText() != current_spacy_selection or \
-           self.benepar_usage_combo.currentText() != current_benepar_selection:
-             self.save_usage_settings() # Save the potentially changed selection
-
     def _update_ui_from_status(self, status_data: dict):
         """Updates the UI elements based on the provided status dictionary."""
         logging.debug(f"ModelsPage._update_ui_from_status: Received status_data = {status_data}") # LOGGING
@@ -823,153 +825,163 @@ class ModelsPage(QWidget):
         nltk_present_overall = status_data.get('nltk_present', False)
         init_error = status_data.get('error') # Check if there was an initial error
 
-        # Determine overall button enable state (disable if worker running OR init error)
+        # Calculate worker status first
         is_worker_running = (self.install_worker_thread and self.install_worker_thread.isRunning()) or \
                           (self.clean_worker_thread and self.clean_worker_thread.isRunning())
-        # Force disable if ANPE core is unavailable OR there was an init error
-        force_disable = not ANPE_AVAILABLE or bool(init_error)
-        self._set_buttons_enabled(not is_worker_running, force_disable=force_disable)
 
-        # Update status label text based on passed data
-        if force_disable:
-            # If forced disable, show appropriate status
-            error_msg = init_error or "ANPE core package not found."
-            self.model_action_status_label.setText(f"Status: {error_msg}")
-            if self.spacy_status_label: self.spacy_status_label.setText("(<i style='color:orange;'>Unknown</i>)")
-            if self.benepar_status_label: self.benepar_status_label.setText("(<i style='color:orange;'>Unknown</i>)")
-            if self.nltk_status_label: self.nltk_status_label.setText("(<i style='color:orange;'>Unknown</i>)")
+        # Determine button enable state (only disable if worker running)
+        self._set_buttons_enabled(not is_worker_running)
+
+        # Update status labels based on installed models
+        # Update spaCy Status Label
+        if installed_spacy_models:
+            found_aliases = []
+            reverse_spacy_map = {v: k for k, v in SPACY_MODEL_MAP.items() if not k.startswith('en_')} 
+            for name in installed_spacy_models:
+                alias = reverse_spacy_map.get(name, name) 
+                found_aliases.append(alias)
+            status_text = f"(<b style='color:green;'>Ready:</b> {', '.join(sorted(found_aliases))})"
+            self.spacy_status_label.setText(status_text)
+            self.spacy_status_label.setToolTip("Installed spaCy models: " + ", ".join(installed_spacy_models))
         else:
-             # Update spaCy Status Label
-            if installed_spacy_models:
-                found_aliases = []
-                reverse_spacy_map = {v: k for k, v in SPACY_MODEL_MAP.items() if not k.startswith('en_')} 
-                for name in installed_spacy_models:
-                    alias = reverse_spacy_map.get(name, name) 
-                    found_aliases.append(alias)
-                status_text = f"(<b style='color:green;'>Ready:</b> {', '.join(sorted(found_aliases))})"
-                self.spacy_status_label.setText(status_text)
-                self.spacy_status_label.setToolTip("Installed spaCy models: " + ", ".join(installed_spacy_models))
-            else:
-                status_text = "(<b style='color:red;'>Missing</b>)"
-                self.spacy_status_label.setText(status_text)
-                self.spacy_status_label.setToolTip("No compatible spaCy models found.")
-    
-            # Update Benepar Status Label
-            if installed_benepar_models:
-                found_aliases = []
-                reverse_benepar_map = {v: k for k, v in BENEPAR_MODEL_MAP.items() if not k.startswith('benepar_')}
-                for name in installed_benepar_models:
-                    alias = reverse_benepar_map.get(name, name)
-                    found_aliases.append(alias)
-                status_text = f"(<b style='color:green;'>Ready:</b> {', '.join(sorted(found_aliases))})"
-                self.benepar_status_label.setText(status_text)
-                self.benepar_status_label.setToolTip("Installed Benepar models: " + ", ".join(installed_benepar_models))
-            else:
-                status_text = "(<b style='color:red;'>Missing</b>)"
-                self.benepar_status_label.setText(status_text)
-                self.benepar_status_label.setToolTip("No compatible Benepar models found.")
-    
-            # Update NLTK Status Label
-            if nltk_present_overall:
-                status_text = "(<b style='color:green;'>Ready</b>)"
-                self.nltk_status_label.setText(status_text)
-                self.nltk_status_label.setToolTip("Required NLTK tokenizers (punkt) found.")
-            else:
-                status_text = "(<b style='color:red;'>Missing</b>)"
-                self.nltk_status_label.setText(status_text)
-                self.nltk_status_label.setToolTip("Required NLTK tokenizers (punkt) are missing.")
+            status_text = "(<b style='color:red;'>Missing</b>)"
+            self.spacy_status_label.setText(status_text)
+            self.spacy_status_label.setToolTip("No compatible spaCy models found.")
 
-            # Update Action Buttons (based on passed status)
-            # This part is the same logic as in refresh_status, but uses the passed lists
-            for model in self.manageable_models:
-                alias = model['alias']
-                button = self.action_buttons.get(alias)
-                if not button: continue
-                model_type = model['type']
-                is_installed = False
-                if model_type == 'spacy':
-                    is_installed = model['name'] in installed_spacy_models
-                elif model_type == 'benepar':
-                    is_installed = model['name'] in installed_benepar_models
-                    
-                # Button enabling is handled by _set_buttons_enabled call above
-                # Only update text and style here
-                if is_installed:
-                    button.setText("Uninstall")
-                    button.setProperty("danger", True) # Set danger property for uninstall
-                    # Removed setStyleSheet here
-                    button.setToolTip(f"Uninstall {model['name']}")
-                else:
-                    button.setText("Install")
-                    button.setProperty("danger", False) # Remove danger property for install
-                    # Removed setStyleSheet here
-                    button.setToolTip(f"Install {model['name']}")
-            
-            # NLTK Action Button
-            if self.nltk_action_button:
-                 # Enabling handled above
-                 if nltk_present_overall:
-                      self.nltk_action_button.setText("Uninstall") # Changed text
-                      self.nltk_action_button.setProperty("danger", True) # Set danger property
-                      # Removed setStyleSheet here
-                      self.nltk_action_button.setToolTip("Uninstall NLTK tokenizers (punkt, punkt_tab).")
-                 else:
-                      self.nltk_action_button.setText("Install NLTK")
-                      self.nltk_action_button.setProperty("danger", False) # Remove danger property
-                      # Removed setStyleSheet here
-                      self.nltk_action_button.setToolTip("Install NLTK tokenizers (punkt, punkt_tab).")
-    
-            # Update usage combos based on installed models found in status_data
-            self._update_usage_combos(installed_spacy_models, installed_benepar_models)
-            # Update the feedback status label (use a neutral message for initial load)
-            if not init_error:
-                self.model_action_status_label.setText("Model status loaded.")
-            # Error message handled by the force_disable block
+        # Update Benepar Status Label
+        if installed_benepar_models:
+            found_aliases = []
+            reverse_benepar_map = {v: k for k, v in BENEPAR_MODEL_MAP.items() if not k.startswith('benepar_')}
+            for name in installed_benepar_models:
+                alias = reverse_benepar_map.get(name, name)
+                found_aliases.append(alias)
+            status_text = f"(<b style='color:green;'>Ready:</b> {', '.join(sorted(found_aliases))})"
+            self.benepar_status_label.setText(status_text)
+            self.benepar_status_label.setToolTip("Installed Benepar models: " + ", ".join(installed_benepar_models))
+        else:
+            status_text = "(<b style='color:red;'>Missing</b>)"
+            self.benepar_status_label.setText(status_text)
+            self.benepar_status_label.setToolTip("No compatible Benepar models found.")
+
+        # Update NLTK Status Label
+        if nltk_present_overall:
+            status_text = "(<b style='color:green;'>Ready</b>)"
+            self.nltk_status_label.setText(status_text)
+            self.nltk_status_label.setToolTip("Required NLTK tokenizers (punkt) found.")
+        else:
+            status_text = "(<b style='color:red;'>Missing</b>)"
+            self.nltk_status_label.setText(status_text)
+            self.nltk_status_label.setToolTip("Required NLTK tokenizers (punkt) are missing.")
+
+        # Update Action Buttons (based on installed status)
+        for model in self.manageable_models:
+            alias = model['alias']
+            button = self.action_buttons.get(alias)
+            if not button: continue
+            model_type = model['type']
+            is_installed = False
+            if model_type == 'spacy':
+                is_installed = model['name'] in installed_spacy_models
+            elif model_type == 'benepar':
+                is_installed = model['name'] in installed_benepar_models
+
+            # Button enabling is handled by _set_buttons_enabled
+            # Only update text and style here
+            if is_installed:
+                button.setText("Uninstall")
+                button.setProperty("danger", True) # Set danger property for uninstall
+                button.setToolTip(f"Uninstall {model['name']}")
+            else:
+                button.setText("Install")
+                button.setProperty("danger", False) # Remove danger property for install
+                button.setToolTip(f"Install {model['name']}")
+            # Force style re-evaluation after changing property
+            button.style().unpolish(button)
+            button.style().polish(button)
+
+        # NLTK Action Button
+        if self.nltk_action_button:
+            if nltk_present_overall:
+                self.nltk_action_button.setText("Uninstall") # Changed text
+                self.nltk_action_button.setProperty("danger", True) # Set danger property
+                self.nltk_action_button.setToolTip("Uninstall NLTK tokenizers (punkt, punkt_tab).")
+            else:
+                self.nltk_action_button.setText("Install NLTK")
+                self.nltk_action_button.setProperty("danger", False) # Remove danger property
+                self.nltk_action_button.setToolTip("Install NLTK tokenizers (punkt, punkt_tab).")
+            # Force style re-evaluation
+            self.nltk_action_button.style().unpolish(self.nltk_action_button)
+            self.nltk_action_button.style().polish(self.nltk_action_button)
+
+        # Update usage combos based on installed models
+        self._update_usage_combos(installed_spacy_models, installed_benepar_models)
+
+        # --- DEBUG LOGGING for SpaCy --- 
+        logging.debug(f"_update_ui_from_status: Processing SpaCy. Installed list received: {installed_spacy_models}")
+        for model_dbg in [m for m in self.manageable_models if m['type'] == 'spacy']:
+             alias_dbg = model_dbg['alias']
+             name_dbg = model_dbg['name']
+             is_installed_dbg = name_dbg in installed_spacy_models
+             logging.debug(f"  Checking SpaCy '{alias_dbg}' ('{name_dbg}'): Found = {is_installed_dbg}")
+        # --- END DEBUG LOGGING ---
+
+        # Update the feedback status label
+        if init_error:
+            self.model_action_status_label.setText(f"Error checking status: {init_error}")
+        elif not is_worker_running:
+            self.model_action_status_label.setText("Model status updated.")
+        # If a worker is running, the status label will be updated by the worker signals
+        
+        # --- Load persistent usage settings AFTER combo boxes are populated ---
+        self.load_usage_settings()
+        # ---------------------------------------------------------------------
 
     @pyqtSlot()
     def refresh_status(self):
         """Checks status of all known models and updates the UI via _update_ui_from_status."""
-        # Still perform the checks here
-        if not ANPE_AVAILABLE:
-            # Handle case where core became unavailable after dialog opened
-            status_update = {'spacy_models': [], 'benepar_models': [], 'nltk_present': False, 'error': 'ANPE core unavailable'}
-            self.model_action_status_label.setText("Status: ANPE core package not found.")
-        else:
-            self.model_action_status_label.setText("Refreshing status...")
-            QApplication.processEvents() # Ensure UI updates during check
-            try:
-                status_update = {
-                    'spacy_models': find_installed_spacy_models(),
-                    'benepar_models': find_installed_benepar_models(),
-                    'nltk_present': check_nltk_models(['punkt', 'punkt_tab']),
-                    'error': None
-                }
-                self.model_action_status_label.setText("Status updated.")
-            except Exception as e:
-                 logging.error(f"Error during manual refresh: {e}", exc_info=True)
-                 status_update = {'spacy_models': [], 'benepar_models': [], 'nltk_present': False, 'error': f'Refresh error: {e}'}
-                 self.model_action_status_label.setText(f"Error refreshing: {e}")
+        # Assume ANPE core is available
+        self.model_action_status_label.setText("Refreshing status...")
+        QApplication.processEvents() # Ensure UI updates during check
+        try:
+            status_update = {
+                'spacy_models': find_installed_spacy_models(),
+                'benepar_models': find_installed_benepar_models(),
+                'nltk_present': check_nltk_models(['punkt', 'punkt_tab']),
+                'error': None
+            }
+            # Status label text updated within _update_ui_from_status
+        except Exception as e:
+            logging.error(f"Error during manual refresh: {e}", exc_info=True)
+            status_update = {'spacy_models': [], 'benepar_models': [], 'nltk_present': False, 'error': f'Refresh error: {e}'}
+            # Error message set within _update_ui_from_status
+
+        # --- DEBUG LOGGING --- 
+        logging.debug(f"refresh_status: Collected Status: {status_update}")
+        # --- END DEBUG LOGGING ---
 
         # Update the UI using the collected status
         self._update_ui_from_status(status_update)
 
-    def _set_buttons_enabled(self, enabled: bool, force_disable: bool = False):
+    def _set_buttons_enabled(self, enabled: bool):
         """Enable/disable action buttons, optionally forcing disable (e.g., if core missing)."""
-        final_enabled_state = False if force_disable else enabled
         
         # Enable/disable global action buttons
-        self.refresh_button.setEnabled(final_enabled_state)
-        self.clean_button.setEnabled(final_enabled_state)
+        # Refresh should only be disabled if a worker is running
+        self.refresh_button.setEnabled(enabled)
+        # Assume core is present, only disable if worker running
+        self.clean_button.setEnabled(enabled)
         
         # Enable/disable buttons in the grid
+        # Assume core is present, only disable if worker running
+        model_action_enabled_state = enabled
         for alias, button in self.action_buttons.items():
-            button.setEnabled(final_enabled_state)
+            button.setEnabled(model_action_enabled_state)
         if self.nltk_action_button:
-            self.nltk_action_button.setEnabled(final_enabled_state)
+            self.nltk_action_button.setEnabled(model_action_enabled_state)
         
-        # Enable/disable usage combos unless forced disable
-        self.spacy_usage_combo.setEnabled(not force_disable)
-        self.benepar_usage_combo.setEnabled(not force_disable)
+        # Enable/disable usage combos (only disable if worker running)
+        self.spacy_usage_combo.setEnabled(enabled)
+        self.benepar_usage_combo.setEnabled(enabled)
 
     @pyqtSlot()
     def run_model_action(self):
@@ -994,10 +1006,6 @@ class ModelsPage(QWidget):
             QMessageBox.critical(self.window(), "Error", "Internal error: Could not determine action from button.")
             return
             
-        if not ANPE_AVAILABLE:
-             QMessageBox.warning(self.window(), "ANPE Not Found", f"Cannot {action} model '{alias}' because the ANPE core package is missing.")
-             return
-             
         # Use install_worker_thread for simplicity, assuming only one action runs at a time
         if self.install_worker_thread and self.install_worker_thread.isRunning():
              QMessageBox.warning(self.window(), "In Progress", "Another model action is already running. Please wait.")
@@ -1070,23 +1078,52 @@ class ModelsPage(QWidget):
     @pyqtSlot()
     def run_clean(self):
         """Confirm and start the background cleaning process."""
-        if not ANPE_AVAILABLE:
-             QMessageBox.warning(self.window(), "ANPE Not Found", "Cannot clean models because the ANPE core package is missing.")
-             return
         if self.clean_worker_thread and self.clean_worker_thread.isRunning():
             QMessageBox.warning(self.window(), "In Progress", "Model cleanup is already running.")
             return
 
+        # --- Detect currently installed models BEFORE showing the confirmation ---
+        try:
+            detected_spacy = find_installed_spacy_models()
+            detected_benepar = find_installed_benepar_models()
+            detected_nltk = check_nltk_models(['punkt', 'punkt_tab'])
+        except Exception as e:
+            logging.error(f"Error detecting models for clean confirmation: {e}")
+            QMessageBox.critical(self.window(), "Error", f"Could not detect installed models before cleanup: {e}")
+            return
+
+        # --- Format the message dynamically ---
+        message_parts = ["This action will attempt to remove the following <b>currently detected</b> ANPE-related models:<br><br>"]
+        
+        if detected_spacy:
+            spacy_models_str = ", ".join([f"<b>{name}</b>" for name in sorted(detected_spacy)])
+            message_parts.append(f" • <b>spaCy:</b> {spacy_models_str}<br>")
+        else:
+             message_parts.append(" • <b>spaCy:</b> (None detected)<br>")
+             
+        if detected_benepar:
+            benepar_models_str = ", ".join([f"<b>{name}</b>" for name in sorted(detected_benepar)])
+            message_parts.append(f" • <b>Benepar:</b> {benepar_models_str}<br>")
+        else:
+             message_parts.append(" • <b>Benepar:</b> (None detected)<br>")
+             
+        if detected_nltk:
+            message_parts.append(" • <b>NLTK:</b> <b>punkt</b>, <b>punkt_tab</b><br>")
+        else:
+             message_parts.append(" • <b>NLTK:</b> (None detected)<br>")
+
+        message_parts.append(
+            "<br>from all known locations on your system.<br>"
+            "Models may need to be re-downloaded if removed.<br><br>"
+            "<b>Are you sure you want to proceed?</b>"
+        )
+        confirm_message = "".join(message_parts)
+        # -------------------------------------
+
         reply = QMessageBox.question(
             self.window(), # Parent to main window
             "Confirm Cleanup",
-            "This will attempt to remove <b>ALL</b> detected ANPE-related models \n"
-            f" (spaCy: {', '.join(set(SPACY_MODEL_MAP.values()))}, \n" # Show actual names
-            f"  Benepar: {', '.join(set(BENEPAR_MODEL_MAP.values()))}, \n"
-            f"  NLTK: punkt, punkt_tab)\n"
-            "from all known locations on your system.\n\n"
-            "Models will need to be re-downloaded the next time they are needed.\n\n"
-            "Are you sure you want to proceed?",
+            confirm_message, # Use the dynamically generated message
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No
         )
@@ -1212,23 +1249,22 @@ class CorePage(QWidget):
         self.check_update_button.clicked.connect(self.handle_core_action)
         
     def load_initial_data(self):
-        """Get the current installed version."""
+        """Get the current installed version (assuming core is installed)."""
         try:
-            self.current_version = importlib.metadata.version(CORE_PACKAGE_NAME) if ANPE_AVAILABLE else "N/A"
+            # Assume core is installed, directly get version
+            self.current_version = importlib.metadata.version(CORE_PACKAGE_NAME)
             self.current_version_label.setText(self.current_version)
             self.status_label.setText("Ready to check for updates.")
-            self.check_update_button.setEnabled(ANPE_AVAILABLE) # Can only check if core is importable
-        except importlib.metadata.PackageNotFoundError:
-            self.current_version = "N/A (Not Found)"
-            self.current_version_label.setText(self.current_version)
-            self.status_label.setText(f"Core package '{CORE_PACKAGE_NAME}' not found.")
-            self.check_update_button.setEnabled(False)
         except Exception as e:
-             self.current_version = "N/A (Error)"
-             self.current_version_label.setText(self.current_version)
-             self.status_label.setText(f"Error getting current version: {e}")
-             self.check_update_button.setEnabled(False)
-             logging.error(f"Error getting current core version: {e}", exc_info=True)
+            # Error getting version even though core is expected
+            self.current_version = "N/A (Error)"
+            self.current_version_label.setText(f"<i style='color: {ERROR_COLOR};'>{self.current_version}</i>")
+            self.status_label.setText(f"Error reading core version: {e}")
+            logging.error(f"Error getting current core version: {e}", exc_info=True)
+        finally:
+            # Button should always be enabled unless worker running
+            self.check_update_button.setEnabled(True)
+            self.check_update_button.setText("Check for Updates") # Ensure initial text
 
     @pyqtSlot()
     def handle_core_action(self):
@@ -1311,18 +1347,33 @@ class CorePage(QWidget):
             self.status_label.setText(f"Error checking for updates: {error_string}")
             self.latest_version_label.setText("Error")
             self.check_update_button.setText("Check for Updates")
-            self.check_update_button.setEnabled(ANPE_AVAILABLE) # Re-enable if core exists
+            # Button should remain enabled to allow retrying the check
+            self.check_update_button.setEnabled(True) 
             logging.error(f"Update check failed: {error_string}")
         else:
             self.latest_version = latest_version # Store latest version
             self.latest_version_label.setText(latest_version)
-            # Compare versions (simple string comparison might work for standard versions)
-            # TODO: Implement more robust version comparison if needed (e.g., using packaging library)
-            if latest_version != "N/A" and current_version != "N/A" and latest_version > current_version:
+            
+            # Determine if an action is needed (update only, assume installed)
+            can_install_or_update = latest_version != "N/A"
+            needs_update = False
+            if self.current_version != "N/A (Error)" and latest_version != "N/A":
+                 # Basic version comparison (consider using 'packaging' library for robustness if needed)
+                 try:
+                      from packaging import version
+                      needs_update = version.parse(latest_version) > version.parse(self.current_version)
+                 except ImportError:
+                      # Fallback to string comparison
+                      needs_update = latest_version > self.current_version
+                 except version.InvalidVersion:
+                      logging.warning(f"Could not parse versions for comparison: current='{self.current_version}', latest='{latest_version}'")
+                      needs_update = False # Avoid potentially incorrect update prompt
+
+            if needs_update:
                 self.status_label.setText(f"Update available (Version {latest_version}).")
-                self.check_update_button.setText("Update ANPE Core")
+                self.check_update_button.setText(f"Update ANPE Core ({latest_version})")
                 self.check_update_button.setEnabled(True)
-            else:
+            else: # Up-to-date or latest is N/A
                 self.status_label.setText("ANPE core package is up to date.")
                 self.check_update_button.setText("Up to Date")
                 self.check_update_button.setEnabled(False) # Disable if up to date
@@ -1352,21 +1403,22 @@ class CorePage(QWidget):
              self.latest_version_label.setText("-") # Clear latest version
              self.status_label.setText("Update successful. Check for updates again if needed.")
              self.check_update_button.setText("Check for Updates")
-             self.check_update_button.setEnabled(ANPE_AVAILABLE)
+             self.check_update_button.setEnabled(True)
         else:
              QMessageBox.warning(self.window(), "Update Failed", message)
              self.status_label.setText("Update failed. Check logs for details.")
              # Keep button as Update? Or revert to Check?
              # Let's revert to Check for simplicity, user can try again
              self.check_update_button.setText("Check for Updates")
-             self.check_update_button.setEnabled(ANPE_AVAILABLE)
+             self.check_update_button.setEnabled(True)
 
 class AboutPage(QWidget):
     """Displays About information: versions, author, links, acknowledgements."""
     def __init__(self, gui_version: str, core_version: str, parent=None):
         super().__init__(parent)
         self.gui_version = gui_version
-        self.core_version = core_version
+        # Ensure core_version is displayed correctly even if passed as N/A
+        self.core_version = core_version 
         self.setObjectName("AboutPage")
         self.setup_ui()
         
@@ -1530,22 +1582,30 @@ class AboutPage(QWidget):
         # Need LicenseDialog - assume it's importable or handle error
         try:
             from anpe_gui.widgets.license_dialog import LicenseDialog
-            # Center the license dialog on the main settings window or screen
+            from PyQt6.QtWidgets import QApplication # Added import
+
             license_dialog = LicenseDialog(self.window()) # Parent to the main dialog window
-            # Basic centering logic (might need refinement)
-            parent_geo = self.window().geometry()
-            dialog_size = license_dialog.sizeHint()
-            x = parent_geo.x() + (parent_geo.width() - dialog_size.width()) // 2
-            y = parent_geo.y() + (parent_geo.height() - dialog_size.height()) // 2
-            license_dialog.move(x, y)
+
+            # --- Center on parent's screen --- 
+            parent_window = self.window()
+            screen = None
+            if parent_window:
+                screen = QApplication.screenAt(parent_window.pos())
+            if not screen:
+                screen = QApplication.primaryScreen()
+                
+            if screen:
+                screen_center = screen.availableGeometry().center()
+                dialog_geom = license_dialog.frameGeometry()
+                dialog_geom.moveCenter(screen_center)
+                license_dialog.move(dialog_geom.topLeft())
+            # If no screen info, let Qt decide default placement
+            # -------------------------------
+
             license_dialog.exec()
         except ImportError:
              logging.error("LicenseDialog not found. Cannot display license.")
-             QMessageBox.warning(self.window(), "Error", "Could not display the license information (Component missing).")
-        except Exception as e:
-            logging.error(f"Failed to show license dialog: {e}")
-            QMessageBox.warning(self.window(), "Error", "Could not display the license information.")
-        
+
     def _visit_project_page(self):
         """Open project page in browser."""
         from PyQt6.QtGui import QDesktopServices # Import locally for clarity
@@ -1569,9 +1629,8 @@ class SettingsDialog(QDialog):
         self.initial_model_status = initial_model_status # Store the passed status
         self.setWindowTitle("ANPE Settings")
         # Increased default/minimum height
-        self.setMinimumSize(800, 650) # Increased height
-        self.resize(850, 700)        # Increased height
-        # self.setWindowIcon(QIcon(":/icons/settings.png")) # Optional: Add icon
+        self.setMinimumSize(700, 600) # Increased height
+        self.resize(800, 700)        # Increased height
 
         # Store references to page widgets
         self.models_page = None
@@ -1587,6 +1646,11 @@ class SettingsDialog(QDialog):
 
         # Center the dialog after setup
         self._center_on_screen()
+        
+        # --- Trigger initial refresh after dialog is set up --- 
+        # Use QTimer.singleShot to schedule the refresh slightly after __init__ completes
+        # REMOVED: QTimer.singleShot(50, self.models_page.refresh_status)
+        # NOTE: Initial UI state is now set in ModelsPage.__init__ using the passed initial_model_status
 
     def _center_on_screen(self):
         """Centers the dialog on the primary screen."""
@@ -1614,12 +1678,6 @@ class SettingsDialog(QDialog):
         main_layout.setSpacing(0)
         main_layout.setContentsMargins(0, 0, 0, 0)
 
-        # --- Top Header (Optional, for title/description) ---
-        # header_widget = QWidget()
-        # header_layout = QVBoxLayout(header_widget)
-        # ... add title QLabel ...
-        # main_layout.addWidget(header_widget)
-
         # --- Main Content Splitter ---
         content_splitter = QSplitter(Qt.Orientation.Horizontal)
         content_splitter.setChildrenCollapsible(False)
@@ -1642,7 +1700,7 @@ class SettingsDialog(QDialog):
                 outline: none; /* Remove focus outline */
             }}
             QListWidget::item {{
-                padding: 10px 15px;
+                padding: 10px 15px 10px 15px; /* Adjusted top/bottom padding */
                 border-bottom: 1px solid #e0e0e0;
                 color: #333;
             }}
@@ -1665,10 +1723,19 @@ class SettingsDialog(QDialog):
                 border: none; /* Ensure no focus border */
             }}
         """)
-        # Add navigation items
-        self.nav_list.addItem(QListWidgetItem("Models"))
-        self.nav_list.addItem(QListWidgetItem("Core"))
-        self.nav_list.addItem(QListWidgetItem("About"))
+        # Add navigation items with icons
+        models_item = QListWidgetItem("Models")
+        models_item.setIcon(ResourceManager.get_icon("layers.svg"))
+        self.nav_list.addItem(models_item)
+
+        core_item = QListWidgetItem("Core")
+        core_item.setIcon(ResourceManager.get_icon("package.svg"))
+        self.nav_list.addItem(core_item)
+
+        about_item = QListWidgetItem("About")
+        about_item.setIcon(ResourceManager.get_icon("info.svg"))
+        self.nav_list.addItem(about_item)
+        
         nav_layout.addWidget(self.nav_list)
         content_splitter.addWidget(nav_widget)
 
@@ -1685,7 +1752,7 @@ class SettingsDialog(QDialog):
         except ImportError:
             gui_version = "N/A"
         try:
-             core_version = importlib.metadata.version(CORE_PACKAGE_NAME) if ANPE_AVAILABLE else "N/A"
+             core_version = importlib.metadata.version(CORE_PACKAGE_NAME)
         except importlib.metadata.PackageNotFoundError:
              core_version = "N/A (Not Found)"
              
@@ -1704,40 +1771,6 @@ class SettingsDialog(QDialog):
 
         main_layout.addWidget(content_splitter)
 
-        # --- Bottom Button Bar ---
-        button_bar = QWidget()
-        button_bar.setStyleSheet("background-color: #f0f0f0; border-top: 1px solid #cccccc;")
-        button_layout = QHBoxLayout(button_bar)
-        button_layout.setContentsMargins(10, 5, 10, 5)
-        button_layout.addStretch()
-        self.close_button = QPushButton("Close")
-        self.close_button.setMinimumWidth(100)
-        self.close_button.clicked.connect(self.accept) # QDialog's accept closes
-        # --- Apply primary button styling --- 
-        self.close_button.setStyleSheet(f"""
-            QPushButton {{
-                padding: 5px 15px;
-                font-size: 10pt;
-                border: none; /* Remove border */
-                border-radius: 4px;
-                background-color: {PRIMARY_COLOR};
-                color: white;
-            }}
-            QPushButton:hover {{
-                background-color: #005fb8; /* Darker blue for hover */
-            }}
-            QPushButton:pressed {{
-                background-color: #004a94; /* Even darker blue for pressed */
-            }}
-            QPushButton:disabled {{
-                background-color: #cccccc;
-                color: #888888;
-            }}
-        """)
-        # -------------------------------------
-        button_layout.addWidget(self.close_button)
-        main_layout.addWidget(button_bar)
-
     def connect_signals(self):
         """Connect signals for navigation and page updates."""
         self.nav_list.currentRowChanged.connect(self.pages_stack.setCurrentIndex)
@@ -1745,20 +1778,3 @@ class SettingsDialog(QDialog):
         # Connect signals from ModelsPage to SettingsDialog signals
         self.models_page.models_changed.connect(self.models_changed.emit)
         self.models_page.model_usage_changed.connect(self.model_usage_changed.emit)
-
-
-# Example usage (for testing standalone)
-if __name__ == '__main__':
-    logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-
-    # Dummy NLTK if core package unavailable
-    if not ANPE_AVAILABLE:
-        class DummyNLTKData:
-            def find(self, path): raise LookupError()
-        class DummyNLTK: data = DummyNLTKData()
-        nltk = DummyNLTK()
-
-    app = QApplication(sys.argv)
-    dialog = SettingsDialog()
-    dialog.show()
-    sys.exit(app.exec()) 

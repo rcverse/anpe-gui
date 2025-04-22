@@ -60,7 +60,7 @@ class HelpDialog(QDialog):
         nav_header.setStyleSheet(f"""
             QLabel {{
                 color: {PRIMARY_COLOR};
-                font-size: 14px;
+                font-size: 20px;
                 font-weight: bold;
                 padding-bottom: 5px;
                 border-bottom: 1px solid #ddd;
@@ -93,13 +93,13 @@ class HelpDialog(QDialog):
             }}
             QTreeWidget::item:hover:!selected {{
                 background-color: {LIGHT_HOVER_BLUE}; /* Light blue background on hover */
-                color: {PRIMARY_COLOR}; /* Use primary color text on hover */
+                color: {PRIMARY_COLOR}; /* Use primary color teaxt on hover */
             }}
             QTreeWidget::item:selected {{
-                background-color: #E1EDFF; /* Light blue background when selected */
-                color: #333333; /* Keep text dark for better contrast */
-                border: none; /* No border */
-                outline: none; /* Remove focus rectangle */
+                background-color: {PRIMARY_COLOR};
+                color: white; 
+                border: none; 
+                outline: none; 
                 border-radius: 0px;
             }}
             QTreeWidget:focus {{
@@ -159,7 +159,6 @@ class HelpDialog(QDialog):
         button_layout.setSpacing(10)
         
         self.project_page_button = QPushButton("Project Page")
-        self.about_button = QPushButton("About")
         self.ok_button = QPushButton("OK")
         
         button_style = """
@@ -170,17 +169,14 @@ class HelpDialog(QDialog):
             }
         """
         self.project_page_button.setStyleSheet(button_style)
-        self.about_button.setStyleSheet(button_style)
         self.ok_button.setStyleSheet(button_style)
         
         button_layout.addStretch()
         button_layout.addWidget(self.project_page_button)
-        button_layout.addWidget(self.about_button)
         button_layout.addWidget(self.ok_button)
         
         self.ok_button.clicked.connect(self.accept)
         self.project_page_button.clicked.connect(self.go_to_project_page)
-        self.about_button.clicked.connect(self.show_about_info)
         
         content_layout.addWidget(button_container)
         content_splitter.addWidget(content_container)
@@ -367,17 +363,6 @@ class HelpDialog(QDialog):
         """Open the project page in a browser."""
         QDesktopServices.openUrl(QUrl("https://github.com/rcverse/Another-Noun-Phrase-Extractor"))
 
-    def show_about_info(self):
-        """Show the about dialog."""
-        from anpe_gui.version import __version__ as gui_version
-        try:
-            from anpe import __version__ as core_version
-        except ImportError:
-            core_version = "N/A"
-        
-        about_dialog = AboutDialog(gui_version, core_version, self)
-        about_dialog.exec()
-
     def preprocess_markdown(self, content):
         """Pre-process markdown content to improve readability."""
         # Add extra newlines before headings for better spacing
@@ -560,202 +545,4 @@ class HelpDialog(QDialog):
             {html_content}
         </body>
         </html>
-        """
-
-class AboutDialog(QDialog):
-    """Custom About dialog with proper icon display."""
-    
-    def __init__(self, gui_version, core_version, parent=None):
-        super().__init__(parent)
-        self.gui_version = gui_version
-        self.core_version = core_version
-        self.setWindowTitle("About ANPE GUI")
-        self.setMinimumWidth(600)
-        self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
-        
-        self.setup_ui()
-        
-    def setup_ui(self):
-        main_layout = QVBoxLayout(self)
-        main_layout.setSpacing(15)
-        main_layout.setContentsMargins(20, 20, 20, 20)
-
-        # --- Header Section ---
-        header_widget = QWidget()
-        header_layout = QHBoxLayout(header_widget)
-        header_layout.setSpacing(20) # Increased spacing
-        header_layout.setContentsMargins(0, 0, 0, 10) # Add bottom margin
-
-        # Icon (left)
-        icon_label = QLabel()
-        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        pixmap = ResourceManager.get_pixmap("app_icon.png")
-        pixmap = pixmap.scaled(100, 100, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
-        icon_label.setPixmap(pixmap)
-        icon_label.setFixedSize(100, 100) # Fix size for consistent layout
-        header_layout.addWidget(icon_label, 0, Qt.AlignmentFlag.AlignTop) # Align icon to top
-
-        # Title/Subtitle (right)
-        title_container = QWidget()
-        title_layout = QVBoxLayout(title_container)
-        title_layout.setContentsMargins(0, 0, 0, 0)
-        title_layout.setSpacing(5)
-        title_layout.addStretch(1) # Push content down vertically
-
-        title_label = QLabel("ANPE")
-        title_label.setStyleSheet("font-size: 24px; font-weight: bold; color: #005A9C;")
-        title_layout.addWidget(title_label)
-
-        subtitle_label = QLabel("Another Noun Phrase Extractor")
-        subtitle_label.setStyleSheet("font-size: 16px; color: #666666;")
-        title_layout.addWidget(subtitle_label)
-        title_layout.addStretch(1) # Push content up vertically
-
-        header_layout.addWidget(title_container, 1)
-        main_layout.addWidget(header_widget)
-
-        # --- Info Grid ---
-        info_widget = QWidget()
-        info_layout = QGridLayout(info_widget)
-        info_layout.setContentsMargins(10, 0, 10, 10) # Reduced top margin
-        info_layout.setSpacing(8)
-        info_layout.setColumnStretch(1, 1) # Allow value column to stretch
-
-        # Labels column width
-        label_width = 110
-
-        # GUI Version
-        gui_label = QLabel("GUI Version:")
-        gui_label.setStyleSheet("font-weight: bold;")
-        gui_label.setFixedWidth(label_width)
-        gui_value = QLabel(self.gui_version)
-        info_layout.addWidget(gui_label, 0, 0, Qt.AlignmentFlag.AlignLeft)
-        info_layout.addWidget(gui_value, 0, 1, Qt.AlignmentFlag.AlignLeft)
-
-        # Core Version
-        core_label = QLabel("Core Version:")
-        core_label.setStyleSheet("font-weight: bold;")
-        core_label.setFixedWidth(label_width)
-        core_value = QLabel(self.core_version)
-        info_layout.addWidget(core_label, 1, 0, Qt.AlignmentFlag.AlignLeft)
-        info_layout.addWidget(core_value, 1, 1, Qt.AlignmentFlag.AlignLeft)
-
-        # Author
-        author_label = QLabel("Author:")
-        author_label.setStyleSheet("font-weight: bold;")
-        author_label.setFixedWidth(label_width)
-        author_value = QLabel("Richard Chen (@rcverse)")
-        info_layout.addWidget(author_label, 2, 0, Qt.AlignmentFlag.AlignLeft)
-        info_layout.addWidget(author_value, 2, 1, Qt.AlignmentFlag.AlignLeft)
-
-        # License
-        license_label = QLabel("License:")
-        license_label.setStyleSheet("font-weight: bold;")
-        license_label.setFixedWidth(label_width)
-        license_value = QLabel("GNU General Public License v3") # View button moved
-        info_layout.addWidget(license_label, 3, 0, Qt.AlignmentFlag.AlignLeft)
-        info_layout.addWidget(license_value, 3, 1, Qt.AlignmentFlag.AlignLeft)
-
-        # Contact
-        email_label = QLabel("Contact:")
-        email_label.setStyleSheet("font-weight: bold;")
-        email_label.setFixedWidth(label_width)
-        email_value = QLabel('<a href="mailto:rcverse6@gmail.com">rcverse6@gmail.com</a>')
-        email_value.setTextFormat(Qt.TextFormat.RichText)
-        email_value.setOpenExternalLinks(True)
-        info_layout.addWidget(email_label, 4, 0, Qt.AlignmentFlag.AlignLeft)
-        info_layout.addWidget(email_value, 4, 1, Qt.AlignmentFlag.AlignLeft)
-
-        main_layout.addWidget(info_widget)
-
-        # --- Separator ---
-        separator = QFrame()
-        separator.setFrameShape(QFrame.Shape.HLine)
-        separator.setFrameShadow(QFrame.Shadow.Sunken)
-        separator.setStyleSheet("background-color: #e0e0e0;")
-        main_layout.addWidget(separator)
-
-
-        # --- Acknowledgements Section ---
-        ack_widget = QWidget()
-        ack_layout = QVBoxLayout(ack_widget)
-        ack_layout.setContentsMargins(10, 5, 10, 5) # Reduced vertical margins
-        ack_layout.setSpacing(5)
-
-        ack_title = QLabel("Acknowledgements")
-        ack_title.setStyleSheet("font-size: 14px; font-weight: bold; color: #333; margin-bottom: 5px;")
-        ack_layout.addWidget(ack_title)
-
-        ack_text = (
-            "This application uses the following open-source libraries:<br>"
-            "• <b>PyQt6</b> (GPLv3 / Commercial)<br>"
-            "• <b>spaCy</b> (MIT License)<br>"
-            "• <b>Benepar</b> (MIT License)<br>"
-            "• <b>NLTK</b> (Apache License 2.0)<br><br>"
-            "We are grateful for the developers of these packages that make ANPE and ANPE GUI possible. "
-            "You can find more detailed license information in the application's About dialog."
-        )
-        ack_label = QLabel(ack_text)
-        ack_label.setWordWrap(True)
-        ack_label.setTextFormat(Qt.TextFormat.RichText) # Use RichText for <br>
-        ack_label.setStyleSheet("font-size: 11px; color: #555;")
-        ack_layout.addWidget(ack_label)
-
-        main_layout.addWidget(ack_widget)
-        main_layout.addStretch(1) # Push buttons to the bottom
-
-        # --- Button Bar ---
-        button_widget = QWidget()
-        button_layout = QHBoxLayout(button_widget)
-        button_layout.setContentsMargins(0, 10, 0, 0) # Add top margin
-        button_layout.setSpacing(10)
-
-        # Project Page Button
-        project_page_button = QPushButton("Visit Project Page")
-        project_page_button.clicked.connect(self._visit_project_page)
-        button_layout.addWidget(project_page_button)
-        
-        # View License Button
-        self.license_view_button = QPushButton("View License") # Store as member
-        self.license_view_button.clicked.connect(self._show_license)
-        button_layout.addWidget(self.license_view_button)
-
-
-        button_layout.addStretch(1) # Push OK button to the right
-
-        # OK Button
-        ok_button = QPushButton("OK")
-        ok_button.setDefault(True) # Make OK the default button
-        ok_button.setFixedWidth(100) # Slightly wider
-        ok_button.clicked.connect(self.accept)
-        button_layout.addWidget(ok_button)
-
-        main_layout.addWidget(button_widget)
-
-    def _show_license(self):
-        """Show the license dialog."""
-        # Center the license dialog on the main window or screen
-        try:
-            from anpe_gui.widgets.license_dialog import LicenseDialog
-            license_dialog = LicenseDialog(self)
-            parent_geometry = self.geometry()
-            screen_geometry = QGuiApplication.primaryScreen().availableGeometry()
-            dialog_size = license_dialog.sizeHint() # Get the recommended size
-
-            # Calculate center position relative to parent
-            x = parent_geometry.x() + (parent_geometry.width() - dialog_size.width()) // 2
-            y = parent_geometry.y() + (parent_geometry.height() - dialog_size.height()) // 2
-
-            # Ensure it's within screen bounds
-            x = max(screen_geometry.x(), min(x, screen_geometry.x() + screen_geometry.width() - dialog_size.width()))
-            y = max(screen_geometry.y(), min(y, screen_geometry.y() + screen_geometry.height() - dialog_size.height()))
-
-            license_dialog.move(x, y)
-            license_dialog.exec()
-        except Exception as e:
-            logging.error(f"Failed to show license dialog: {e}")
-            QMessageBox.warning(self, "Error", "Could not display the license information.")
-        
-    def _visit_project_page(self):
-        """Open project page in browser."""
-        QDesktopServices.openUrl(QUrl("https://github.com/rcverse/Another-Noun-Phrase-Extractor")) 
+        """ 
