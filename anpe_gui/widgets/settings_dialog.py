@@ -6,13 +6,10 @@ model usage preferences, and model installation/management.
 import anpe
 import sys
 import logging
-import nltk # Need nltk for the status check part (will move to page)
+import nltk # Need nltk for the status check part (will move to page) - Still needed for ModelsPage NLTK status check
 import importlib.metadata # For getting core version
-import subprocess # For core update
-import urllib.request # For checking latest core version
-import json # For parsing PyPI response
 
-from PyQt6.QtCore import Qt, QThread, QObject, pyqtSignal, pyqtSlot, QSize, QSettings, QTimer
+from PyQt6.QtCore import Qt, QThread, QObject, pyqtSignal, pyqtSlot, QSize, QSettings, QTimer, QEvent
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QGroupBox,
     QGridLayout, QProgressBar, QMessageBox, QWidget, QSpacerItem, QSizePolicy,
@@ -23,14 +20,17 @@ from PyQt6.QtGui import QIcon, QPixmap
 
 from anpe_gui.theme import ERROR_COLOR, PRIMARY_COLOR, get_scroll_bar_style, LIGHT_HOVER_BLUE # Import theme elements
 from anpe_gui.resource_manager import ResourceManager # ADDED THIS IMPORT
-# from anpe_gui.setup_wizard import SetupWizard # No longer needed here
+from anpe_gui.widgets.activity_indicator import PulsingActivityIndicator # IMPORT THE INDICATOR
+# Import the worker classes from their new location
+from anpe_gui.workers.settings_workers import CoreUpdateWorker, CleanWorker, InstallDefaultsWorker, ModelActionWorker
 
 # Assuming these utilities exist and work as expected
 # (We will need more specific imports later in the page widgets)
 try:
     from anpe.utils.setup_models import (
         check_spacy_model, check_benepar_model, check_nltk_models, setup_models,
-        SPACY_MODEL_MAP, BENEPAR_MODEL_MAP, install_nltk_models, install_spacy_model, install_benepar_model # Import maps and new functions
+        SPACY_MODEL_MAP, BENEPAR_MODEL_MAP, install_nltk_models, install_spacy_model, install_benepar_model, # Import maps and new functions
+        DEFAULT_SPACY_ALIAS, DEFAULT_BENEPAR_ALIAS # Explicitly import defaults
     )
     from anpe.utils.clean_models import clean_all
     from anpe.utils.model_finder import (
@@ -62,341 +62,6 @@ except ImportError as e:
     nltk = DummyNLTK()
 
 
-# --- Worker Objects --- 
-# (These will be used by the page widgets)
-
-class CoreUpdateWorker(QObject):
-    """Worker for checking and performing ANPE core updates."""
-    check_finished = pyqtSignal(str, str, str) # latest_version, current_version, error_string
-    update_progress = pyqtSignal(int, str)    # value (-1 for indeterminate), message
-    update_finished = pyqtSignal(bool, str)   # success, message
-    
-    def __init__(self, current_version):
-        super().__init__()
-        self.current_version = current_version
-
-    @pyqtSlot()
-    def run_check(self):
-        """Check PyPI for the latest version."""
-        latest_version = "N/A"
-        error_string = ""
-        try:
-            # Use PyPI JSON API
-            pypi_url = f"https://pypi.org/pypi/{CORE_PACKAGE_NAME}/json"
-            with urllib.request.urlopen(pypi_url, timeout=10) as response:
-                if response.status == 200:
-                    data = json.loads(response.read().decode())
-                    latest_version = data.get("info", {}).get("version", "N/A")
-                else:
-                    error_string = f"Failed to fetch from PyPI (Status: {response.status})"
-        except urllib.error.URLError as e:
-            error_string = f"Network error checking PyPI: {e.reason}"
-        except json.JSONDecodeError:
-            error_string = "Error parsing PyPI response."
-        except Exception as e:
-            error_string = f"An unexpected error occurred: {e}"
-            
-        self.check_finished.emit(latest_version, self.current_version, error_string)
-
-    @pyqtSlot()
-    def run_update(self):
-        """Run pip install --upgrade anpe."""
-        success = False
-        message = ""
-        try:
-            self.update_progress.emit(-1, "Starting update process...") # Indeterminate
-            # Ensure pip is available and upgrade it first for robustness
-            try:
-                subprocess.run([sys.executable, "-m", "pip", "install", "--upgrade", "pip"], check=True, capture_output=True)
-            except Exception as pip_e:
-                logging.warning(f"Could not upgrade pip: {pip_e}")
-            
-            # Run the update command
-            result = subprocess.run(
-                [sys.executable, "-m", "pip", "install", "--upgrade", CORE_PACKAGE_NAME],
-                check=True, # Raise error on failure
-                capture_output=True,
-                text=True,
-                encoding='utf-8' # Explicitly set encoding
-            )
-            message = f"Update successful!\n\nOutput:\n{result.stdout[-500:]}" # Show last bit of output
-            success = True
-            self.update_progress.emit(100, "Update complete.")
-            
-        except subprocess.CalledProcessError as e:
-            message = f"Update failed.\n\nError:\n{e.stderr[-500:]}"
-            success = False
-            self.update_progress.emit(0, "Update failed.")
-        except Exception as e:
-            message = f"An unexpected error occurred during update: {e}"
-            success = False
-            self.update_progress.emit(0, "Update failed.")
-            
-        self.update_finished.emit(success, message)
-
-class CleanWorker(QObject):
-    """Worker to run clean_all in a background thread."""
-    finished = pyqtSignal(dict) # Return status dictionary from clean_all
-    progress = pyqtSignal(str) # To send status updates
-
-    @pyqtSlot()
-    def run(self):
-        self.progress.emit("Starting model cleanup process...")
-        results = {}
-        try:
-            # clean_all now handles logging internally
-            # We just capture the results dictionary
-            results = clean_all() # Removed logger passing
-            self.progress.emit("Model cleanup process finished.")
-        except Exception as e:
-            logging.error(f"Exception during background model cleanup: {e}", exc_info=True)
-            self.progress.emit(f"Error during cleanup: {e}")
-            # Ensure results dict still has keys even on error
-            results = {"spacy": False, "benepar": False, "nltk": False} 
-        finally:
-            # Ensure finished is always emitted
-            self.finished.emit(results)
-
-
-class ModelActionWorker(QObject):
-    """Worker for installing or uninstalling specific models."""
-    progress = pyqtSignal(str) # Message only for progress updates
-    finished = pyqtSignal(bool, str) # success, message
-    
-    def __init__(self, action: str, model_type: str, alias: str = None):
-        """
-        Initialize the worker.
-        
-        Args:
-            action: Either "install" or "uninstall"
-            model_type: One of "spacy", "benepar", or "nltk"
-            alias: The model alias (e.g., "md", "lg", "default"), None for NLTK
-        """
-        super().__init__()
-        self.action = action
-        self.model_type = model_type
-        self.alias = alias
-        
-    @pyqtSlot()
-    def run(self):
-        """Execute the requested model action."""
-        success = False
-        message = ""
-        
-        try:
-            self.progress.emit(f"Starting {self.action} for {self.model_type} model{f' {self.alias}' if self.alias else ''}...")
-            
-            # Import necessary functions from setup_models
-            from anpe.utils.setup_models import install_nltk_models, install_spacy_model, install_benepar_model
-
-            # Handle NLTK models specially
-            if self.model_type == 'nltk':
-                if self.action == 'install':
-                    try:
-                        # Use the dedicated install function from setup_models
-                        success = install_nltk_models()
-                        if success:
-                            message = "NLTK resources successfully installed."
-                        else:
-                            message = "Failed to install NLTK resources. Check logs."
-                    except Exception as e:
-                        message = f"Failed to install NLTK resources: {e}"
-                        success = False
-                elif self.action == 'uninstall':
-                    # Uninstallation logic for NLTK remains here as it's simpler
-                    try:
-                        import nltk.data
-                        # Try to find and remove punkt resources
-                        try:
-                            punkt_path = nltk.data.find('tokenizers/punkt')
-                            import shutil, os
-                            if os.path.exists(punkt_path):
-                                if os.path.isdir(punkt_path):
-                                    shutil.rmtree(punkt_path)
-                                else:
-                                    os.remove(punkt_path)
-                            # Handle punkt_tab too
-                            punkt_tab_path = nltk.data.find('tokenizers/punkt_tab')
-                            if os.path.exists(punkt_tab_path):
-                                if os.path.isdir(punkt_tab_path):
-                                    shutil.rmtree(punkt_tab_path)
-                                else:
-                                    os.remove(punkt_tab_path)
-                            success = not check_nltk_models(['punkt', 'punkt_tab'])
-                            message = "NLTK resources successfully uninstalled."
-                        except (LookupError, OSError, IOError) as e:
-                            message = f"Error removing NLTK resources: {e}"
-                            success = False
-                    except Exception as e:
-                        message = f"Failed to uninstall NLTK resources: {e}"
-                        success = False
-            # Handle spaCy and Benepar models
-            else:
-                if not self.alias:
-                    message = f"Missing alias for {self.model_type} model action."
-                    success = False
-                else:
-                    # Get the full model name from the alias
-                    model_map = SPACY_MODEL_MAP if self.model_type == 'spacy' else BENEPAR_MODEL_MAP
-                    model_name = model_map.get(self.alias)
-                    
-                    if not model_name:
-                        message = f"Unknown {self.model_type} model alias: {self.alias}"
-                        success = False
-                    else:
-                        if self.action == 'install':
-                            try:
-                                if self.model_type == 'spacy':
-                                    # Use the dedicated install function from setup_models
-                                    success = install_spacy_model(model_name=model_name)
-                                elif self.model_type == 'benepar':
-                                    # Use the dedicated install function from setup_models
-                                    success = install_benepar_model(model_name=model_name)
-                                
-                                if success:
-                                    message = f"Successfully installed {self.model_type} model {model_name}."
-                                else:
-                                    message = f"Failed to install {self.model_type} model {model_name}. Check logs."
-                            except Exception as e:
-                                message = f"Failed to install {model_name}: {e}"
-                                success = False
-
-                        elif self.action == 'uninstall':
-                            # Uninstallation logic remains the same (as it was already implemented here)
-                            if self.model_type == 'spacy':
-                                # Use subprocess to run pip uninstall for spaCy models
-                                import subprocess
-                                import sys
-                                import spacy
-                                import shutil
-                                
-                                success = True  # Will be set to False if any step fails
-                                self.progress.emit(f"Attempting to uninstall spaCy model {model_name}...")
-                                
-                                # Check if the model is installed before proceeding
-                                installed_models = find_installed_spacy_models()
-                                if model_name not in installed_models:
-                                    message = f"spaCy model {model_name} is not installed."
-                                    success = True  # Not an error, the model is already not installed
-                                    
-                                else:
-                                    # 1. Try pip uninstall
-                                    try:
-                                        result = subprocess.run(
-                                            [sys.executable, "-m", "pip", "uninstall", "-y", model_name],
-                                            check=False, capture_output=True, text=True
-                                        )
-                                        if result.returncode != 0 and "not installed" not in result.stderr.lower():
-                                            self.progress.emit(f"Pip uninstall failed: {result.stderr.strip()}")
-                                            success = False
-                                    except Exception as e:
-                                        self.progress.emit(f"Error running pip uninstall: {e}")
-                                        success = False
-                                    
-                                    # 2. Try removing from spaCy data directory
-                                    try:
-                                        data_path = spacy.util.get_data_path()
-                                        if data_path and os.path.exists(data_path):
-                                            model_path = os.path.join(data_path, model_name)
-                                            if os.path.exists(model_path):
-                                                try:
-                                                    if os.path.isdir(model_path):
-                                                        shutil.rmtree(model_path)
-                                                    else:
-                                                        os.remove(model_path)
-                                                    self.progress.emit(f"Removed model from data directory: {model_path}")
-                                                except Exception as e:
-                                                    self.progress.emit(f"Failed to remove from data directory: {e}")
-                                                    success = False
-                                    except Exception as e:
-                                        self.progress.emit(f"Could not access spaCy data directory: {e}")
-                                        # Don't mark as failure if we just couldn't check
-                                
-                                # Final check
-                                if not check_spacy_model(model_name):
-                                    message = f"Successfully uninstalled {self.model_type} model {model_name}."
-                                else:
-                                    message = f"Failed to completely uninstall {model_name}. It may still be available."
-                                    success = False
-                                
-                            elif self.model_type == 'benepar':
-                                # For Benepar, find and remove the model files using model_finder utility
-                                import os
-                                import shutil
-                                
-                                success = True
-                                found_something = False
-                                
-                                # Check if the model is installed before proceeding
-                                installed_models = find_installed_benepar_models()
-                                if model_name not in installed_models:
-                                    message = f"Benepar model {model_name} is not installed."
-                                    success = True  # Not an error, the model is already not installed
-                                else:
-                                    try:
-                                        # Use nltk.data to find the model
-                                        try:
-                                            # Get the path directly from nltk.data.find
-                                            import nltk
-                                            model_dir_path = nltk.data.find(f'models/{model_name}')
-                                            if os.path.exists(model_dir_path):
-                                                found_something = True
-                                                self.progress.emit(f"Removing directory: {model_dir_path}")
-                                                try:
-                                                    if os.path.isdir(model_dir_path):
-                                                        shutil.rmtree(model_dir_path)
-                                                    else:
-                                                        os.remove(model_dir_path)
-                                                except Exception as e:
-                                                    self.progress.emit(f"Failed to remove {model_dir_path}: {e}")
-                                                    success = False
-                                        except LookupError:
-                                            self.progress.emit(f"Could not find models/{model_name} using nltk.data.find")
-                                            # Continue to look with alternative methods
-
-                                        # Also check for zip files in NLTK paths
-                                        import nltk
-                                        nltk_paths = nltk.data.path
-                                        for nltk_path in set(nltk_paths):  # Use set to avoid duplicates
-                                            models_dir = os.path.join(nltk_path, "models")
-                                            if not os.path.isdir(models_dir):
-                                                continue
-                                                
-                                            # Check for zip file
-                                            zip_path = os.path.join(models_dir, model_name + ".zip")
-                                            if os.path.exists(zip_path):
-                                                found_something = True
-                                                self.progress.emit(f"Removing zip file: {zip_path}")
-                                                try:
-                                                    os.remove(zip_path)
-                                                except Exception as e:
-                                                    self.progress.emit(f"Failed to remove zip file {zip_path}: {e}")
-                                                    success = False
-                                        
-                                        # Final check
-                                        if not check_benepar_model(model_name):
-                                            if found_something:
-                                                message = f"Successfully uninstalled {self.model_type} model {model_name}."
-                                            else:
-                                                message = f"Model {model_name} was not found in known locations."
-                                                # Still consider it success since the model is not present
-                                        else:
-                                            message = f"Failed to completely uninstall {model_name}. It may still be available."
-                                            success = False
-                                            
-                                    except Exception as e:
-                                        message = f"Error uninstalling Benepar model: {e}"
-                                        success = False
-                            
-        except Exception as e:
-            success = False
-            message = f"An unexpected error occurred: {e}"
-            logging.error(f"Model action worker error: {e}", exc_info=True)
-            
-        self.progress.emit("Operation complete.")
-        self.finished.emit(success, message)
-
-
 # --- Page Widgets Implementation ---
 
 class ModelsPage(QWidget):
@@ -405,12 +70,12 @@ class ModelsPage(QWidget):
     models_changed = pyqtSignal() 
     model_usage_changed = pyqtSignal()
 
-    def __init__(self, parent=None, initial_model_status=None):
+    def __init__(self, parent=None, model_status=None):
         super().__init__(parent)
-        logging.debug(f"ModelsPage.__init__: Received initial_model_status = {initial_model_status}") # LOGGING
+        logging.debug(f"ModelsPage.__init__: Received model_status = {model_status}") # LOGGING
         self.setObjectName("ModelsPage")
         self.settings = QSettings("rcverse", "ANPE_GUI") # For usage persistence
-        self.initial_model_status = initial_model_status # Store initial status
+        self.model_status = model_status # Store initial status
         
         # Store refs to status labels - these will be created in setup_ui
         self.spacy_status_label = None
@@ -445,9 +110,9 @@ class ModelsPage(QWidget):
         self.connect_signals()
         
         # Update UI using the initial status passed from MainWindow
-        if self.initial_model_status:
+        if self.model_status:
             logging.debug("ModelsPage: Applying initial status to UI.")
-            self._update_ui_from_status(self.initial_model_status)
+            self._update_ui_from_status(self.model_status)
         else:
             # Fallback if no status was passed (should not happen ideally)
             logging.warning("ModelsPage: No initial status received, performing initial refresh.")
@@ -685,49 +350,62 @@ class ModelsPage(QWidget):
         management_layout.addWidget(separator_actions)
 
         feedback_actions_layout = QHBoxLayout()
-        feedback_actions_layout.setContentsMargins(0, 0, 0, 0) 
-        feedback_actions_layout.setSpacing(10) 
+        feedback_actions_layout.setContentsMargins(0, 0, 0, 0)
+        feedback_actions_layout.setSpacing(10)
 
-        # Feedback Area (Status Label + Progress Bar)
+        # Feedback Area (Activity Indicator + Status Label) - Updated
         feedback_widget = QWidget()
-        feedback_layout = QVBoxLayout(feedback_widget)
+        feedback_layout = QHBoxLayout(feedback_widget) # Use QHBoxLayout now
         feedback_layout.setContentsMargins(0,0,0,0)
-        feedback_layout.setSpacing(3)
+        feedback_layout.setSpacing(8) # Spacing between indicator and label
+
+        self.model_action_indicator = PulsingActivityIndicator()
+        self.model_action_indicator.setFixedSize(20, 20) # Smaller indicator
+        self.model_action_indicator.setVisible(False) # Hidden initially
+        self.model_action_indicator.set_color(PRIMARY_COLOR) # Use theme color
+
         self.model_action_status_label = QLabel("Status updated.")
         self.model_action_status_label.setWordWrap(True)
-        self.model_action_status_label.setStyleSheet("color: #666; font-style: italic; font-size: 9pt;") 
-        self.model_action_progress = QProgressBar()
-        self.model_action_progress.setVisible(False)
-        self.model_action_progress.setTextVisible(False)
-        self.model_action_progress.setFixedHeight(6) # Even smaller progress bar
-        self.model_action_progress.setStyleSheet(f""" QProgressBar {{ border: 1px solid #ccc; border-radius: 2px; background-color: #f5f5f5; }} QProgressBar::chunk {{ background-color: {PRIMARY_COLOR}; }} """)
-        feedback_layout.addWidget(self.model_action_status_label)
-        feedback_layout.addWidget(self.model_action_progress)
+        self.model_action_status_label.setStyleSheet("color: #666; font-style: italic; font-size: 9pt;")
+
+        feedback_layout.addWidget(self.model_action_indicator) # Add indicator first
+        feedback_layout.addWidget(self.model_action_status_label, 1) # Label takes stretch
+
+        # Remove the old progress bar and its layout
+        # self.model_action_progress = QProgressBar()
+        # self.model_action_progress.setVisible(False)
+        # self.model_action_progress.setTextVisible(False)
+        # self.model_action_progress.setFixedHeight(6) # Even smaller progress bar
+        # self.model_action_progress.setStyleSheet(f""" QProgressBar {{ border: 1px solid #ccc; border-radius: 2px; background-color: #f5f5f5; }} QProgressBar::chunk {{ background-color: {PRIMARY_COLOR}; }} """)
+        # feedback_layout.addWidget(self.model_action_status_label)
+        # feedback_layout.addWidget(self.model_action_progress)
+
         feedback_actions_layout.addWidget(feedback_widget, 1) # Feedback takes expanding space
 
-        # Global Action Buttons (Refresh, Clean)
+        # Global Action Buttons (Refresh, Clean/Install Defaults)
         self.refresh_button = QPushButton("Refresh Status")
         self.refresh_button.setFixedHeight(26)
         # Removed setStyleSheet here - uses global theme
-        
-        self.clean_button = QPushButton("Clean All") # Shorter text
-        self.clean_button.setFixedWidth(80) # Reduced width
-        self.clean_button.setFixedHeight(26)
-        self.clean_button.setProperty("danger", True) # Apply danger style (now outline)
-        self.clean_button.setToolTip("Clean All ANPE-related Models")
-        
+
+        # Rename clean_button to install_clean_button
+        self.install_clean_button = QPushButton("...") # Text set dynamically
+        self.install_clean_button.setFixedWidth(120) # Slightly wider for longer text
+        self.install_clean_button.setFixedHeight(26)
+        # self.install_clean_button.setProperty("danger", True) # Property set dynamically
+        # Tooltip set dynamically
+
         button_widget = QWidget()
         button_layout = QHBoxLayout(button_widget)
         button_layout.setContentsMargins(0,0,0,0)
         button_layout.setSpacing(8)
         button_layout.addWidget(self.refresh_button)
-        button_layout.addWidget(self.clean_button)
+        button_layout.addWidget(self.install_clean_button) # Use new name
 
         feedback_actions_layout.addWidget(button_widget) # Add buttons container (fixed size)
         management_layout.addLayout(feedback_actions_layout) # Add actions layout to group
 
         main_layout.addWidget(management_group) # Add management group to main layout
-        main_layout.addStretch(1) # Push content up 
+        main_layout.addStretch(1) # Push content up
 
         # NOTE: Initial UI update is now called from __init__ after setup_ui completes
 
@@ -737,7 +415,9 @@ class ModelsPage(QWidget):
         self.benepar_usage_combo.currentTextChanged.connect(self.save_usage_settings)
         # Management actions
         self.refresh_button.clicked.connect(self.refresh_status)
-        self.clean_button.clicked.connect(self.run_clean)
+        # Connect the new button to the dynamic handler (to be created)
+        self.install_clean_button.clicked.connect(self.handle_install_clean_click)
+        # self.clean_button.clicked.connect(self.run_clean) # Remove old connection
 
     def load_usage_settings(self):
         """Load saved model usage preferences and set combo boxes.
@@ -926,12 +606,52 @@ class ModelsPage(QWidget):
         # --- END DEBUG LOGGING ---
 
         # Update the feedback status label
+        # Determine if all default models are present
+        try:
+            # Remove redundant imports here - rely on module-level imports
+            # from anpe.utils.setup_models import SPACY_MODEL_MAP, BENEPAR_MODEL_MAP, DEFAULT_SPACY_ALIAS, DEFAULT_BENEPAR_ALIAS
+            default_spacy_name = SPACY_MODEL_MAP[DEFAULT_SPACY_ALIAS]
+            default_benepar_name = BENEPAR_MODEL_MAP[DEFAULT_BENEPAR_ALIAS]
+            all_defaults_present = (
+                default_spacy_name in installed_spacy_models and
+                default_benepar_name in installed_benepar_models and
+                nltk_present_overall
+            )
+        except KeyError: # Handle case where default alias might not be in map (shouldn't happen)
+            logging.error("Default model alias not found in map during UI update.")
+            all_defaults_present = False # Assume missing if map is broken
+        except Exception as e:
+            logging.error(f"Error determining default model presence: {e}")
+            all_defaults_present = False # Assume missing on error
+
+        # Check keyboard modifiers for Alt key
+        alt_modifier_pressed = bool(QApplication.keyboardModifiers() & Qt.KeyboardModifier.AltModifier)
+
+        # Update the install/clean button dynamically
+        if alt_modifier_pressed or all_defaults_present:
+            self.install_clean_button.setText("Clean All")
+            self.install_clean_button.setToolTip("Clean all installed ANPE models and resources (spaCy, Benepar, NLTK).\
+Requires restart if models were in use.")
+            self.install_clean_button.setProperty("danger", True)
+        else: # Models missing and Alt not pressed
+            self.install_clean_button.setText("Install Defaults")
+            self.install_clean_button.setToolTip(f"Install required default models:\
+- spaCy: {default_spacy_name}\
+- Benepar: {default_benepar_name}\
+- NLTK: punkt, punkt_tab\
+(Hold Alt to Clean All instead)")
+            self.install_clean_button.setProperty("danger", False)
+        # Force style re-evaluation
+        self.install_clean_button.style().unpolish(self.install_clean_button)
+        self.install_clean_button.style().polish(self.install_clean_button)
+
+        # Update the general status label
         if init_error:
             self.model_action_status_label.setText(f"Error checking status: {init_error}")
         elif not is_worker_running:
             self.model_action_status_label.setText("Model status updated.")
         # If a worker is running, the status label will be updated by the worker signals
-        
+
         # --- Load persistent usage settings AFTER combo boxes are populated ---
         self.load_usage_settings()
         # ---------------------------------------------------------------------
@@ -960,6 +680,7 @@ class ModelsPage(QWidget):
         # --- END DEBUG LOGGING ---
 
         # Update the UI using the collected status
+        self.model_status = status_update # <--- Update the stored status
         self._update_ui_from_status(status_update)
 
     def _set_buttons_enabled(self, enabled: bool):
@@ -969,7 +690,7 @@ class ModelsPage(QWidget):
         # Refresh should only be disabled if a worker is running
         self.refresh_button.setEnabled(enabled)
         # Assume core is present, only disable if worker running
-        self.clean_button.setEnabled(enabled)
+        self.install_clean_button.setEnabled(enabled)
         
         # Enable/disable buttons in the grid
         # Assume core is present, only disable if worker running
@@ -1032,8 +753,8 @@ class ModelsPage(QWidget):
                  
         self._set_buttons_enabled(False) # Disable all action buttons
         self.model_action_status_label.setText(f"Starting {action} for {model_type} model '{alias}'...")
-        self.model_action_progress.setRange(0,0) # Indeterminate
-        self.model_action_progress.setVisible(True)
+        self.model_action_indicator.setVisible(True) # Show indicator
+        self.model_action_indicator.start()          # Start animation
         
         # Cleanup previous thread/worker (this part is fine)
         if self.install_worker: # Reuse install_worker attribute name
@@ -1064,7 +785,8 @@ class ModelsPage(QWidget):
     def on_model_action_finished(self, success: bool, message: str):
         """Handle completion of any model install/uninstall worker with explicit wait."""
         logging.debug("on_model_action_finished started.")
-        self.model_action_progress.setVisible(False)
+        self.model_action_indicator.stop()           # Stop animation
+        self.model_action_indicator.setVisible(False) # Hide indicator
         
         # Store references before clearing
         worker_to_delete = self.install_worker
@@ -1129,17 +851,23 @@ class ModelsPage(QWidget):
             QMessageBox.warning(self.window(), "In Progress", "Model cleanup is already running.")
             return
 
-        # --- Detect currently installed models BEFORE showing the confirmation ---
-        try:
-            detected_spacy = find_installed_spacy_models()
-            detected_benepar = find_installed_benepar_models()
-            detected_nltk = check_nltk_models(['punkt', 'punkt_tab'])
-        except Exception as e:
-            logging.error(f"Error detecting models for clean confirmation: {e}")
-            QMessageBox.critical(self.window(), "Error", f"Could not detect installed models before cleanup: {e}")
-            return
+        # --- Use the (now updated) model_status instead of re-checking --- 
+        detected_spacy = []
+        detected_benepar = []
+        detected_nltk = False
+        if self.model_status: # Check if status dict exists
+            detected_spacy = self.model_status.get('spacy_models', [])
+            detected_benepar = self.model_status.get('benepar_models', [])
+            detected_nltk = self.model_status.get('nltk_present', False)
+        else:
+            # Fallback if status is somehow missing (shouldn't happen ideally)
+            logging.warning("model_status not found in run_clean. Confirmation message may be incomplete.")
+            # Optionally, could perform the check here as a last resort, 
+            # but sticking to the plan of using the stored status.
+            pass 
+        # --- End change ---
 
-        # --- Format the message dynamically ---
+        # --- Format the message dynamically --- # This part remains the same
         message_parts = ["This action will attempt to remove the following <b>currently detected</b> ANPE-related models:<br><br>"]
         
         if detected_spacy:
@@ -1180,8 +908,8 @@ class ModelsPage(QWidget):
 
         self._set_buttons_enabled(False)
         self.model_action_status_label.setText("Starting cleanup...")
-        self.model_action_progress.setRange(0,0) # Indeterminate
-        self.model_action_progress.setVisible(True)
+        self.model_action_indicator.setVisible(True) # Show indicator
+        self.model_action_indicator.start()          # Start animation
         
         # Cleanup previous thread/worker (this part is fine)
         if self.clean_worker:
@@ -1211,7 +939,8 @@ class ModelsPage(QWidget):
     def on_clean_finished(self, results: dict):
         """Handle completion of the clean process."""
         logging.debug("on_clean_finished started.") # Add logging
-        self.model_action_progress.setVisible(False)
+        self.model_action_indicator.stop()           # Stop animation
+        self.model_action_indicator.setVisible(False) # Hide indicator
         
         # Store references to worker and thread before clearing them later
         worker_to_delete = self.clean_worker
@@ -1284,6 +1013,212 @@ class ModelsPage(QWidget):
         logging.debug("ModelsPage: Model usage preference changed.")
         self.save_usage_settings()
         self.model_usage_changed.emit()
+
+    # --- Dynamic Action Handling ---
+
+    @pyqtSlot()
+    def handle_install_clean_click(self):
+        """Handles clicks on the dynamic Install Defaults / Clean All button."""
+        # Re-check state on click, as Alt key might have changed
+        alt_modifier_pressed = bool(QApplication.keyboardModifiers() & Qt.KeyboardModifier.AltModifier)
+
+        # Determine default model presence based on last known status
+        all_defaults_present = False # Default assumption
+        if self.model_status:
+            try:
+                # Remove redundant imports here - rely on module-level imports
+                # from anpe.utils.setup_models import SPACY_MODEL_MAP, BENEPAR_MODEL_MAP, DEFAULT_SPACY_ALIAS, DEFAULT_BENEPAR_ALIAS
+                default_spacy_name = SPACY_MODEL_MAP[DEFAULT_SPACY_ALIAS]
+                default_benepar_name = BENEPAR_MODEL_MAP[DEFAULT_BENEPAR_ALIAS]
+                installed_spacy = self.model_status.get('spacy_models', [])
+                installed_benepar = self.model_status.get('benepar_models', [])
+                nltk_present = self.model_status.get('nltk_present', False)
+                all_defaults_present = (
+                    default_spacy_name in installed_spacy and
+                    default_benepar_name in installed_benepar and
+                    nltk_present
+                )
+            except Exception as e:
+                logging.error(f"Error re-checking default model presence on click: {e}")
+                # Proceed based on button text as fallback?
+                button_text = self.install_clean_button.text()
+                if "Clean" in button_text:
+                    all_defaults_present = True
+                else:
+                    all_defaults_present = False
+
+        if alt_modifier_pressed or all_defaults_present:
+            # If Alt is held OR all models are present -> Clean All
+            self.run_clean()
+        else:
+            # If Alt is NOT held AND models are missing -> Install Defaults
+            self.run_install_defaults()
+
+    def run_install_defaults(self):
+        """Start the background default model installation process."""
+        if (hasattr(self, 'install_defaults_thread') and self.install_defaults_thread and self.install_defaults_thread.isRunning()) or \
+           (self.install_worker_thread and self.install_worker_thread.isRunning()) or \
+           (self.clean_worker_thread and self.clean_worker_thread.isRunning()):
+            QMessageBox.warning(self.window(), "In Progress", "Another model operation is already running.")
+            return
+
+        # Confirmation (optional, but good practice)
+        reply = QMessageBox.question(
+            self.window(),
+            "Confirm Install Defaults",
+            "This will attempt to download and install any missing default ANPE models (spaCy-md, Benepar-default, NLTK). Proceed?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes
+        )
+        if reply == QMessageBox.StandardButton.No:
+            return
+
+        self._set_buttons_enabled(False)
+        self.model_action_status_label.setText("Starting default installation...")
+        self.model_action_indicator.setVisible(True)
+        self.model_action_indicator.start()
+
+        # Cleanup previous thread/worker (use dedicated attributes)
+        if hasattr(self, 'install_defaults_worker') and self.install_defaults_worker:
+            self.install_defaults_worker.deleteLater()
+        if hasattr(self, 'install_defaults_thread') and self.install_defaults_thread:
+            self.install_defaults_thread.quit()
+            self.install_defaults_thread.wait()
+            self.install_defaults_thread.deleteLater()
+
+        self.install_defaults_worker = InstallDefaultsWorker()
+        self.install_defaults_thread = QThread(self)
+        self.install_defaults_worker.moveToThread(self.install_defaults_thread)
+
+        # Connect signals
+        self.install_defaults_worker.progress.connect(self.model_action_status_label.setText)
+        self.install_defaults_worker.finished.connect(self.on_install_defaults_finished)
+        self.install_defaults_thread.started.connect(self.install_defaults_worker.run)
+
+        # Clean up connections
+        self.install_defaults_worker.finished.connect(self.install_defaults_thread.quit)
+
+        self.install_defaults_thread.start()
+
+    @pyqtSlot(bool, str)
+    def on_install_defaults_finished(self, success: bool, message: str):
+        """Handle completion of the default install process."""
+        logging.debug("on_install_defaults_finished started.")
+        self.model_action_indicator.stop()
+        self.model_action_indicator.setVisible(False)
+
+        # Store references before clearing
+        worker_to_delete = self.install_defaults_worker if hasattr(self, 'install_defaults_worker') else None
+        thread_to_wait = self.install_defaults_thread if hasattr(self, 'install_defaults_thread') else None
+
+        # Clear internal references immediately
+        self.install_defaults_worker = None
+        self.install_defaults_thread = None
+
+        # Show message box first
+        if success:
+             QMessageBox.information(self.window(), "Install Defaults Complete", message)
+        else:
+             QMessageBox.warning(self.window(), "Install Defaults Failed", message)
+
+        # --- Explicitly wait for thread and delete objects ---
+        if thread_to_wait is not None:
+            logging.debug("Waiting for install defaults worker thread to finish...")
+            try:
+                if worker_to_delete:
+                    # Assuming signals: progress, finished
+                    worker_to_delete.progress.disconnect()
+                    worker_to_delete.finished.disconnect()
+                thread_to_wait.started.disconnect()
+                thread_to_wait.finished.disconnect()
+            except TypeError: # Signals might already be disconnected
+                logging.debug("Install defaults signals likely already disconnected.")
+            except Exception as e:
+                logging.warning(f"Error disconnecting install defaults signals during explicit cleanup: {e}")
+
+            if thread_to_wait.isRunning():
+                thread_to_wait.quit()
+                if not thread_to_wait.wait(5000): # Wait up to 5 seconds
+                    logging.warning("Install defaults worker thread did not finish cleanly after quit().")
+                else:
+                    logging.debug("Install defaults worker thread finished after wait().")
+            else:
+                 logging.debug("Install defaults worker thread was not running when checked.")
+
+            if worker_to_delete:
+                worker_to_delete.deleteLater()
+                logging.debug("Scheduled install_defaults_worker deletion.")
+            thread_to_wait.deleteLater()
+            logging.debug("Scheduled install_defaults_thread deletion.")
+        else:
+             logging.debug("No install defaults worker thread reference found to wait on.")
+
+        # Refresh UI status and emit signal
+        logging.debug("Refreshing status after install defaults thread wait/cleanup.")
+        self.refresh_status()
+        logging.debug("Emitting models_changed signal after install defaults.")
+        self.models_changed.emit()
+        logging.debug("on_install_defaults_finished completed.")
+
+    # --- End Dynamic Action Handling ---
+
+    # --- Event Handling for Alt Key --- 
+
+    def _update_dynamic_button_state(self, alt_pressed_hint: bool | None = None):
+        """Updates the text, tooltip, and style of the install/clean button based on model status and Alt key.
+        
+        Args:
+            alt_pressed_hint: If True/False, overrides the global modifier check.
+                              If None, uses QApplication.keyboardModifiers().
+        """
+        # Determine default model presence (reusing logic structure)
+        all_defaults_present = False
+        default_spacy_name = "N/A"
+        default_benepar_name = "N/A"
+        if self.model_status:
+            try:
+                default_spacy_name = SPACY_MODEL_MAP[DEFAULT_SPACY_ALIAS]
+                default_benepar_name = BENEPAR_MODEL_MAP[DEFAULT_BENEPAR_ALIAS]
+                installed_spacy = self.model_status.get('spacy_models', [])
+                installed_benepar = self.model_status.get('benepar_models', [])
+                nltk_present = self.model_status.get('nltk_present', False)
+                all_defaults_present = (
+                    default_spacy_name in installed_spacy and
+                    default_benepar_name in installed_benepar and
+                    nltk_present
+                )
+            except Exception as e:
+                logging.error(f"Error determining default model presence for dynamic button: {e}")
+                all_defaults_present = False # Fallback
+
+        # Check keyboard modifiers for Alt key, using hint if provided
+        if alt_pressed_hint is not None:
+            alt_modifier_pressed = alt_pressed_hint
+            logging.debug(f"_update_dynamic_button_state using hint: {alt_modifier_pressed}")
+        else:
+            alt_modifier_pressed = bool(QApplication.keyboardModifiers() & Qt.KeyboardModifier.AltModifier)
+            logging.debug(f"_update_dynamic_button_state using global state: {alt_modifier_pressed}")
+
+        # Update the install/clean button dynamically
+        if alt_modifier_pressed or all_defaults_present:
+            self.install_clean_button.setText("Clean All")
+            self.install_clean_button.setToolTip("Clean all installed ANPE models and resources (spaCy, Benepar, NLTK).")
+            self.install_clean_button.setProperty("danger", True)
+        else: # Models missing and Alt not pressed
+            self.install_clean_button.setText("Install Defaults")
+            # Use the names determined above, even if fallback N/A
+            self.install_clean_button.setToolTip(f"Install required default models:\
+- spaCy: {default_spacy_name}\
+- Benepar: {default_benepar_name}\
+- NLTK: punkt, punkt_tab\
+(Hold Alt to Clean All instead)")
+            self.install_clean_button.setProperty("danger", False)
+            
+        # Force style re-evaluation
+        self.install_clean_button.style().unpolish(self.install_clean_button)
+        self.install_clean_button.style().polish(self.install_clean_button)
+
+    # --- End Event Handling ---
 
 
 class CorePage(QWidget):
@@ -1719,10 +1654,10 @@ class SettingsDialog(QDialog):
     # Signal emitted if model usage preference changes
     model_usage_changed = pyqtSignal() 
 
-    def __init__(self, parent=None, initial_model_status=None):
+    def __init__(self, parent=None, model_status=None):
         super().__init__(parent)
-        logging.debug(f"SettingsDialog.__init__: Received initial_model_status = {initial_model_status}") # LOGGING
-        self.initial_model_status = initial_model_status # Store the passed status
+        logging.debug(f"SettingsDialog.__init__: Received model_status = {model_status}") # LOGGING
+        self.model_status = model_status # Store the passed status
         self.setWindowTitle("ANPE Settings")
         # Increased default/minimum height
         self.setMinimumSize(700, 600) # Increased height
@@ -1746,7 +1681,10 @@ class SettingsDialog(QDialog):
         # --- Trigger initial refresh after dialog is set up --- 
         # Use QTimer.singleShot to schedule the refresh slightly after __init__ completes
         # REMOVED: QTimer.singleShot(50, self.models_page.refresh_status)
-        # NOTE: Initial UI state is now set in ModelsPage.__init__ using the passed initial_model_status
+        # NOTE: Initial UI state is now set in ModelsPage.__init__ using the passed model_status
+
+        # Install event filter to capture Alt key presses/releases globally within the dialog
+        self.installEventFilter(self)
 
     def _center_on_screen(self):
         """Centers the dialog on the primary screen."""
@@ -1775,10 +1713,15 @@ class SettingsDialog(QDialog):
         main_layout.setContentsMargins(0, 0, 0, 0)
 
         # --- Main Content Splitter ---
-        content_splitter = QSplitter(Qt.Orientation.Horizontal)
-        content_splitter.setChildrenCollapsible(False)
-        content_splitter.setHandleWidth(1) # Minimal handle
-        content_splitter.setStyleSheet("QSplitter::handle { background-color: #cccccc; }")
+        # content_splitter = QSplitter(Qt.Orientation.Horizontal)
+        # content_splitter.setChildrenCollapsible(False)
+        # content_splitter.setHandleWidth(1) # Minimal handle
+        # content_splitter.setStyleSheet("QSplitter::handle { background-color: #cccccc; }")
+        
+        # --- Use QHBoxLayout instead of QSplitter --- 
+        content_layout = QHBoxLayout()
+        content_layout.setSpacing(0) # No space between nav and pages
+        content_layout.setContentsMargins(0,0,0,0)
 
         # Left Pane: Navigation List
         nav_widget = QWidget()
@@ -1833,14 +1776,14 @@ class SettingsDialog(QDialog):
         self.nav_list.addItem(about_item)
         
         nav_layout.addWidget(self.nav_list)
-        content_splitter.addWidget(nav_widget)
+        content_layout.addWidget(nav_widget) # Add nav to layout
 
         # Right Pane: Stacked Pages
         self.pages_stack = QStackedWidget()
         self.pages_stack.setStyleSheet("QStackedWidget > QWidget { background-color: white; }") # Ensure pages have white background
 
         # Create and add pages (Pass initial status to ModelsPage)
-        self.models_page = ModelsPage(self, initial_model_status=self.initial_model_status) # Use self.initial_model_status
+        self.models_page = ModelsPage(self, model_status=self.model_status) # Use self.model_status
         self.core_page = CorePage(self)
         # Pass version info to AboutPage
         try:
@@ -1858,14 +1801,12 @@ class SettingsDialog(QDialog):
         self.pages_stack.addWidget(self.core_page)
         self.pages_stack.addWidget(self.about_page)
 
-        content_splitter.addWidget(self.pages_stack)
+        content_layout.addWidget(self.pages_stack, 1) # Add pages to layout, give stretch factor 1
 
-        # Set initial splitter sizes (navigation fixed, pages expand)
-        content_splitter.setSizes([180, 670]) # Adjust based on total width
-        content_splitter.setStretchFactor(0, 0) # Nav doesn't stretch
-        content_splitter.setStretchFactor(1, 1) # Pages stretch
+        # Navigation width is fixed by self.nav_list.setFixedWidth(180) above
+        # Stretch factor for pages_stack handles expansion in QHBoxLayout
 
-        main_layout.addWidget(content_splitter)
+        main_layout.addLayout(content_layout) # Add the new layout to the main layout
 
     def connect_signals(self):
         """Connect signals for navigation and page updates."""
@@ -1874,3 +1815,30 @@ class SettingsDialog(QDialog):
         # Connect signals from ModelsPage to SettingsDialog signals
         self.models_page.models_changed.connect(self.models_changed.emit)
         self.models_page.model_usage_changed.connect(self.model_usage_changed.emit)
+
+    # --- Event Filter Implementation --- 
+    def eventFilter(self, source, event):
+        """Filters events globally within the dialog, specifically for Alt key changes."""
+        update_needed = False
+        alt_state_hint = None
+        
+        # Check if the event is a key press or release
+        if event.type() == QEvent.Type.KeyPress:
+            if event.key() == Qt.Key.Key_Alt:
+                update_needed = True
+                alt_state_hint = True # Alt is now pressed
+        elif event.type() == QEvent.Type.KeyRelease:
+            # Check if the key is Alt and not an auto-repeat release
+            if event.key() == Qt.Key.Key_Alt and not event.isAutoRepeat(): 
+                update_needed = True
+                alt_state_hint = False # Alt is now released
+
+        # If an update is needed and the correct page is visible, call the update function
+        if update_needed:
+            if self.models_page and self.pages_stack.currentWidget() == self.models_page:
+                # Pass the determined state hint
+                self.models_page._update_dynamic_button_state(alt_pressed_hint=alt_state_hint)
+                # Don't consume the event
+
+        # Call the base class implementation for standard event processing
+        return super().eventFilter(source, event)

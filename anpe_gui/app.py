@@ -66,7 +66,7 @@ def main():
         
         if main_window_instance is None:
             print("APP: Creating MainWindow instance...")
-            main_window_instance = MainWindow(initial_model_status=status_dict)
+            main_window_instance = MainWindow(model_status=status_dict)
             print("APP: MainWindow instance created.")
         
         if main_window_instance:

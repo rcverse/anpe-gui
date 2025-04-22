@@ -136,8 +136,8 @@ class MainWindow(QMainWindow):
         }}
     """
 
-    # Modified __init__ to accept initial_model_status
-    def __init__(self, initial_model_status: Dict):
+    # Modified __init__ to accept model_status
+    def __init__(self, model_status: Dict):
         super().__init__()
         
         self.setWindowTitle(f"ANPE GUI v{GUI_VERSION}")
@@ -157,8 +157,8 @@ class MainWindow(QMainWindow):
         self.setStyleSheet(get_stylesheet())
         
         # Store initial model status received from constructor
-        self.initial_model_status = initial_model_status
-        logging.debug(f"MainWindow received initial status: {self.initial_model_status}")
+        self.model_status = model_status
+        logging.debug(f"MainWindow received initial status: {self.model_status}")
         
         self.anpe_version = anpe_version_str # Store version string
         self.worker: Optional[ExtractionWorker] = None # For single processing
@@ -174,7 +174,7 @@ class MainWindow(QMainWindow):
         
         # --- Set initial state based on received status --- 
         self.extractor_ready = False # Default to False
-        initial_error = self.initial_model_status.get('error')
+        initial_error = self.model_status.get('error')
         
         if initial_error:
             # Handle initialization error state
@@ -192,9 +192,9 @@ class MainWindow(QMainWindow):
         else:
             # Handle successful initialization state (even if models are missing)
             # Determine if core is ready (needs at least one of each model type)
-            has_spacy = len(self.initial_model_status.get('spacy_models', [])) > 0
-            has_benepar = len(self.initial_model_status.get('benepar_models', [])) > 0
-            has_nltk = self.initial_model_status.get('nltk_present', False)
+            has_spacy = len(self.model_status.get('spacy_models', [])) > 0
+            has_benepar = len(self.model_status.get('benepar_models', [])) > 0
+            has_nltk = self.model_status.get('nltk_present', False)
             
             if has_spacy and has_benepar and has_nltk:
                 self.extractor_ready = True
@@ -1462,9 +1462,9 @@ class MainWindow(QMainWindow):
 
     def open_settings(self):
         """Opens the settings dialog, passing the initial model status."""
-        logging.debug(f"Opening Settings Dialog. Passing initial status: {self.initial_model_status}") # LOGGING
+        logging.debug(f"Opening Settings Dialog. Passing initial status: {self.model_status}") # LOGGING
         # Pass the stored initial status to the dialog
-        dialog = SettingsDialog(self, initial_model_status=self.initial_model_status) 
+        dialog = SettingsDialog(self, model_status=self.model_status)
         dialog.models_changed.connect(self.on_models_changed)
         dialog.model_usage_changed.connect(self.on_model_usage_preference_changed)
         dialog.exec()
@@ -1519,7 +1519,7 @@ class MainWindow(QMainWindow):
         self.status_check_worker = None
 
         # --- Update UI based on status_dict ---
-        self.initial_model_status = status_dict # Update stored status
+        self.model_status = status_dict # Update stored status
 
         # Update extractor readiness and UI state
         has_spacy = len(status_dict.get('spacy_models', [])) > 0
@@ -1598,12 +1598,12 @@ class MainWindow(QMainWindow):
         # --- Update UI based on error ---
         self.extractor_ready = False
         # Update error in stored status only if the key exists
-        if isinstance(self.initial_model_status, dict):
-            self.initial_model_status['error'] = error_msg 
+        if isinstance(self.model_status, dict):
+            self.model_status['error'] = error_msg
         else:
-             # Handle case where initial_model_status might not be a dict yet (unlikely but safe)
-             self.initial_model_status = {'error': error_msg} 
-             
+             # Handle case where model_status might not be a dict yet (unlikely but safe)
+             self.model_status = {'error': error_msg}
+
         self.status_bar.showMessage(f"Error checking status: {error_msg}", 0, status_type='error')
         if hasattr(self, 'process_button'): self.process_button.setEnabled(False)
         
