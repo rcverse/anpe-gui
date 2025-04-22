@@ -52,68 +52,7 @@ from anpe_gui.widgets import (FileListWidget, StructureFilterWidget,
 from anpe_gui.theme import get_stylesheet # Import the function to get the stylesheet
 from anpe_gui.widgets.settings_dialog import SettingsDialog # Import the new dialog
 from anpe_gui.resource_manager import ResourceManager # Added import
-
-# --- Worker for Background Initialization ---
-class ExtractorInitializer(QObject):
-    # Emit dictionary with detailed status on success, or None if check fails before completion
-    initialized = pyqtSignal(object) 
-    error = pyqtSignal(str)          # Emit error message string
-
-    def run(self):
-        """Checks specific model availability and emits status or error."""
-        logging.info("Performing initial detailed model status check...")
-        MISSING_MODELS_PREFIX = "Missing required models: "
-        status_dict = {
-            'spacy_models': [],
-            'benepar_models': [],
-            'nltk_present': False,
-            'error': None # Add error field to status dict
-        }
-        try:
-            # Always try to import, even if models might be missing
-            from anpe.utils.setup_models import check_nltk_models
-            from anpe.utils.model_finder import find_installed_spacy_models, find_installed_benepar_models
-            
-            # Perform the checks
-            status_dict['spacy_models'] = find_installed_spacy_models()
-            status_dict['benepar_models'] = find_installed_benepar_models()
-            status_dict['nltk_present'] = check_nltk_models(['punkt', 'punkt_tab'])
-
-            logging.info(f"Initial detailed model status: {status_dict}")
-
-            # Check if *minimum* requirements are met (any spacy, any benepar, nltk)
-            has_spacy = len(status_dict['spacy_models']) > 0
-            has_benepar = len(status_dict['benepar_models']) > 0
-            has_nltk = status_dict['nltk_present']
-
-            if has_spacy and has_benepar and has_nltk:
-                logging.info("Required model types found. Initialization check successful.")
-                self.initialized.emit(status_dict) # Emit detailed status
-            else:
-                # Minimum requirements not met, construct error message
-                missing = []
-                if not has_spacy: missing.append("spaCy model(s)")
-                if not has_benepar: missing.append("Benepar model(s)")
-                if not has_nltk: missing.append("NLTK data")
-                error_msg = MISSING_MODELS_PREFIX + ", ".join(missing)
-                logging.warning(error_msg + ". Setup needed.")
-                status_dict['error'] = error_msg # Store error in status dict as well
-                self.error.emit(error_msg) # Emit specific error message
-                # Do NOT emit initialized signal here
-                
-        except ImportError as ie:
-             error_msg = f"Initialization check failed: Could not import ANPE utilities ({ie}). Is ANPE installed?"
-             logging.error(error_msg, exc_info=True)
-             status_dict['error'] = error_msg
-             self.error.emit(error_msg)
-        except Exception as e:
-            error_msg = f"Error during initialization check: {e}"
-            logging.error(error_msg, exc_info=True)
-            status_dict['error'] = error_msg
-            # self.initialized.emit(None) 
-            self.error.emit(error_msg)
-
-# --- End Worker --- 
+from anpe_gui.workers.status_worker import ModelStatusChecker # IMPORT NEW WORKER
 
 # Helper function to get the base path
 def get_base_path():
@@ -204,7 +143,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(f"ANPE GUI v{GUI_VERSION}")
         # Set default size first (Enlarged)
         self.initial_width = 950
-        self.initial_height = 850
+        self.initial_height = 900
         self.setGeometry(0, 0, self.initial_width, self.initial_height)  
         
         # Center the window
@@ -246,6 +185,10 @@ class MainWindow(QMainWindow):
             # Settings button should be enabled (default state after setup_ui)
             if hasattr(self, 'process_button'): self.process_button.setEnabled(False)
             logging.warning(f"MainWindow initialized with error state: {initial_error}")
+            # If the error was specifically about missing models detected by the checker, show the popup too.
+            if initial_error.startswith("Missing required models:"):
+                 self._show_missing_models_dialog(initial_error) # Call helper
+
         else:
             # Handle successful initialization state (even if models are missing)
             # Determine if core is ready (needs at least one of each model type)
@@ -272,9 +215,55 @@ class MainWindow(QMainWindow):
                 self.status_bar.showMessage(status_message, 0, status_type=status_type) 
                 if hasattr(self, 'process_button'): self.process_button.setEnabled(False)
                 logging.warning("MainWindow initialized, but required models are missing.")
+                
+                # --- Show the Missing Models Dialog ---
+                self._show_missing_models_dialog(status_message) # Call helper
+                # --------------------------------------
             
             # Settings button should be enabled (default state after setup_ui)
         # ---------------------------------------------------
+
+    # Add a helper method for the dialog
+    def _show_missing_models_dialog(self, details: str):
+        """Shows a dialog informing the user about missing models."""
+        # Use QTimer.singleShot to ensure the main window is fully shown first
+        QTimer.singleShot(100, lambda: self._do_show_missing_models_dialog(details))
+
+    def _do_show_missing_models_dialog(self, details: str):
+        """The actual dialog creation and execution."""
+        msg_box = QMessageBox(self)
+        msg_box.setIcon(QMessageBox.Icon.Warning)
+        msg_box.setWindowTitle("Essential Models Missing")
+        msg_box.setTextFormat(Qt.TextFormat.RichText) # Keep rich text for main message
+
+        # Main message
+        msg_box.setText("<b>Core ANPE functionality requires model installation.</b>")
+        
+        # Detailed information using setInformativeText
+        informative_text = (
+            f"Details: {details}<br><br>"
+            "Please go to the settings to install the required components."
+        )
+        msg_box.setInformativeText(informative_text)
+        
+        # Remove standard OK button
+        # ok_button = msg_box.addButton(QMessageBox.StandardButton.Ok)
+        # if ok_button:
+        #    ok_button.setProperty("secondary", True) 
+        
+        # Add the single action button, renamed
+        settings_button = msg_box.addButton("Open Setting", QMessageBox.ButtonRole.ActionRole)
+        # The default QPushButton style from the theme will apply
+        
+        # Make the action button the default
+        msg_box.setDefaultButton(settings_button) 
+        
+        # Execute the dialog
+        msg_box.exec()
+        
+        # Check if the action button was clicked (it's the only one now, but check is harmless)
+        if msg_box.clickedButton() == settings_button:
+            self.open_settings() # Call the existing method to open the dialog
 
     def _center_on_screen(self):
         """Centers the window on the primary screen."""
@@ -734,9 +723,8 @@ class MainWindow(QMainWindow):
             }}
         """)
         self.process_button.clicked.connect(self.start_processing)
-        self.process_button.setEnabled(False)
         # Add tooltip to explain disabled state
-        self.process_button.setToolTip("Process the input text or files. \n(Disabled if initializing, processing, or models are missing - check Status Bar)")
+        self.process_button.setToolTip("Process the input text or files. \\n(Disabled if initializing, processing, or models are missing - check Status Bar)")
         process_reset_layout.addWidget(self.process_button)
         
         self.input_layout.addLayout(process_reset_layout)
@@ -1494,20 +1482,26 @@ class MainWindow(QMainWindow):
         
         # Create and run worker
         self.status_check_thread = QThread()
-        self.status_check_worker = StatusCheckWorker()
+        # self.status_check_worker = StatusCheckWorker() # OLD
+        self.status_check_worker = ModelStatusChecker() # NEW
         self.status_check_worker.moveToThread(self.status_check_thread)
         
         # Connect signals
-        self.status_check_worker.finished.connect(self.on_status_check_finished)
-        self.status_check_worker.error.connect(self.on_status_check_error)
+        # self.status_check_worker.finished.connect(self.on_status_check_finished) # OLD
+        # self.status_check_worker.error.connect(self.on_status_check_error) # OLD
+        self.status_check_worker.status_checked.connect(self.on_status_check_finished) # NEW
+        self.status_check_worker.error_occurred.connect(self.on_status_check_error) # NEW
         self.status_check_thread.started.connect(self.status_check_worker.run)
         
         # Cleanup
-        self.status_check_worker.finished.connect(self.status_check_thread.quit)
-        self.status_check_worker.error.connect(self.status_check_thread.quit)
+        # self.status_check_worker.finished.connect(self.status_check_thread.quit) # OLD
+        # self.status_check_worker.error.connect(self.status_check_thread.quit) # OLD
+        self.status_check_worker.status_checked.connect(self.status_check_thread.quit) # NEW
+        self.status_check_worker.error_occurred.connect(self.status_check_thread.quit) # NEW
         self.status_check_thread.finished.connect(self.status_check_thread.deleteLater)
-        self.status_check_worker.finished.connect(self.status_check_worker.deleteLater)
-        self.status_check_worker.error.connect(self.status_check_worker.deleteLater)
+        # REMOVE these lines: Worker deleteLater is handled inside the finished/error slots now
+        # self.status_check_worker.status_checked.connect(self.status_check_worker.deleteLater) # NEW
+        # self.status_check_worker.error_occurred.connect(self.status_check_worker.deleteLater) # NEW
         
         self.status_check_thread.start()
 
@@ -1515,6 +1509,16 @@ class MainWindow(QMainWindow):
     def on_status_check_finished(self, status_dict):
         """Handle successful completion of the background status check."""
         logging.info(f"Background status check complete: {status_dict}")
+        
+        # Store references before clearing
+        thread_to_wait = self.status_check_thread
+        worker_to_delete = self.status_check_worker
+        
+        # Clear internal references first
+        self.status_check_thread = None
+        self.status_check_worker = None
+
+        # --- Update UI based on status_dict ---
         self.initial_model_status = status_dict # Update stored status
 
         # Update extractor readiness and UI state
@@ -1541,37 +1545,106 @@ class MainWindow(QMainWindow):
             
         # Re-enable settings button
         if hasattr(self, 'model_manage_button'): self.model_manage_button.setEnabled(True)
-        
-        # Clear thread references
-        self.status_check_thread = None
-        self.status_check_worker = None
+        # ------------------------------------
+
+        # --- Explicitly wait for thread and delete objects ---
+        if thread_to_wait is not None:
+            logging.debug("Waiting for status check worker thread to finish...")
+            # Disconnect signals to avoid potential double cleanup or calls after deletion
+            try:
+                if worker_to_delete:
+                    worker_to_delete.status_checked.disconnect()
+                    worker_to_delete.error_occurred.disconnect()
+                thread_to_wait.started.disconnect()
+                thread_to_wait.finished.disconnect()
+            except TypeError: # Signals might already be disconnected
+                logging.debug("Status check signals likely already disconnected.")
+            except Exception as e:
+                logging.warning(f"Error disconnecting status check signals during explicit cleanup: {e}")
+
+            if thread_to_wait.isRunning():
+                thread_to_wait.quit()
+                if not thread_to_wait.wait(3000): # Wait up to 3 seconds
+                    logging.warning("Status check worker thread did not finish cleanly after quit().")
+                else:
+                    logging.debug("Status check worker thread finished after wait().")
+            else:
+                 logging.debug("Status check worker thread was not running when checked.")
+
+            # Schedule deletion
+            if worker_to_delete:
+                worker_to_delete.deleteLater()
+                logging.debug("Scheduled status_check_worker deletion.")
+            thread_to_wait.deleteLater()
+            logging.debug("Scheduled status_check_thread deletion.")
+        else:
+             logging.debug("No status check worker thread reference found to wait on.")
+        # ----------------------------------------------------
+        logging.debug("on_status_check_finished completed.")
         
     @pyqtSlot(str) # New slot for status check error
     def on_status_check_error(self, error_msg):
         """Handle errors during the background status check."""
         logging.error(f"Background status check error: {error_msg}")
+        
+        # Store references before clearing
+        thread_to_wait = self.status_check_thread
+        worker_to_delete = self.status_check_worker
+        
+        # Clear internal references first
+        self.status_check_thread = None
+        self.status_check_worker = None
+
+        # --- Update UI based on error ---
         self.extractor_ready = False
-        self.initial_model_status['error'] = error_msg # Update error in stored status
+        # Update error in stored status only if the key exists
+        if isinstance(self.initial_model_status, dict):
+            self.initial_model_status['error'] = error_msg 
+        else:
+             # Handle case where initial_model_status might not be a dict yet (unlikely but safe)
+             self.initial_model_status = {'error': error_msg} 
+             
         self.status_bar.showMessage(f"Error checking status: {error_msg}", 0, status_type='error')
         if hasattr(self, 'process_button'): self.process_button.setEnabled(False)
         
         # Re-enable settings button even on error
         if hasattr(self, 'model_manage_button'): self.model_manage_button.setEnabled(True)
-        
-        # Clear thread references
-        self.status_check_thread = None
-        self.status_check_worker = None
+        # -----------------------------
 
-        # REMOVED: Synchronous check logic
-        # try:
-        #     from anpe.utils.setup_models import check_nltk_models
-        # ... (rest of synchronous code) ...
-        # except Exception as e:
-        #     ...
-        # --------------------------------------
+        # --- Explicitly wait for thread and delete objects ---
+        if thread_to_wait is not None:
+            logging.debug("Waiting for status check worker thread to finish (after error)...")
+             # Disconnect signals to avoid potential double cleanup or calls after deletion
+            try:
+                if worker_to_delete:
+                    worker_to_delete.status_checked.disconnect()
+                    worker_to_delete.error_occurred.disconnect()
+                thread_to_wait.started.disconnect()
+                thread_to_wait.finished.disconnect()
+            except TypeError: # Signals might already be disconnected
+                logging.debug("Status check signals likely already disconnected (error path).")
+            except Exception as e:
+                logging.warning(f"Error disconnecting status check signals during explicit cleanup (error path): {e}")
 
-        # REMOVED: Triggering background check.
-        # QTimer.singleShot(100, self.start_background_initialization)
+            if thread_to_wait.isRunning():
+                thread_to_wait.quit()
+                if not thread_to_wait.wait(3000): # Wait up to 3 seconds
+                    logging.warning("Status check worker thread did not finish cleanly after quit() (error path).")
+                else:
+                    logging.debug("Status check worker thread finished after wait() (error path).")
+            else:
+                 logging.debug("Status check worker thread was not running when checked (error path).")
+
+            # Schedule deletion
+            if worker_to_delete:
+                worker_to_delete.deleteLater()
+                logging.debug("Scheduled status_check_worker deletion (error path).")
+            thread_to_wait.deleteLater()
+            logging.debug("Scheduled status_check_thread deletion (error path).")
+        else:
+             logging.debug("No status check worker thread reference found to wait on (error path).")
+        # ----------------------------------------------------
+        logging.debug("on_status_check_error completed.")
 
     @pyqtSlot()
     def on_model_usage_preference_changed(self):
@@ -1835,36 +1908,3 @@ class MainWindow(QMainWindow):
             # Show the log panel
             self.log_panel.setVisible(True)
             self.status_bar.status_label.setToolTip("Click to hide log panel")
-
-# --- Worker for background status check after settings --- 
-class StatusCheckWorker(QObject):
-    finished = pyqtSignal(dict)
-    error = pyqtSignal(str)
-
-    def run(self):
-        logging.debug("StatusCheckWorker running...")
-        try:
-            from anpe.utils.setup_models import check_nltk_models
-            from anpe.utils.model_finder import find_installed_spacy_models, find_installed_benepar_models
-            
-            spacy_models = find_installed_spacy_models()
-            benepar_models = find_installed_benepar_models()
-            nltk_present = check_nltk_models(['punkt', 'punkt_tab'])
-            
-            status = {
-                'spacy_models': spacy_models,
-                'benepar_models': benepar_models,
-                'nltk_present': nltk_present,
-                'error': None
-            }
-            logging.debug(f"StatusCheckWorker finished successfully: {status}")
-            self.finished.emit(status)
-        except ImportError as ie:
-             error_msg = f"Status check failed: Could not import ANPE utilities ({ie})."
-             logging.error(error_msg)
-             self.error.emit(error_msg)
-        except Exception as e:
-            error_msg = f"Error during status check: {e}"
-            logging.error(error_msg, exc_info=True)
-            self.error.emit(error_msg)
-# -----------------------------------------------------

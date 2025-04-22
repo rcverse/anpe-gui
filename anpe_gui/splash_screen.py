@@ -11,20 +11,15 @@ from PyQt6.QtGui import QPixmap, QPainter, QColor, QFont, QLinearGradient, QBrus
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QCoreApplication, QPropertyAnimation, QEasingCurve, QPointF, pyqtProperty, QRect, QRectF, QThread, QObject, pyqtSlot # Added QThread, QObject, pyqtSlot
 from anpe_gui.theme import PRIMARY_COLOR  # Import the primary color
 from anpe_gui.version import __version__ as gui_version  # Import GUI version directly from version.py
+from anpe_gui.workers.status_worker import ModelStatusChecker # Import the new worker
 
-# Attempt to import ExtractorInitializer (might fail if ANPE isn't installed)
-try:
-    from anpe_gui.main_window import ExtractorInitializer # Import from MainWindow module
-    INITIALIZER_AVAILABLE = True
-except ImportError as e:
-    INITIALIZER_AVAILABLE = False
-    logging.warning(f"Could not import ExtractorInitializer for splash screen: {e}")
-    # Define a dummy if needed, though we might just skip the check
-    class ExtractorInitializer(QObject):
-        initialized = pyqtSignal(object)
-        error = pyqtSignal(str)
-        def run(self): self.error.emit("ANPE Core not available")
+# --- Worker for Background Initialization --- MOVED TO status_worker.py
+# --- End Worker ---
 
+# Flag indicating if the initializer class is usable (always True now)
+# INITIALIZER_AVAILABLE = True # REMOVED
+
+# Attempt to import ANPE core version (still needed for display)
 try:
     from anpe import __version__ as core_version  # Import core version
 except ImportError:
@@ -316,46 +311,51 @@ class SplashScreen(QSplashScreen):
     # --- Initialization Logic --- 
 
     def start_initialization(self):
-        """
-        Starts the actual initialization process in a background thread.
-        """
-        self.fade_in() # Show splash with fade-in
-        QCoreApplication.processEvents() # Process events to ensure it's shown
-        
-        # Set initial status message
-        self.showMessage("Initializing ANPE...")
+        """Start the background model check using ModelStatusChecker."""
+        self.status_label.setText("Checking model status...")
+        logging.info("Splash: Starting background initialization check...")
+        QCoreApplication.processEvents() # Ensure UI updates
 
-        if not INITIALIZER_AVAILABLE:
-            logging.error("ExtractorInitializer not available. Skipping ANPE check.")
-            # Handle case where ANPE core check cannot run
-            # Create a default error status
-            error_status = {
-                'spacy_models': [], 'benepar_models': [], 'nltk_present': False,
-                'error': "ANPE core library not found or import failed."
-            }
-            # Emit completion signal with error status after a short delay
-            QTimer.singleShot(1000, lambda: self._emit_completion(error_status))
+        # Check if a thread is already running (unlikely here, but good practice)
+        if self.init_thread and self.init_thread.isRunning():
+            logging.warning("Splash: Initialization thread already running.")
             return
 
-        # Proceed with background check
-        self.init_thread = QThread()
-        self.init_worker = ExtractorInitializer()
-        self.init_worker.moveToThread(self.init_thread)
-        
-        # Connect worker signals to splash screen slots
-        self.init_worker.initialized.connect(self._on_init_success)
-        self.init_worker.error.connect(self._on_init_error)
-        self.init_thread.started.connect(self.init_worker.run)
-        
-        # Clean up thread when worker finishes or errors out
-        self.init_worker.initialized.connect(self.init_thread.quit)
-        self.init_worker.error.connect(self.init_thread.quit)
-        self.init_thread.finished.connect(self.init_thread.deleteLater)
-        self.init_worker.initialized.connect(self.init_worker.deleteLater) # Clean up worker
-        self.init_worker.error.connect(self.init_worker.deleteLater) # Clean up worker
+        try:
+            # 1. Create Worker
+            self.init_worker = ModelStatusChecker()
+        except Exception as e: # Catch potential issues creating the worker
+            logging.error(f"Splash: Failed to create ModelStatusChecker: {e}", exc_info=True)
+            # Emit error directly if worker creation fails
+            self._emit_completion({'error': f"Failed to start check: {e}"})
+            return
 
-        logging.debug("Splash Screen: Starting initialization thread.")
+        # 2. Create Thread and Move Worker
+        self.init_thread = QThread(self)
+        self.init_worker.moveToThread(self.init_thread)
+
+        # 3. Connect Signals
+        self.init_thread.started.connect(self.init_worker.run)
+        # Connect NEW signals from ModelStatusChecker to existing slots
+        self.init_worker.status_checked.connect(self._on_init_success)
+        self.init_worker.error_occurred.connect(self._on_init_error)
+        # Cleanup connections
+        self.init_worker.status_checked.connect(self.init_thread.quit)
+        self.init_worker.error_occurred.connect(self.init_thread.quit)
+        self.init_thread.finished.connect(self.init_worker.deleteLater)
+        self.init_thread.finished.connect(self.init_thread.deleteLater)
+        # Clear references when thread finishes
+        self.init_thread.finished.connect(self._clear_init_references)
+
+        # 4. Start the Thread
         self.init_thread.start()
+
+    @pyqtSlot()
+    def _clear_init_references(self):
+        """Clear worker and thread references when the thread finishes."""
+        logging.debug("Splash: Clearing init worker and thread references.")
+        self.init_worker = None
+        self.init_thread = None
 
     @pyqtSlot(object) # Receives the status dictionary 
     def _on_init_success(self, status_dict):

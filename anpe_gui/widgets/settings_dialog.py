@@ -867,11 +867,11 @@ class ModelsPage(QWidget):
         if nltk_present_overall:
             status_text = "(<b style='color:green;'>Ready</b>)"
             self.nltk_status_label.setText(status_text)
-            self.nltk_status_label.setToolTip("Required NLTK tokenizers (punkt) found.")
+            self.nltk_status_label.setToolTip("Required NLTK resources found.")
         else:
             status_text = "(<b style='color:red;'>Missing</b>)"
             self.nltk_status_label.setText(status_text)
-            self.nltk_status_label.setToolTip("Required NLTK tokenizers (punkt) are missing.")
+            self.nltk_status_label.setToolTip("Required NLTK resources are missing.")
 
         # Update Action Buttons (based on installed status)
         for model in self.manageable_models:
@@ -1035,7 +1035,7 @@ class ModelsPage(QWidget):
         self.model_action_progress.setRange(0,0) # Indeterminate
         self.model_action_progress.setVisible(True)
         
-        # Cleanup previous thread/worker
+        # Cleanup previous thread/worker (this part is fine)
         if self.install_worker: # Reuse install_worker attribute name
             self.install_worker.deleteLater()
         if self.install_worker_thread:
@@ -1048,32 +1048,79 @@ class ModelsPage(QWidget):
         self.install_worker_thread = QThread(self) 
         self.install_worker.moveToThread(self.install_worker_thread)
         
-        # Connect signals (use the same slots as install/verify for now)
+        # Connect signals
         self.install_worker.progress.connect(self.model_action_status_label.setText)
-        self.install_worker.finished.connect(self.on_model_action_finished) # Use a generic finished slot
+        self.install_worker.finished.connect(self.on_model_action_finished) # Use the updated finished slot
         self.install_worker_thread.started.connect(self.install_worker.run)
-        # Cleanup
-        self.install_worker.finished.connect(self.install_worker_thread.quit)
-        self.install_worker.finished.connect(self.install_worker.deleteLater)
-        self.install_worker_thread.finished.connect(self.install_worker_thread.deleteLater)
+
+        # Cleanup connections - REMOVE deleteLater calls here
+        self.install_worker.finished.connect(self.install_worker_thread.quit) # Quit is okay
+        # self.install_worker.finished.connect(self.install_worker.deleteLater) # REMOVE THIS
+        # self.install_worker_thread.finished.connect(self.install_worker_thread.deleteLater) # REMOVE THIS
         
         self.install_worker_thread.start()
         
     @pyqtSlot(bool, str)
     def on_model_action_finished(self, success: bool, message: str):
-        """Handle completion of any model install/uninstall worker."""
+        """Handle completion of any model install/uninstall worker with explicit wait."""
+        logging.debug("on_model_action_finished started.")
         self.model_action_progress.setVisible(False)
-        self.install_worker_thread = None # Clear thread/worker references
-        self.install_worker = None
         
+        # Store references before clearing
+        worker_to_delete = self.install_worker
+        thread_to_wait = self.install_worker_thread
+
+        # Clear internal references immediately
+        self.install_worker = None
+        self.install_worker_thread = None
+        
+        # Show message box first
         if success:
              QMessageBox.information(self.window(), "Action Complete", message)
         else:
              QMessageBox.warning(self.window(), "Action Failed", message)
-             
-        # Use a timer to delay refresh_status call slightly to ensure UI has time to process
-        QTimer.singleShot(100, self.refresh_status)
+
+        # --- Explicitly wait for thread and delete objects ---
+        if thread_to_wait is not None:
+            logging.debug("Waiting for model action worker thread to finish...")
+            # Disconnect signals to avoid potential double cleanup or calls after deletion
+            try:
+                if worker_to_delete:
+                    worker_to_delete.progress.disconnect()
+                    worker_to_delete.finished.disconnect()
+                thread_to_wait.started.disconnect()
+                thread_to_wait.finished.disconnect()
+            except TypeError: # Signals might already be disconnected
+                logging.debug("Model action signals likely already disconnected.")
+            except Exception as e:
+                logging.warning(f"Error disconnecting model action signals during explicit cleanup: {e}")
+
+            if thread_to_wait.isRunning():
+                thread_to_wait.quit()
+                if not thread_to_wait.wait(5000): # Wait up to 5 seconds (install can take time)
+                    logging.warning("Model action worker thread did not finish cleanly after quit().")
+                else:
+                    logging.debug("Model action worker thread finished after wait().")
+            else:
+                 logging.debug("Model action worker thread was not running when checked.")
+
+            # Schedule deletion
+            if worker_to_delete:
+                worker_to_delete.deleteLater()
+                logging.debug("Scheduled model action worker deletion.")
+            thread_to_wait.deleteLater()
+            logging.debug("Scheduled model action worker thread deletion.")
+        else:
+             logging.debug("No model action worker thread reference found to wait on.")
+        # ----------------------------------------------------
+
+        # Now that the thread is confirmed finished, update UI and signal main window
+        logging.debug("Refreshing status after model action thread wait/cleanup.")
+        self.refresh_status() # Update status labels and buttons
+        
+        logging.debug("Emitting models_changed signal after model action.")
         self.models_changed.emit() # Notify parent dialog/main window
+        logging.debug("on_model_action_finished completed.")
 
     @pyqtSlot()
     def run_clean(self):
@@ -1136,7 +1183,7 @@ class ModelsPage(QWidget):
         self.model_action_progress.setRange(0,0) # Indeterminate
         self.model_action_progress.setVisible(True)
         
-        # Cleanup previous thread/worker
+        # Cleanup previous thread/worker (this part is fine)
         if self.clean_worker:
             self.clean_worker.deleteLater()
         if self.clean_worker_thread:
@@ -1150,22 +1197,31 @@ class ModelsPage(QWidget):
 
         # Connect signals
         self.clean_worker.progress.connect(self.model_action_status_label.setText)
-        self.clean_worker.finished.connect(self.on_clean_finished)
+        self.clean_worker.finished.connect(self.on_clean_finished) # Our explicit cleanup slot
         self.clean_worker_thread.started.connect(self.clean_worker.run)
-        # Clean up
-        self.clean_worker.finished.connect(self.clean_worker_thread.quit)
-        self.clean_worker.finished.connect(self.clean_worker.deleteLater)
-        self.clean_worker_thread.finished.connect(self.clean_worker_thread.deleteLater)
+
+        # Clean up connections - REMOVE deleteLater calls here
+        self.clean_worker.finished.connect(self.clean_worker_thread.quit) # Quit is okay
+        # self.clean_worker.finished.connect(self.clean_worker.deleteLater) # REMOVE THIS
+        # self.clean_worker_thread.finished.connect(self.clean_worker_thread.deleteLater) # REMOVE THIS
 
         self.clean_worker_thread.start()
 
     @pyqtSlot(dict)
     def on_clean_finished(self, results: dict):
         """Handle completion of the clean process."""
+        logging.debug("on_clean_finished started.") # Add logging
         self.model_action_progress.setVisible(False)
-        self.clean_worker_thread = None
-        self.clean_worker = None
         
+        # Store references to worker and thread before clearing them later
+        worker_to_delete = self.clean_worker
+        thread_to_wait = self.clean_worker_thread
+
+        # Clear internal references immediately to prevent re-entry issues
+        # The actual objects will be deleted after waiting.
+        self.clean_worker = None
+        self.clean_worker_thread = None
+
         all_succeeded = all(results.values()) # Check if all removals were error-free
 
         if all_succeeded:
@@ -1178,9 +1234,49 @@ class ModelsPage(QWidget):
             QMessageBox.warning(self.window(), "Cleanup Incomplete", message)
             
         self.model_action_status_label.setText(message)
+
+        # --- Explicitly wait for thread and delete objects ---
+        if thread_to_wait is not None:
+            logging.debug("Waiting for clean worker thread to finish...")
+            # Disconnect signals to avoid potential double cleanup or calls after deletion
+            try:
+                if worker_to_delete:
+                    worker_to_delete.finished.disconnect()
+                thread_to_wait.started.disconnect()
+                thread_to_wait.finished.disconnect()
+            except TypeError: # Signals might already be disconnected
+                logging.debug("Signals likely already disconnected.")
+            except Exception as e:
+                logging.warning(f"Error disconnecting signals during explicit cleanup: {e}")
+                
+            if thread_to_wait.isRunning():
+                thread_to_wait.quit()
+                if not thread_to_wait.wait(3000): # Wait up to 3 seconds
+                    logging.warning("Clean worker thread did not finish cleanly after quit().")
+                else:
+                    logging.debug("Clean worker thread finished after wait().")
+            else:
+                logging.debug("Clean worker thread was not running when checked.")
+
+            # Schedule deletion
+            if worker_to_delete:
+                worker_to_delete.deleteLater()
+                logging.debug("Scheduled clean_worker deletion.")
+            thread_to_wait.deleteLater()
+            logging.debug("Scheduled clean_worker_thread deletion.")
+        else:
+            logging.debug("No clean worker thread reference found to wait on.")
+        # ----------------------------------------------------
+        
+        # Now that the thread is confirmed finished (or wasn't running), update UI safely.
+        logging.debug("Refreshing status after thread wait/cleanup.")
         self.refresh_status() # Update status labels
-        self._set_buttons_enabled(True)
+        # Note: refresh_status calls _update_ui_from_status which enables buttons if no worker is running
+        # self._set_buttons_enabled(True) # This is likely redundant now
+
+        logging.debug("Emitting models_changed signal.")
         self.models_changed.emit() # Notify parent dialog/main window
+        logging.debug("on_clean_finished completed.")
 
     @pyqtSlot()
     def on_model_usage_preference_changed(self):

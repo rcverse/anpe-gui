@@ -81,7 +81,10 @@ def main():
     splash.initialization_complete.connect(on_initialization_complete)
     print("APP: Connected splash initialization_complete signal.")
 
-    # --- Start Splash Initialization (this also shows the splash screen) --- 
+    # --- Show the splash screen BEFORE starting initialization ---
+    splash.fade_in()
+
+    # --- Start Splash Initialization (this runs the background check) --- 
     splash.start_initialization()
     print("APP: Splash initialization started (includes fade-in).")
 
