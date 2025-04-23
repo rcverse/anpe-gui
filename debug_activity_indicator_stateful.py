@@ -38,19 +38,34 @@ class DebugWindow(QMainWindow):
         self.start_button.setToolTip("Switch to blue ripple animation")
         self.start_button.clicked.connect(self.indicator.start)
 
-        self.stop_button = QPushButton("Stop (Idle)")
-        self.stop_button.setToolTip("Switch to green idle glow animation")
-        self.stop_button.clicked.connect(self.indicator.stop)
+        self.idle_button = QPushButton("Idle")
+        self.idle_button.setToolTip("Switch to green idle glow animation")
+        self.idle_button.clicked.connect(self.indicator.idle)
+
+        self.warn_button = QPushButton("Warn")
+        self.warn_button.setToolTip("Switch to yellow warning animation")
+        self.warn_button.clicked.connect(self.indicator.warn)
+
+        self.error_button = QPushButton("Error")
+        self.error_button.setToolTip("Switch to red error animation")
+        self.error_button.clicked.connect(self.indicator.error)
+
+        self.checking_button = QPushButton("Checking")
+        self.checking_button.setToolTip("Switch to yellow checking pulse")
+        self.checking_button.clicked.connect(self.indicator.checking)
 
         button_layout.addWidget(self.start_button)
-        button_layout.addWidget(self.stop_button)
+        button_layout.addWidget(self.idle_button)
+        button_layout.addWidget(self.warn_button)
+        button_layout.addWidget(self.error_button)
+        button_layout.addWidget(self.checking_button)
         
         main_layout.addLayout(button_layout)
         self.setCentralWidget(container)
 
         # --- Set Initial State --- 
         # Start in the idle state
-        self.indicator.stop()
+        self.indicator.idle()
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
