@@ -23,7 +23,7 @@ class PulsingActivityIndicator(QWidget):
         self.setMaximumHeight(24)
 
         # Animation properties
-        self.ripple_duration_steps = 200 # Controls ripple speed (0-200)
+        self.ripple_duration_steps = 225 # Controls ripple speed (Faster: was 250)
         self.ripples = [] # List to store ripple progress (0.0 to 1.0)
         
         # State and Transition
@@ -37,7 +37,7 @@ class PulsingActivityIndicator(QWidget):
         
         # Idle State Animation
         self.idle_breath_phase = 0.0
-        self.idle_breath_speed = 0.04 # Speed of breathing effect
+        self.idle_breath_speed = 0.02 # Speed of breathing effect (Slower: was 0.04)
 
         # Set up timer for animation (runs continuously when visible)
         self.timer = QTimer(self)
@@ -110,11 +110,11 @@ class PulsingActivityIndicator(QWidget):
 
         # --- Calculate Idle Glow Properties --- 
         min_widget_dim_idle = min(width, height)
-        glow_max_radius = min_widget_dim_idle * 0.40 # Base size for idle glow
+        glow_max_radius = min_widget_dim_idle * 0.35 # Base size for idle glow (Smaller: was 0.40)
         breath_factor = (1.0 + math.sin(self.idle_breath_phase)) / 2.0 # 0.0 to 1.0
         # Modify radius and alpha based on breath
-        current_glow_radius = glow_max_radius * (0.75 + 0.25 * breath_factor) # Pulse size
-        base_glow_alpha = 160 + 60 * breath_factor # Pulse alpha
+        current_glow_radius = glow_max_radius * (0.90 + 0.10 * breath_factor) # Pulse size (Even more subtle: was 0.85 + 0.15)
+        base_glow_alpha = 180 + 40 * breath_factor # Pulse alpha (More subtle: was 160 + 60)
         # Apply transition fade
         final_glow_alpha = base_glow_alpha * (1.0 - self.transition_alpha)
 
@@ -149,7 +149,31 @@ class PulsingActivityIndicator(QWidget):
             int_glow_radius = int(current_glow_radius)
             painter.drawEllipse(center.x() - int_glow_radius, center.y() - int_glow_radius, int_glow_radius * 2, int_glow_radius * 2)
 
+        # --- Draw Active Center Dot (Added) ---
+        # Draw this dot only when transitioning to or in the active state
+        center_dot_max_alpha = 100 # Reduced base alpha (was 150)
+        center_dot_alpha = center_dot_max_alpha * self.transition_alpha # Fade in/out with transition
+        if center_dot_alpha > 5:
+            min_widget_dim_center = min(width, height)
+            center_dot_radius = min_widget_dim_center * 0.12 # Small, fixed size relative to widget
+            
+            # Create gradient instead of solid color
+            center_dot_gradient = QRadialGradient(center_f, center_dot_radius)
+            gradient_center_color = QColor(self.base_color)
+            gradient_center_color.setAlpha(int(center_dot_alpha)) # Apply transition alpha
+            center_dot_gradient.setColorAt(0.0, gradient_center_color)
+            gradient_edge_color = QColor(self.base_color)
+            gradient_edge_color.setAlpha(0) # Fully transparent edge
+            center_dot_gradient.setColorAt(1.0, gradient_edge_color)
+            
+            painter.setBrush(QBrush(center_dot_gradient)) # Use gradient brush
+            
+            int_center_dot_radius = int(center_dot_radius)
+            if int_center_dot_radius > 0:
+                painter.drawEllipse(center.x() - int_center_dot_radius, center.y() - int_center_dot_radius, int_center_dot_radius * 2, int_center_dot_radius * 2)
+
         # --- Draw Active Ripple --- 
+        # Now draw the ripple *after* the center dot
         if final_ripple_alpha > 5 and current_ripple_radius > 0.5:
             ripple_gradient = QRadialGradient(center_f, current_ripple_radius)
             ripple_center_color = QColor(self.base_color)
