@@ -117,8 +117,8 @@ Click the gear icon (<q>⚙️</q>) in the top-right corner to open the Settings
 #### Models Page
 *   **Usage Preference**: If you have multiple spaCy or Benepar models installed, you can select which one ANPE should use by default.
 *   **Model Status & Management**:
-    *   View the installation status of different spaCy models (e.g., `en_core_web_sm`, `md`, `lg`, `trf`), Benepar models (`benepar_en3`, `benepar_en3_large`), and NLTK data (`punkt`).
-    *   Buttons allow you to <button>Install</button> or <button>Uninstall</button> individual models or NLTK data. Requires an internet connection.
+    *   View the installation status of different spaCy models (e.g., `en_core_web_sm`, `md`, `lg`, `trf`) and Benepar models (`benepar_en3`, `benepar_en3_large`).
+    *   Buttons allow you to <button>Install</button> or <button>Uninstall</button> individual models. Requires an internet connection.
     *   A <button>Refresh Status</button> button re-checks your environment for installed models.
     *   A <button>Clean Models</button> tool helps remove potentially corrupted or outdated model cache files. Use this if you suspect model-related issues.
 
@@ -164,10 +164,10 @@ The ANPE GUI relies on several open-source libraries:
 *   **PyQt6** (GPLv3 or Commercial): For the graphical user interface framework
 *   **spaCy** (MIT License): For initial text processing (tokenization, sentence segmentation)
 *   **Benepar** (MIT License): For constituency parsing (identifying phrase structures)
-*   **NLTK** (Apache License 2.0): Used by Benepar and for certain tokenizer data
+*   **NLTK** (Apache License 2.0): Used by Benepar for model management
 
 We are grateful for the developers of these packages that make ANPE and ANPE GUI possible. You can find more detailed license information in the application's About dialog.
 
 ## Contact
-*   **Project Page**: Visit the [ANPE GitHub Repository](https://github.com/rcverse/anpe) for source code and documentation
+*   **Project Page**: Visit the [ANPE GitHub Repository](https://github.com/rcverse/another-noun-phrase-extractor) for source code and documentation
 *   **Email**: For questions or feedback, contact rcverse6@gmail.com

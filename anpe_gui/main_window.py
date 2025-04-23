@@ -194,9 +194,9 @@ class MainWindow(QMainWindow):
             # Determine if core is ready (needs at least one of each model type)
             has_spacy = len(self.model_status.get('spacy_models', [])) > 0
             has_benepar = len(self.model_status.get('benepar_models', [])) > 0
-            has_nltk = self.model_status.get('nltk_present', False)
+
             
-            if has_spacy and has_benepar and has_nltk:
+            if has_spacy and has_benepar: # Modified check
                 self.extractor_ready = True
                 status_type = 'ready'
                 message = "ANPE Ready"
@@ -209,7 +209,6 @@ class MainWindow(QMainWindow):
                 missing = []
                 if not has_spacy: missing.append("spaCy")
                 if not has_benepar: missing.append("Benepar")
-                if not has_nltk: missing.append("NLTK data")
                 status_type = 'warning'
                 status_message = f"Missing required models: {', '.join(missing)}. Use 'Manage Models' (gear icon) to install."
                 self.status_bar.showMessage(status_message, 0, status_type=status_type) 
@@ -245,11 +244,6 @@ class MainWindow(QMainWindow):
             "Please go to the settings to install the required components."
         )
         msg_box.setInformativeText(informative_text)
-        
-        # Remove standard OK button
-        # ok_button = msg_box.addButton(QMessageBox.StandardButton.Ok)
-        # if ok_button:
-        #    ok_button.setProperty("secondary", True) 
         
         # Add the single action button, renamed
         settings_button = msg_box.addButton("Open Setting", QMessageBox.ButtonRole.ActionRole)
@@ -1524,9 +1518,8 @@ class MainWindow(QMainWindow):
         # Update extractor readiness and UI state
         has_spacy = len(status_dict.get('spacy_models', [])) > 0
         has_benepar = len(status_dict.get('benepar_models', [])) > 0
-        has_nltk = status_dict.get('nltk_present', False)
 
-        self.extractor_ready = has_spacy and has_benepar and has_nltk
+        self.extractor_ready = has_spacy and has_benepar # Modified check
         if self.extractor_ready:
             status_type = 'ready'
             message = "ANPE Ready"
@@ -1537,7 +1530,6 @@ class MainWindow(QMainWindow):
             missing = []
             if not has_spacy: missing.append("spaCy")
             if not has_benepar: missing.append("Benepar")
-            if not has_nltk: missing.append("NLTK data")
             status_type = 'warning'
             status_message = f"Missing required models: {', '.join(missing)}. Use 'Manage Models' to install."
             self.status_bar.showMessage(status_message, 0, status_type=status_type) 

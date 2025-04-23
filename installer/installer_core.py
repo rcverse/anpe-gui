@@ -458,7 +458,6 @@ def main(install_path: str):
     # 6. Install packages
     required_packages = [
         # "PyQt6", # Keep only if anpe_gui directly needs it AND anpe doesn't depend on it
-        "nltk",
         "spacy",
         "benepar",
         "anpe",

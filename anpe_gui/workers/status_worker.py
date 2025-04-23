@@ -3,7 +3,7 @@ from PyQt6.QtCore import QObject, pyqtSignal
 
 class ModelStatusChecker(QObject):
     """
-    Worker thread to check the status of required models (spaCy, Benepar, NLTK)
+    Worker thread to check the status of required models (spaCy, Benepar)
     without blocking the main GUI thread.
     """
     status_checked = pyqtSignal(dict)  # Emits dict with model status on success
@@ -19,13 +19,11 @@ class ModelStatusChecker(QObject):
         status = {
             'spacy_models': [],
             'benepar_models': [],
-            'nltk_present': False,
             'error': None
         }
         try:
             # Import necessary functions within the run method
             # This isolates potential ImportErrors if anpe is not fully installed
-            from anpe.utils.setup_models import check_nltk_models
             from anpe.utils.model_finder import find_installed_spacy_models, find_installed_benepar_models
             logging.debug("ModelStatusChecker: ANPE utilities imported successfully.")
 
@@ -38,19 +36,14 @@ class ModelStatusChecker(QObject):
             status['benepar_models'] = find_installed_benepar_models()
             logging.debug(f"ModelStatusChecker: Found Benepar models: {status['benepar_models']}")
 
-            logging.debug("ModelStatusChecker: Checking NLTK data (punkt, punkt_tab)...")
-            status['nltk_present'] = check_nltk_models(['punkt', 'punkt_tab'])
-            logging.debug(f"ModelStatusChecker: NLTK data present: {status['nltk_present']}")
-
             # Determine if core models are present
             has_spacy = len(status['spacy_models']) > 0
             has_benepar = len(status['benepar_models']) > 0
 
-            if not (has_spacy and has_benepar and status['nltk_present']):
+            if not (has_spacy and has_benepar): 
                 missing = []
                 if not has_spacy: missing.append("spaCy")
                 if not has_benepar: missing.append("Benepar")
-                if not status['nltk_present']: missing.append("NLTK data")
                 warning_msg = f"Missing required models: {', '.join(missing)}"
                 # Store as an 'error' for consistent handling, but it's a warning state
                 status['error'] = warning_msg

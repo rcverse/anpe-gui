@@ -14,7 +14,7 @@ Create a self-contained, modern setup application (first-run wizard) for ANPE:
     1.  Deploys an isolated Python environment (using bundled distributions).
     2.  Installs the `anpe` core library and other Python dependencies via `pip` into the environment.
     3.  Deploys the `anpe_gui` application source code alongside the environment.
-    4.  Downloads and sets up required language models (spaCy, Benepar, NLTK).
+    4.  Downloads and sets up required language models (spaCy, Benepar). (NLTK is used implicitly by Benepar).
 *   **Motivation:** Avoid packaging large dependencies directly into the application executable, keeping the distributable small while ensuring a foolproof setup for end-users.
 
 ## UI Design

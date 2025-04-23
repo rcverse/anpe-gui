@@ -1,6 +1,6 @@
 # ANPE GUI - Developer Guide
 
-A PyQt6-based graphical user interface for [ANPE (Another Noun Phrase Extractor)](https://github.com/rcverse/anpe), implemented using a modular architecture with separate workers for background processing.
+A PyQt6-based graphical user interface for [ANPE (Another Noun Phrase Extractor)](https://github.com/rcverse/another-noun-phrase-extractor), implemented using a modular architecture with separate workers for background processing.
 
 ## Architecture Overview
 
@@ -69,7 +69,7 @@ Central styling definitions including colors, spacing, and stylesheet generators
 
 1. **Clone the Repository:**
    ```bash
-   git clone https://github.com/rcverse/anpe.git
+   git clone https://github.com/rcverse/another-noun-phrase-extractor.git
    cd anpe
    ```
 

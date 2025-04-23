@@ -41,14 +41,13 @@ class ModelSetupWorker(QObject):
             "check_models": "Checking model presence",
             "install_spacy": "Installing spaCy model",
             "install_benepar": "Installing Benepar model",
-            "install_nltk": "Installing NLTK components"
         }
 
         # Task phase mapping to detect which task is active based on log messages
         self._phase_patterns = {
             "check_models": [
-                "checking spacy model", "checking benepar model", "checking nltk", 
-                "check_spacy_model", "check_benepar_model", "check_nltk_models",
+                "checking spacy model", "checking benepar model",
+                "check_spacy_model", "check_benepar_model",
                 "checking for presence", "starting model setup"
             ],
             "install_spacy": [
@@ -59,10 +58,6 @@ class ModelSetupWorker(QObject):
                 "benepar model not found", "download benepar", "install_benepar_model",
                 "benepar_en3", "berkeley neural parser", "constituency parsing"
             ],
-            "install_nltk": [
-                "nltk model", "punkt", "nltk resource", "tokenizers", "nltk data",
-                "download/setup nltk", "download nltk"
-            ]
         }
 
     def run(self):
@@ -154,8 +149,6 @@ class ModelSetupWorker(QObject):
             self._set_task_status("install_spacy", TaskStatus.PROCESSING)
         elif "checking benepar model" in line_lower:
             self._set_task_status("install_benepar", TaskStatus.PROCESSING)
-        elif "checking nltk models" in line_lower:
-            self._set_task_status("install_nltk", TaskStatus.PROCESSING)
             
         # Handle model presence detection
         if "spacy model is already present" in line_lower:
@@ -164,9 +157,6 @@ class ModelSetupWorker(QObject):
         elif "benepar model is already present" in line_lower:
             self._set_task_status("install_benepar", TaskStatus.COMPLETED)
             self.status_update.emit("Benepar model is already installed")
-        elif "nltk models are already present" in line_lower:
-            self._set_task_status("install_nltk", TaskStatus.COMPLETED)
-            self.status_update.emit("NLTK components are already installed")
             
         # Handle model download start
         if "downloading spacy model" in line_lower:
@@ -175,9 +165,6 @@ class ModelSetupWorker(QObject):
         elif "download benepar" in line_lower:
             self._set_task_status("install_benepar", TaskStatus.PROCESSING)
             self.status_update.emit("Downloading Benepar (parsing) model...")
-        elif "download nltk" in line_lower:
-            self._set_task_status("install_nltk", TaskStatus.PROCESSING)
-            self.status_update.emit("Downloading NLTK components...")
             
         # Special case for model check: Handle 'one or more models are missing' as a normal status, not failure
         if "one or more models are missing" in line_lower and self._current_task == "check_models":
@@ -193,8 +180,6 @@ class ModelSetupWorker(QObject):
                 self._set_task_status("install_spacy", TaskStatus.FAILED)
             elif "benepar" in line_lower and "install_benepar" in self._tasks:
                 self._set_task_status("install_benepar", TaskStatus.FAILED)
-            elif "nltk" in line_lower and "install_nltk" in self._tasks:
-                self._set_task_status("install_nltk", TaskStatus.FAILED)
             elif self._current_task:
                 # Default fallback if we can't identify the specific model
                 self._set_task_status(self._current_task, TaskStatus.FAILED)
@@ -207,9 +192,6 @@ class ModelSetupWorker(QObject):
         elif "successfully downloaded and verified benepar model" in line_lower:
             self._set_task_status("install_benepar", TaskStatus.COMPLETED)
             self.status_update.emit("Benepar model installed successfully")
-        elif "successfully downloaded and verified nltk" in line_lower:
-            self._set_task_status("install_nltk", TaskStatus.COMPLETED)
-            self.status_update.emit("NLTK components installed successfully")
             
         # Check for overall completion
         if "model setup process completed successfully" in line_lower:
@@ -246,7 +228,6 @@ class ModelSetupWorker(QObject):
             r'Downloading spaCy model: en_core_web_md': 'Downloading English language model',
             r'spaCy': 'spaCy (text processing)',
             r'Benepar': 'Benepar (parsing)',
-            r'NLTK': 'NLTK (tokenization)',
             r'benepar_en3': 'English parsing model'
         }
         
@@ -287,8 +268,6 @@ class ModelSetupWorker(QObject):
                 self.status_update.emit("Downloading spaCy (text processing) model...")
             elif task_id == "install_benepar":
                 self.status_update.emit("Downloading Benepar (parsing) model...")
-            elif task_id == "install_nltk":
-                self.status_update.emit("Downloading NLTK (tokenization) components...")
             
         # Track completed tasks
         if status == TaskStatus.COMPLETED:
@@ -301,8 +280,6 @@ class ModelSetupWorker(QObject):
                 self.status_update.emit("SpaCy model installed successfully.")
             elif task_id == "install_benepar":
                 self.status_update.emit("Benepar model installed successfully.")
-            elif task_id == "install_nltk":
-                self.status_update.emit("NLTK components installed successfully.")
                 
         elif status == TaskStatus.FAILED:
             self._completed_tasks.discard(task_id)

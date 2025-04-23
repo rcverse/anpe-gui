@@ -1,139 +1,163 @@
 from PyQt6.QtWidgets import QWidget
-from PyQt6.QtCore import QTimer, Qt, QPoint
-from PyQt6.QtGui import QPainter, QColor, QBrush, QPen, QPainterPath
+from PyQt6.QtCore import QTimer, Qt, QPoint, QPointF
+from PyQt6.QtGui import QPainter, QColor, QBrush, QPen, QRadialGradient
 import math
+
+# Import theme colors
+from anpe_gui.theme import PRIMARY_COLOR, SUCCESS_COLOR
 
 class PulsingActivityIndicator(QWidget):
     """
-    A pulsing and rotating activity indicator showing processing activity
-    without implying specific progress percentage.
+    An activity indicator displaying:
+    - Active State: Strictly sequential, blue solid ripples expanding outwards.
+    - Idle State: A green glowing circle with a subtle breathing effect.
+    Provides smooth transitions between states.
+    Uses theme colors and non-linear easing.
     """
-    
+
     def __init__(self, parent=None):
         super().__init__(parent)
-        
+
         # Configure widget appearance
         self.setMinimumSize(24, 24)
         self.setMaximumHeight(24)
-        
+
         # Animation properties
-        self.pulse_size = 0
-        self.rotation_angle = 0
-        self.growing = True
-        self.active = False
-        self.color = QColor(52, 152, 219)  # Default blue color
+        self.ripple_duration_steps = 200 # Controls ripple speed (0-200)
+        self.ripples = [] # List to store ripple progress (0.0 to 1.0)
         
-        # Set up timer for animation
+        # State and Transition
+        self.target_state = 'idle' # Can be 'idle' or 'active'
+        self.transition_alpha = 0.0 # 0.0 = fully idle, 1.0 = fully active
+        self.transition_step = 0.05 # Speed of fade between states
+
+        # Colors
+        self.base_color = QColor(PRIMARY_COLOR)     # Blue for active ripple
+        self.idle_color = QColor(SUCCESS_COLOR)     # Green for idle glow
+        
+        # Idle State Animation
+        self.idle_breath_phase = 0.0
+        self.idle_breath_speed = 0.04 # Speed of breathing effect
+
+        # Set up timer for animation (runs continuously when visible)
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_animation)
-        self.timer.setInterval(50)  # Update every 50ms (smoother animation)
-    
+        self.timer.setInterval(15) # Smooth interval (adjust if needed)
+
     def start(self):
-        """Start the animation."""
-        self.active = True
-        self.timer.start()
-    
+        """Transition to the active (blue ripple) state."""
+        self.target_state = 'active'
+        if not self.timer.isActive():
+            self.timer.start()
+        # Ripple launch is handled in update_animation based on transition_alpha
+
     def stop(self):
-        """Stop the animation but keep the indicator visible with a static appearance."""
-        self.active = False
-        self.timer.stop()
-        # Reset angle but keep pulse size at a visible value
-        self.rotation_angle = 0
-        self.pulse_size = 5  # Keep a medium size for visibility when static
-        self.update()  # Make sure the static indicator is drawn
-    
+        """Transition to the idle (green glow) state."""
+        self.target_state = 'idle'
+        if not self.timer.isActive(): # Ensure timer runs for idle breathing
+            self.timer.start()
+
     def set_color(self, color):
-        """Set the color of the indicator."""
-        self.color = QColor(color)
+        """Set the base color for the active ripple."""
+        # Note: Idle color is fixed to SUCCESS_COLOR for status indication
+        self.base_color = QColor(color)
         self.update()
-    
+
     def update_animation(self):
-        """Update animation parameters and trigger a repaint."""
-        if self.active:
-            # Update pulse size
-            if self.growing:
-                self.pulse_size += 1
-                if self.pulse_size >= 10:
-                    self.growing = False
-            else:
-                self.pulse_size -= 1
-                if self.pulse_size <= 0:
-                    self.growing = True
-            
-            # Update rotation angle
-            self.rotation_angle = (self.rotation_angle + 10) % 360
-            
-            # Trigger repaint
-            self.update()
-    
+        """Update transition, ripple progress, and idle breathing."""
+
+        # Update transition alpha
+        if self.target_state == 'active' and self.transition_alpha < 1.0:
+            self.transition_alpha = min(1.0, self.transition_alpha + self.transition_step)
+        elif self.target_state == 'idle' and self.transition_alpha > 0.0:
+            self.transition_alpha = max(0.0, self.transition_alpha - self.transition_step)
+
+        # Update idle breathing phase
+        self.idle_breath_phase = (self.idle_breath_phase + self.idle_breath_speed) % (2 * math.pi)
+
+        # Update ripple progress
+        progress_step = 1.0 / self.ripple_duration_steps
+        new_ripples = []
+        for progress in self.ripples:
+            new_progress = progress + progress_step
+            if new_progress < 1.0:
+                new_ripples.append(new_progress)
+        self.ripples = new_ripples
+
+        # Launch new ripple only if fully active and no ripple exists
+        if self.target_state == 'active' and self.transition_alpha >= 1.0 and not self.ripples:
+            self.ripples.append(0.0)
+
+        # Trigger repaint
+        self.update()
+        
+        # Optional: Stop timer if fully idle and nothing is happening? Maybe not needed.
+        # if self.target_state == 'idle' and self.transition_alpha == 0.0 and not self.ripples:
+        #     self.timer.stop() # Or just let it run for breathing?
+
     def paintEvent(self, event):
-        """Paint the animated indicator."""
-        if not self.active and self.pulse_size == 0:
-            return
-            
+        """Paint the idle glow and active ripple, blending based on transition_alpha."""
+
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        
+        painter.setPen(Qt.PenStyle.NoPen)
+
         # Get widget dimensions
         width = self.width()
         height = self.height()
         center = QPoint(width // 2, height // 2)
-        
-        # Save painter state before rotation
-        painter.save()
-        painter.translate(center)
-        painter.rotate(self.rotation_angle)
-        painter.translate(-center.x(), -center.y())
-        
-        # Calculate size based on pulse state
-        min_radius = min(width, height) * 0.2
-        max_radius = min(width, height) * 0.4
-        
-        # Calculate current size
-        size_ratio = self.pulse_size / 10
-        radius = min_radius + (max_radius - min_radius) * size_ratio
-        
-        # Draw the main circle
-        color = QColor(self.color)
-        color.setAlpha(max(80, 255 - (self.pulse_size * 10)))
-        
-        painter.setBrush(QBrush(color))
-        painter.setPen(Qt.PenStyle.NoPen)
-        
-        # For QPoint center, we need to use the rectangle form instead of center/radius
-        int_radius = int(radius)
-        painter.drawEllipse(
-            center.x() - int_radius,
-            center.y() - int_radius,
-            int_radius * 2,
-            int_radius * 2
-        )
-        
-        # Draw 3 smaller circles around the edge for a more distinctive spinner effect
-        small_radius = int(radius * 0.25)
-        distance = radius * 0.7
-        
-        # Draw smaller circles with different opacities
-        for i in range(3):
-            angle = i * 120  # 120 degrees apart (3 dots)
-            rad_angle = angle * (3.14159 / 180)  # Convert to radians
-            
-            # Position the smaller circle
-            x = center.x() + int(distance * math.cos(rad_angle))
-            y = center.y() + int(distance * math.sin(rad_angle))
-            
-            # Vary opacity based on position
-            opacity = 150 + i * 35
-            dot_color = QColor(self.color)
-            dot_color.setAlpha(opacity)
-            
-            painter.setBrush(QBrush(dot_color))
-            painter.drawEllipse(
-                x - small_radius,
-                y - small_radius,
-                small_radius * 2,
-                small_radius * 2
-            )
-        
-        # Restore painter state
-        painter.restore() 
+        center_f = QPointF(center)
+
+        # --- Calculate Idle Glow Properties --- 
+        min_widget_dim_idle = min(width, height)
+        glow_max_radius = min_widget_dim_idle * 0.40 # Base size for idle glow
+        breath_factor = (1.0 + math.sin(self.idle_breath_phase)) / 2.0 # 0.0 to 1.0
+        # Modify radius and alpha based on breath
+        current_glow_radius = glow_max_radius * (0.75 + 0.25 * breath_factor) # Pulse size
+        base_glow_alpha = 160 + 60 * breath_factor # Pulse alpha
+        # Apply transition fade
+        final_glow_alpha = base_glow_alpha * (1.0 - self.transition_alpha)
+
+        # --- Calculate Active Ripple Properties (if ripple exists) --- 
+        final_ripple_alpha = 0.0
+        current_ripple_radius = 0.0
+        if self.ripples:
+            progress = self.ripples[0]
+            min_widget_dim_ripple = min(width, height)
+            ripple_max_radius = min_widget_dim_ripple * 0.70 # Ripple expands larger
+            ripple_min_radius = ripple_max_radius * 0.10
+            # Easing
+            t = progress
+            eased_progress = t * t * (3.0 - 2.0 * t)
+            current_ripple_radius = ripple_min_radius + (ripple_max_radius - ripple_min_radius) * eased_progress
+            # Base alpha fade
+            base_ripple_alpha = int(180 * (1.0 - progress))
+            base_ripple_alpha = max(0, min(255, base_ripple_alpha))
+            # Apply transition fade
+            final_ripple_alpha = base_ripple_alpha * self.transition_alpha
+
+        # --- Draw Idle Glow --- 
+        if final_glow_alpha > 5 and current_glow_radius > 0.5:
+            glow_gradient = QRadialGradient(center_f, current_glow_radius)
+            glow_center_color = QColor(self.idle_color)
+            glow_center_color.setAlpha(int(final_glow_alpha))
+            glow_gradient.setColorAt(0.0, glow_center_color)
+            glow_edge_color = QColor(self.idle_color)
+            glow_edge_color.setAlpha(0)
+            glow_gradient.setColorAt(1.0, glow_edge_color)
+            painter.setBrush(QBrush(glow_gradient))
+            int_glow_radius = int(current_glow_radius)
+            painter.drawEllipse(center.x() - int_glow_radius, center.y() - int_glow_radius, int_glow_radius * 2, int_glow_radius * 2)
+
+        # --- Draw Active Ripple --- 
+        if final_ripple_alpha > 5 and current_ripple_radius > 0.5:
+            ripple_gradient = QRadialGradient(center_f, current_ripple_radius)
+            ripple_center_color = QColor(self.base_color)
+            ripple_center_color.setAlpha(int(final_ripple_alpha))
+            ripple_gradient.setColorAt(0.0, ripple_center_color)
+            ripple_edge_color = QColor(self.base_color)
+            ripple_edge_color.setAlpha(0)
+            ripple_gradient.setColorAt(1.0, ripple_edge_color)
+            painter.setBrush(QBrush(ripple_gradient))
+            int_ripple_radius = int(current_ripple_radius)
+            painter.drawEllipse(center.x() - int_ripple_radius, center.y() - int_ripple_radius, int_ripple_radius * 2, int_ripple_radius * 2)

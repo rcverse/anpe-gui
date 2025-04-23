@@ -371,7 +371,7 @@ class SplashScreen(QSplashScreen):
         logging.error(f"Splash Screen: Initialization check failed: {error_message}")
         # Create a status dictionary representing the error
         error_status = {
-            'spacy_models': [], 'benepar_models': [], 'nltk_present': False,
+            'spacy_models': [], 'benepar_models': [],
             'error': error_message
         }
         self.final_init_status = error_status

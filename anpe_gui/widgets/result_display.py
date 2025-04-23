@@ -770,87 +770,122 @@ class ResultDisplayWidget(QWidget):
             # Set model on detached tree view
             self.detached_window.tree_view.setModel(detached_proxy)
             
-            # Default to sort by order - match the main view's sorting
-            detached_proxy.sort(-1, Qt.SortOrder.AscendingOrder)
-            
-            # Update sort button styles
+            # --- Synchronize state from main view ---
+            # 1. Sort State
+            current_sort_col = self.proxy_model.sortColumn()
+            current_sort_order = self.proxy_model.sortOrder()
+            detached_proxy.sort(current_sort_col, current_sort_order)
+            logging.debug(f"Detached window initial sort set to col: {current_sort_col}, order: {current_sort_order}")
+
+            # 2. Filter State
+            current_filter_text = self.filter_input.text()
+            if current_filter_text:
+                self.detached_window.filter_input.setText(current_filter_text) # Set text in detached input
+                regex = QRegularExpression(current_filter_text,
+                                           QRegularExpression.PatternOption.CaseInsensitiveOption)
+                detached_proxy.setFilterRegularExpression(regex)
+                logging.debug(f"Detached window initial filter set to: '{current_filter_text}'")
+
+            # 3. Column Visibility / Metadata Enabled State
+            metadata_enabled = not self.tree_view.isColumnHidden(AnpeResultModel.COL_LEN)
+            self.detached_window.tree_view.setColumnHidden(AnpeResultModel.COL_LEN, not metadata_enabled)
+            self.detached_window.tree_view.setColumnHidden(AnpeResultModel.COL_STRUCT, not metadata_enabled)
+            self.detached_window.sort_order_button.setVisible(metadata_enabled)
+            self.detached_window.sort_length_button.setVisible(metadata_enabled)
+            self.detached_window.sort_structure_button.setVisible(metadata_enabled)
+            logging.debug(f"Detached window metadata enabled: {metadata_enabled}")
+            # --- End Synchronization ---
+
+            # Update detached button styles to reflect the sort state
             self.detached_window.update_button_styles()
-            
+
             # Configure header just like in the main window
             header = self.detached_window.tree_view.header()
-            header.setSectionsClickable(False)
-            
-            # Check if metadata columns should be visible
-            # Look at the main tree view to determine if metadata is enabled
-            metadata_enabled = not self.tree_view.isColumnHidden(AnpeResultModel.COL_LEN)
-            
-            # Show/hide columns based on metadata_enabled flag
-            self.detached_window.tree_view.setColumnHidden(AnpeResultModel.COL_LEN, not metadata_enabled)
-            self.detached_window.tree_view.setColumnHidden(AnpeResultModel.COL_STRUCT, not metadata_enabled)
-            
-            # Show/hide buttons based on metadata_enabled flag
-            self.detached_window.sort_order_button.setVisible(metadata_enabled)
-            self.detached_window.sort_length_button.setVisible(metadata_enabled)
-            self.detached_window.sort_structure_button.setVisible(metadata_enabled)
-            
-            # Set initial column widths
-            header.resizeSection(AnpeResultModel.COL_ID, 50)
-            header.resizeSection(AnpeResultModel.COL_NP, 350)
-            if metadata_enabled:
-                header.resizeSection(AnpeResultModel.COL_LEN, 60)
-            
-            # Apply current filter
-            if self.filter_input.text():
-                regex = QRegularExpression(self.filter_input.text(), 
-                                          QRegularExpression.PatternOption.CaseInsensitiveOption)
-                detached_proxy.setFilterRegularExpression(regex)
-            
-            # Connect click signal for expansion
-            self.detached_window.tree_view.clicked.connect(self._handle_detached_item_click)
-            
-            # Collapse all items by default
-            self.detached_window.tree_view.collapseAll()
-            
-            # Show the window
-            self.detached_window.show()
-            
-        else:
-            # --- Window exists, ensure UI state matches main window ---
-            header = self.detached_window.tree_view.header()
-            metadata_enabled = not self.tree_view.isColumnHidden(AnpeResultModel.COL_LEN)
+            header.setSectionsClickable(False) # Disable direct header clicking for sorting
 
-            # Show/hide columns based on metadata_enabled flag
-            self.detached_window.tree_view.setColumnHidden(AnpeResultModel.COL_LEN, not metadata_enabled)
-            self.detached_window.tree_view.setColumnHidden(AnpeResultModel.COL_STRUCT, not metadata_enabled)
-
-            # Show/hide buttons based on metadata_enabled flag
-            self.detached_window.sort_order_button.setVisible(metadata_enabled)
-            self.detached_window.sort_length_button.setVisible(metadata_enabled)
-            self.detached_window.sort_structure_button.setVisible(metadata_enabled)
-
-            # Update header resize modes based on visibility
+            # Set resize modes based on visibility
+            header.setSectionResizeMode(AnpeResultModel.COL_ID, QHeaderView.ResizeMode.Interactive)
             if metadata_enabled:
                 header.setSectionResizeMode(AnpeResultModel.COL_STRUCT, QHeaderView.ResizeMode.Stretch)
-                header.setSectionResizeMode(AnpeResultModel.COL_NP, QHeaderView.ResizeMode.Interactive) # Reset NP if metadata is now visible
+                header.setSectionResizeMode(AnpeResultModel.COL_NP, QHeaderView.ResizeMode.Interactive)
                 header.setSectionResizeMode(AnpeResultModel.COL_LEN, QHeaderView.ResizeMode.Interactive)
             else:
+                # If metadata hidden, let NP stretch
                 header.setSectionResizeMode(AnpeResultModel.COL_NP, QHeaderView.ResizeMode.Stretch)
-                # No need to explicitly set COL_STRUCT/COL_LEN resize mode if they are hidden
 
-            # Ensure filter is synchronized (if it changed while window was hidden)
-            current_filter = self.filter_input.text()
-            if self.detached_window.filter_input.text() != current_filter:
-                 self.detached_window.filter_input.setText(current_filter)
-                 # The textChanged signal will trigger the filter update in the detached window
+            # Set initial column widths (these are starting points, user can resize)
+            header.resizeSection(AnpeResultModel.COL_ID, 50)
+            header.resizeSection(AnpeResultModel.COL_NP, 350) # Initial NP width
+            if metadata_enabled:
+                header.resizeSection(AnpeResultModel.COL_LEN, 60) # Initial Length width
 
-            # Update button styles (especially length arrow)
+            # Connect click signal for expansion in detached view
+            self.detached_window.tree_view.clicked.connect(self._handle_detached_item_click)
+
+            # Collapse all items by default (user can expand)
+            self.detached_window.tree_view.collapseAll()
+
+            # Show the window
+            self.detached_window.show()
+
+        else:
+            # --- Window exists, ensure UI state matches main window ---
+            logging.debug("Re-showing existing detached window. Synchronizing state.")
+            detached_proxy = self.detached_window.tree_view.model()
+            if not detached_proxy or detached_proxy.sourceModel() != self.source_model:
+                 # If the source model changed while detached window was hidden, rebuild model
+                 logging.warning("Source model mismatch or detached proxy missing. Rebuilding detached view.")
+                 # Close the potentially outdated window and schedule deletion
+                 old_window = self.detached_window # Keep a temporary reference
+                 self.detached_window = None # <<< **Set reference to None immediately**
+                 old_window.close() # Close the old window
+                 # Now call _eject_results again. Since self.detached_window is None, it will create a new one.
+                 self._eject_results()
+                 return # Exit this call
+
+            # 1. Synchronize Sort State
+            current_sort_col = self.proxy_model.sortColumn()
+            current_sort_order = self.proxy_model.sortOrder()
+            if detached_proxy.sortColumn() != current_sort_col or detached_proxy.sortOrder() != current_sort_order:
+                detached_proxy.sort(current_sort_col, current_sort_order)
+                logging.debug(f"Detached window sort synchronized to col: {current_sort_col}, order: {current_sort_order}")
+
+            # 2. Synchronize Filter State
+            current_filter_text = self.filter_input.text()
+            if self.detached_window.filter_input.text() != current_filter_text:
+                 self.detached_window.filter_input.setText(current_filter_text)
+                 # The textChanged signal connected earlier will update the filter
+                 logging.debug(f"Detached window filter synchronized to: '{current_filter_text}'")
+
+            # 3. Synchronize Column Visibility / Metadata Enabled State
+            metadata_enabled = not self.tree_view.isColumnHidden(AnpeResultModel.COL_LEN)
+            detached_metadata_enabled = not self.detached_window.tree_view.isColumnHidden(AnpeResultModel.COL_LEN)
+
+            if metadata_enabled != detached_metadata_enabled:
+                self.detached_window.tree_view.setColumnHidden(AnpeResultModel.COL_LEN, not metadata_enabled)
+                self.detached_window.tree_view.setColumnHidden(AnpeResultModel.COL_STRUCT, not metadata_enabled)
+                self.detached_window.sort_order_button.setVisible(metadata_enabled)
+                self.detached_window.sort_length_button.setVisible(metadata_enabled)
+                self.detached_window.sort_structure_button.setVisible(metadata_enabled)
+                logging.debug(f"Detached window metadata visibility synchronized: {metadata_enabled}")
+
+                # Update header resize modes based on visibility
+                header = self.detached_window.tree_view.header()
+                if metadata_enabled:
+                    header.setSectionResizeMode(AnpeResultModel.COL_STRUCT, QHeaderView.ResizeMode.Stretch)
+                    header.setSectionResizeMode(AnpeResultModel.COL_NP, QHeaderView.ResizeMode.Interactive) # Reset NP if metadata is now visible
+                    header.setSectionResizeMode(AnpeResultModel.COL_LEN, QHeaderView.ResizeMode.Interactive)
+                else:
+                    header.setSectionResizeMode(AnpeResultModel.COL_NP, QHeaderView.ResizeMode.Stretch)
+
+            # 4. Update button styles (especially length arrow)
             self.detached_window.update_button_styles()
 
             # --- Show and bring to front ---
             self.detached_window.show()
             self.detached_window.raise_()
             self.detached_window.activateWindow()
-            
+
         logging.debug("Results displayed in detached window.")
     
     def _on_detached_window_closed(self):

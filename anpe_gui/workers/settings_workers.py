@@ -12,6 +12,8 @@ import json
 import os
 import shutil
 import spacy
+import importlib.metadata
+import re # Import regex module
 
 from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 
@@ -19,8 +21,8 @@ from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 CORE_PACKAGE_NAME = "anpe"
 try:
     from anpe.utils.setup_models import (
-        check_spacy_model, check_benepar_model, check_nltk_models,
-        SPACY_MODEL_MAP, BENEPAR_MODEL_MAP, install_nltk_models, install_spacy_model, install_benepar_model,
+        check_spacy_model, check_benepar_model,
+        SPACY_MODEL_MAP, BENEPAR_MODEL_MAP, install_spacy_model, install_benepar_model,
         DEFAULT_SPACY_ALIAS, DEFAULT_BENEPAR_ALIAS, # Needed by ModelActionWorker
         setup_models # Add setup_models here
     )
@@ -38,11 +40,9 @@ except ImportError as e:
     DEFAULT_BENEPAR_ALIAS = "default" # Need a default value
     def check_spacy_model(*args, **kwargs): return False
     def check_benepar_model(*args, **kwargs): return False
-    def check_nltk_models(*args, **kwargs): return False
-    def install_nltk_models(*args, **kwargs): return False
     def install_spacy_model(*args, **kwargs): return False
     def install_benepar_model(*args, **kwargs): return False
-    def clean_all(*args, **kwargs): return {"spacy": False, "benepar": False, "nltk": False}
+    def clean_all(*args, **kwargs): return {"spacy": False, "benepar": False}
     def find_installed_spacy_models(): return []
     def find_installed_benepar_models(): return []
     # Setup models worker needs the actual function
@@ -66,6 +66,52 @@ except ImportError as e:
     except (NameError, AttributeError):
         nltk = DummyNLTK()
 
+# --- Setup NLTK Data Directory --- 
+def setup_nltk_data_dir() -> str | None:
+    """Ensures user's NLTK data directory exists and is preferred.
+
+    Returns:
+        str or None: The path to the user's NLTK data directory, or None on error.
+    """
+    try:
+        # User-specific directory (in home directory)
+        home = os.path.expanduser("~")
+        nltk_user_dir = os.path.join(home, "nltk_data")
+
+        # Create directory if it doesn't exist
+        os.makedirs(nltk_user_dir, exist_ok=True)
+        logging.debug(f"Ensured NLTK user data directory exists: {nltk_user_dir}")
+
+        # Ensure this directory is the first path NLTK checks
+        if nltk_user_dir not in nltk.data.path:
+            nltk.data.path.insert(0, nltk_user_dir)
+            logging.debug(f"Prepended {nltk_user_dir} to nltk.data.path")
+
+        # Set environment variable for potential subprocess use (like benepar download)
+        os.environ['NLTK_DATA'] = nltk_user_dir
+        logging.debug(f"Set NLTK_DATA environment variable to: {nltk_user_dir}")
+
+        # Verify it's the primary path
+        if nltk.data.path[0] != nltk_user_dir:
+             logging.warning(f"Expected {nltk_user_dir} to be the first NLTK path, but found {nltk.data.path[0]}. This might cause issues.")
+
+        return nltk_user_dir
+
+    except PermissionError as e:
+        logging.error(f"Permission denied creating or accessing NLTK data directory at {getattr(e, 'filename', 'N/A')}. Please check permissions.", exc_info=True)
+        return None
+    except Exception as e:
+        logging.error(f"Unexpected error during NLTK data directory setup: {e}", exc_info=True)
+        return None
+
+# Get the primary NLTK data directory path
+NLTK_DATA_DIR = setup_nltk_data_dir()
+if NLTK_DATA_DIR is None:
+    logging.critical("CRITICAL: Could not setup NLTK data directory. Benepar operations will likely fail.")
+    # Optionally fallback to a default relative path if needed, but None indicates a problem
+    # NLTK_DATA_DIR = "." # Example fallback, might not work well
+# ------------------------------- 
+
 # --- Worker Objects --- 
 
 class CoreUpdateWorker(QObject):
@@ -73,6 +119,7 @@ class CoreUpdateWorker(QObject):
     check_finished = pyqtSignal(str, str, str) # latest_version, current_version, error_string
     update_progress = pyqtSignal(int, str)    # value (-1 for indeterminate), message
     update_finished = pyqtSignal(bool, str)   # success, message
+    log_message = pyqtSignal(str)             # For detailed subprocess output
     
     def __init__(self, current_version):
         super().__init__()
@@ -108,37 +155,83 @@ class CoreUpdateWorker(QObject):
 
     @pyqtSlot()
     def run_update(self):
-        """Run pip install --upgrade anpe."""
+        """Run pip install --upgrade anpe, streaming output."""
         success = False
         message = ""
         try:
             self.update_progress.emit(-1, "Starting update process...") # Indeterminate
-            # Ensure pip is available and upgrade it first for robustness
+            
+            # --- Upgrade pip with streaming --- 
+            self.log_message.emit("--- Upgrading pip ---")
             try:
-                subprocess.run([sys.executable, "-m", "pip", "install", "--upgrade", "pip"], check=True, capture_output=True, text=True, encoding='utf-8')
+                pip_upgrade_cmd = [sys.executable, "-m", "pip", "install", "--upgrade", "pip"]
+                self.log_message.emit(f"Running: {' '.join(pip_upgrade_cmd)}")
+                process_pip = subprocess.Popen(
+                    pip_upgrade_cmd, 
+                    stdout=subprocess.PIPE, 
+                    stderr=subprocess.STDOUT, # Redirect stderr to stdout
+                    text=True, 
+                    encoding='utf-8', 
+                    bufsize=1 # Line buffering
+                )
+                # Stream output
+                for line in iter(process_pip.stdout.readline, ''):
+                    self.log_message.emit(line.strip())
+                process_pip.stdout.close()
+                return_code_pip = process_pip.wait()
+                if return_code_pip != 0:
+                    self.log_message.emit(f"WARNING: pip upgrade failed with code {return_code_pip}. Continuing update attempt...")
+                    # Don't mark overall success as False here, just log warning
+                else:
+                    self.log_message.emit("pip upgrade successful.")
             except Exception as pip_e:
+                self.log_message.emit(f"WARNING: Error running pip upgrade: {pip_e}. Continuing update attempt...")
                 logging.warning(f"Could not upgrade pip: {pip_e}")
+            self.log_message.emit("----------------------")
+            # --------------------------------
             
-            # Run the update command
-            result = subprocess.run(
-                [sys.executable, "-m", "pip", "install", "--upgrade", CORE_PACKAGE_NAME],
-                check=True, # Raise error on failure
-                capture_output=True,
+            # --- Upgrade ANPE core with streaming --- 
+            self.log_message.emit(f"--- Upgrading {CORE_PACKAGE_NAME} --- ")
+            anpe_upgrade_cmd = [sys.executable, "-m", "pip", "install", "--upgrade", CORE_PACKAGE_NAME]
+            self.log_message.emit(f"Running: {' '.join(anpe_upgrade_cmd)}")
+            process_anpe = subprocess.Popen(
+                anpe_upgrade_cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
                 text=True,
-                encoding='utf-8' # Explicitly set encoding
+                encoding='utf-8',
+                bufsize=1
             )
-            message = f"Update successful!\n\nOutput:\n{result.stdout[-500:]}" # Show last bit of output
-            success = True
-            self.update_progress.emit(100, "Update complete.")
+            # Stream output
+            full_output = []
+            for line in iter(process_anpe.stdout.readline, ''):
+                line_strip = line.strip()
+                self.log_message.emit(line_strip)
+                full_output.append(line_strip)
+            process_anpe.stdout.close()
+            return_code_anpe = process_anpe.wait()
+            # --------------------------------------
             
-        except subprocess.CalledProcessError as e:
-            message = f"Update failed.\n\nError:\n{e.stderr[-500:]}"
-            success = False
-            self.update_progress.emit(0, "Update failed.")
+            if return_code_anpe == 0:
+                message = f"{CORE_PACKAGE_NAME} update successful!"
+                success = True
+                self.update_progress.emit(100, "Update complete.")
+                self.log_message.emit("----------------------")
+            else:
+                message = f"{CORE_PACKAGE_NAME} update failed (exit code: {return_code_anpe}). Check details log."
+                success = False
+                self.update_progress.emit(0, "Update failed.")
+                self.log_message.emit(f"ERROR: Update failed with code {return_code_anpe}")
+                self.log_message.emit("----------------------")
+                # Optional: Add last few lines of output to the main message?
+                # message += "\n\nLast Output:\n" + "\n".join(full_output[-10:])
+                
         except Exception as e:
             message = f"An unexpected error occurred during update: {e}"
+            logging.error(message, exc_info=True)
             success = False
             self.update_progress.emit(0, "Update failed.")
+            self.log_message.emit(f"FATAL ERROR during update: {e}")
             
         self.update_finished.emit(success, message)
 
@@ -146,6 +239,7 @@ class CleanWorker(QObject):
     """Worker to run clean_all in a background thread."""
     finished = pyqtSignal(dict) # Return status dictionary from clean_all
     progress = pyqtSignal(str) # To send status updates
+    log_message = pyqtSignal(str) # Added for consistency, but not used
 
     @pyqtSlot()
     def run(self):
@@ -158,13 +252,12 @@ class CleanWorker(QObject):
             # Assume clean_all internally handles stages like spaCy, Benepar, NLTK
             results = clean_all() # Removed logger passing
             self.progress.emit("Cleaning Benepar models...") # Example stage message
-            self.progress.emit("Cleaning NLTK resources...") # Example stage message
             self.progress.emit("Model cleanup process finished.")
         except Exception as e:
             logging.error(f"Exception during background model cleanup: {e}", exc_info=True)
             self.progress.emit(f"Error during cleanup: {e}")
             # Ensure results dict still has keys even on error
-            results = {"spacy": False, "benepar": False, "nltk": False}
+            results = {"spacy": False, "benepar": False}
         finally:
             # Ensure finished is always emitted
             self.finished.emit(results)
@@ -173,6 +266,7 @@ class InstallDefaultsWorker(QObject):
     """Worker to run setup_models with default settings."""
     progress = pyqtSignal(str)
     finished = pyqtSignal(bool, str) # success, final_message
+    log_message = pyqtSignal(str) # Added for consistency, but not used directly by this worker
 
     @pyqtSlot()
     def run(self):
@@ -214,6 +308,7 @@ class ModelActionWorker(QObject):
     """Worker for installing or uninstalling specific models."""
     progress = pyqtSignal(str) # Message only for progress updates
     finished = pyqtSignal(bool, str) # success, message
+    log_message = pyqtSignal(str) # For detailed subprocess output
     
     def __init__(self, action: str, model_type: str, alias: str = None):
         """
@@ -221,13 +316,54 @@ class ModelActionWorker(QObject):
         
         Args:
             action: Either "install" or "uninstall"
-            model_type: One of "spacy", "benepar", or "nltk"
-            alias: The model alias (e.g., "md", "lg", "default"), None for NLTK
+            model_type: One of "spacy", "benepar"
+            alias: The model alias (e.g., "md", "lg", "default")
         """
         super().__init__()
         self.action = action
         self.model_type = model_type
         self.alias = alias
+        
+    def _run_subprocess_and_stream(self, cmd: list[str], description: str) -> tuple[int, list[str]]:
+        """Helper to run a subprocess, stream its output, and return status/output."""
+        self.log_message.emit(f"--- Running: {description} ---")
+        self.log_message.emit(f"Command: {' '.join(cmd)}")
+        full_output_lines = [] # Store lines for potential return
+        return_code = -1 # Default error code
+        # Regex to remove ANSI escape codes
+        ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|(?:\[[0-?]*[ -/]*[@-~]))')
+        try:
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                encoding='utf-8',
+                bufsize=1,
+                creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0 # Hide console window on Windows
+            )
+            for line in iter(process.stdout.readline, ''):
+                line_strip = line.strip()
+                # Remove ANSI codes before emitting/storing
+                cleaned_line = ansi_escape.sub('', line_strip)
+                self.log_message.emit(cleaned_line) 
+                full_output_lines.append(cleaned_line) # Store cleaned line
+            process.stdout.close()
+            return_code = process.wait()
+            self.log_message.emit(f"--- {description} finished (code: {return_code}) ---")
+        except FileNotFoundError:
+            err_msg = f"ERROR: Command not found ({cmd[0]}). Is it installed and in PATH?"
+            self.log_message.emit(err_msg)
+            full_output_lines.append(err_msg)
+            logging.error(f"Command not found: {cmd[0]}")
+            return_code = -1 # Indicate error
+        except Exception as e:
+            err_msg = f"ERROR running {description}: {e}"
+            self.log_message.emit(err_msg)
+            full_output_lines.append(err_msg)
+            logging.error(f"Error running subprocess for {description}: {e}", exc_info=True)
+            return_code = -1 # Indicate error
+        return return_code, full_output_lines
         
     @pyqtSlot()
     def run(self):
@@ -235,231 +371,193 @@ class ModelActionWorker(QObject):
         success = False
         message = ""
         action_verb = "Installing" if self.action == 'install' else "Uninstalling"
-        target_desc = f"{self.model_type} model{f' {self.alias}' if self.alias else ' resources'}"
+        target_desc = f"{self.model_type} model '{self.alias}'"
 
         try:
             self.progress.emit(f"Starting {action_verb.lower()} {target_desc}...")
 
-            # Import necessary functions from setup_models - relies on imports at top now
-            # from anpe.utils.setup_models import install_nltk_models, install_spacy_model, install_benepar_model
-
-            # Handle NLTK models specially
-            if self.model_type == 'nltk':
-                if self.action == 'install':
-                    try:
-                        self.progress.emit("Downloading NLTK resources...") # More specific message
-                        success = install_nltk_models()
-                        if success:
-                            message = "NLTK resources successfully installed."
-                        else:
-                            message = "Failed to install NLTK resources. Check logs."
-                    except Exception as e:
-                        message = f"Failed to install NLTK resources: {e}"
-                        success = False
-                elif self.action == 'uninstall':
-                    try:
-                        self.progress.emit("Removing NLTK resources...") # More specific
-                        # Try to find and remove punkt resources
-                        try:
-                            punkt_path = nltk.data.find('tokenizers/punkt')
-                            if os.path.exists(punkt_path):
-                                if os.path.isdir(punkt_path):
-                                    shutil.rmtree(punkt_path)
-                                else:
-                                    os.remove(punkt_path)
-                            # Handle punkt_tab too - REMOVED DUPLICATE PROGRESS EMIT
-                            punkt_tab_path = nltk.data.find('tokenizers/punkt_tab')
-                            if os.path.exists(punkt_tab_path):
-                                if os.path.isdir(punkt_tab_path):
-                                    shutil.rmtree(punkt_tab_path)
-                                else:
-                                    os.remove(punkt_tab_path)
-                            # Verify removal after attempting
-                            success = not check_nltk_models(['punkt', 'punkt_tab'])
-                            if success:
-                                message = "NLTK resources successfully uninstalled."
-                            else:
-                                message = "Could not confirm removal of all NLTK resources." # Updated message
-                        except (LookupError, OSError, IOError) as e:
-                            message = f"Error removing NLTK resources: {e}"
-                            success = False
-                    except Exception as e:
-                        message = f"Failed to uninstall NLTK resources: {e}"
-                        success = False
-            # Handle spaCy and Benepar models
+            # spaCy / Benepar (Removed redundant outer check)
+            # if self.model_type == 'spacy' or self.model_type == 'benepar': # Removed redundant check
+            if not self.alias:
+                message = f"Missing alias for {self.model_type} model action."
+                success = False
             else:
-                if not self.alias:
-                    message = f"Missing alias for {self.model_type} model action."
+                model_map = SPACY_MODEL_MAP if self.model_type == 'spacy' else BENEPAR_MODEL_MAP
+                model_name = model_map.get(self.alias)
+                if not model_name:
+                    message = f"Unknown {self.model_type} model alias: {self.alias}"
                     success = False
                 else:
-                    # Get the full model name from the alias
-                    model_map = SPACY_MODEL_MAP if self.model_type == 'spacy' else BENEPAR_MODEL_MAP
-                    model_name = model_map.get(self.alias)
-                    
-                    if not model_name:
-                        message = f"Unknown {self.model_type} model alias: {self.alias}"
-                        success = False
-                    else:
-                        if self.action == 'install':
+                    # --- INSTALL ACTION --- 
+                    if self.action == 'install':
+                        install_success = True # Track overall install success
+                        
+                        # spaCy Specific Pre-checks/Installs
+                        if self.model_type == 'spacy' and model_name.endswith('_trf'):
+                            self.progress.emit("Checking for spacy-transformers...")
                             try:
-                                self.progress.emit(f"Downloading {self.model_type} model {model_name}...") # More specific
-                                if self.model_type == 'spacy':
-                                    success = install_spacy_model(model_name=model_name)
-                                elif self.model_type == 'benepar':
-                                    success = install_benepar_model(model_name=model_name)
-                                
-                                if success:
-                                    message = f"Successfully installed {self.model_type} model {model_name}."
+                                importlib.metadata.version("spacy-transformers")
+                                self.log_message.emit("'spacy-transformers' is already installed.")
+                            except importlib.metadata.PackageNotFoundError:
+                                self.progress.emit("Installing spacy-transformers dependency...")
+                                cmd_trf = [sys.executable, '-m', 'pip', 'install', "spacy[transformers]"]
+                                rc_trf, _ = self._run_subprocess_and_stream(cmd_trf, "spacy-transformers install")
+                                if rc_trf != 0:
+                                    self.progress.emit("Failed to install 'spacy-transformers'. Model install may fail.")
+                                    # Don't set install_success to False here, let model download proceed
                                 else:
-                                    message = f"Failed to install {self.model_type} model {model_name}. Check logs."
-                            except Exception as e:
-                                message = f"Failed to install {model_name}: {e}"
-                                success = False
-
-                        elif self.action == 'uninstall':
-                            self.progress.emit(f"Attempting to uninstall {self.model_type} model {model_name}...")
-                            if self.model_type == 'spacy':
-                                success = True  # Will be set to False if any step fails
-                                self.progress.emit(f"Attempting to uninstall spaCy model {model_name}...")
-                                
-                                # Check if the model is installed before proceeding
-                                installed_models = find_installed_spacy_models()
-                                if model_name not in installed_models:
-                                    message = f"spaCy model {model_name} is not installed."
-                                    success = True  # Not an error, the model is already not installed
-                                else:
-                                    # 1. Try pip uninstall
-                                    try:
-                                        self.progress.emit(f"Running pip uninstall {model_name}...") # More specific
-                                        result = subprocess.run(
-                                            [sys.executable, "-m", "pip", "uninstall", "-y", model_name],
-                                            check=False, capture_output=True, text=True, encoding='utf-8'
-                                        )
-                                        # Check both return code and stderr for confirmation
-                                        if result.returncode != 0 and "successfully uninstalled" not in result.stdout.lower() and "not installed" not in result.stderr.lower():
-                                            self.progress.emit(f"Pip uninstall may have failed: {result.stderr.strip()}")
-                                            # Don't set success = False here, rely on final check
-                                    except Exception as e:
-                                        self.progress.emit(f"Error running pip uninstall: {e}")
-                                        # Don't set success = False here, rely on final check
+                                    self.progress.emit("'spacy-transformers' installed.")
                                     
-                                    # 2. Try removing from spaCy data directory (if available)
-                                    try:
-                                        data_path = spacy.util.get_data_path()
-                                        if data_path and os.path.exists(data_path):
-                                            model_path = os.path.join(data_path, model_name)
-                                            # Also check linked paths like en_core_web_md -> en_core_web_md-x.y.z
-                                            model_link_path = os.path.join(data_path, model_name.replace("-", "_")) # Check link name too
+                        # Main Model Download/Install
+                        self.progress.emit(f"Downloading/installing {self.model_type} model {model_name}...")
+                        return_code = -1 # Default error
+                        if self.model_type == 'spacy':
+                            cmd_model = [sys.executable, '-m', 'spacy', 'download', model_name]
+                            return_code, _ = self._run_subprocess_and_stream(cmd_model, f"spaCy download {model_name}")
+                            install_success = (return_code == 0) and check_spacy_model(model_name)
+                        elif self.model_type == 'benepar':
+                            escaped_nltk_data_dir = NLTK_DATA_DIR.replace('\\', '\\\\')
+                            benepar_script = (
+                                f"import nltk; import benepar; import sys; "
+                                f"nltk.data.path.insert(0, r'{escaped_nltk_data_dir}'); "
+                                f"print('--- Starting benepar.download(\'{model_name}\') ---', flush=True); "
+                                f"try: benepar.download('{model_name}'); print('--- benepar.download finished ---', flush=True); sys.exit(0); "
+                                f"except Exception as e: print(f'ERROR in benepar.download: {{e}}', flush=True); sys.exit(1);"
+                            )
+                            cmd_model = [sys.executable, '-c', benepar_script]
+                            return_code, _ = self._run_subprocess_and_stream(cmd_model, f"Benepar download {model_name}")
+                            install_success = check_benepar_model(model_name) # Check after attempt
 
-                                            paths_to_remove = []
-                                            if os.path.exists(model_path):
-                                                paths_to_remove.append(model_path)
-                                            if os.path.islink(model_link_path) and os.path.exists(model_link_path):
-                                                # Follow link to check if it points to our target before removing link
-                                                try:
-                                                    resolved_link = os.path.realpath(model_link_path)
-                                                    # Need to check if resolved path contains the target model version directory
-                                                    # This is complex, maybe just remove link if it exists
-                                                    # For now, just add the link path for removal
-                                                    paths_to_remove.append(model_link_path)
-                                                except Exception as link_e:
-                                                    logging.warning(f"Could not resolve link {model_link_path}: {link_e}")
-
-                                            for path_to_remove in set(paths_to_remove):
-                                                try:
-                                                    self.progress.emit(f"Removing model path: {path_to_remove}...")
-                                                    if os.path.isdir(path_to_remove):
-                                                        shutil.rmtree(path_to_remove)
-                                                    else:
-                                                        os.remove(path_to_remove)
-                                                    self.progress.emit(f"Removed model path: {path_to_remove}")
-                                                except Exception as e:
-                                                    self.progress.emit(f"Failed to remove {path_to_remove}: {e}")
-                                                    # Don't set success = False here, rely on final check
-                                    except Exception as e:
-                                        self.progress.emit(f"Could not access or process spaCy data directory: {e}")
-                                
-                                    # Final check using check_spacy_model
-                                    if not check_spacy_model(model_name):
-                                        message = f"Successfully uninstalled {self.model_type} model {model_name}."
-                                        success = True
-                                    else:
-                                        message = f"Failed to completely uninstall {model_name}. It may still be available. Manual check/removal might be needed."
-                                        success = False
-                                
-                            elif self.model_type == 'benepar':
-                                success = True
-                                found_something = False
-                                
-                                # Check if the model is installed before proceeding
-                                installed_models = find_installed_benepar_models()
-                                if model_name not in installed_models:
-                                    message = f"Benepar model {model_name} is not installed."
-                                    success = True  # Not an error
-                                else:
-                                    try:
-                                        paths_to_remove = []
-                                        # Use nltk.data to find the model directory
-                                        try:
-                                            self.progress.emit(f"Checking NLTK path for {model_name} directory...")
-                                            model_dir_path = nltk.data.find(f'models/{model_name}')
-                                            if os.path.exists(model_dir_path):
-                                                found_something = True
-                                                paths_to_remove.append(model_dir_path)
-                                        except LookupError:
-                                            self.progress.emit(f"Could not find models/{model_name} directory using nltk.data.find")
-
-                                        # Also check for zip files in NLTK paths
-                                        nltk_paths = nltk.data.path
-                                        for nltk_path in set(nltk_paths):  # Use set to avoid duplicates
-                                            if not os.path.isdir(nltk_path):
-                                                continue
-                                            models_dir = os.path.join(nltk_path, "models")
-                                            if not os.path.isdir(models_dir):
-                                                continue
-                                                
-                                            zip_path = os.path.join(models_dir, model_name + ".zip")
-                                            if os.path.exists(zip_path):
-                                                found_something = True
-                                                paths_to_remove.append(zip_path)
-                                        
-                                        # Attempt removal
-                                        if not paths_to_remove:
-                                            self.progress.emit(f"No specific paths found for {model_name} in NLTK directories.")
-                                            # Might still be installed but not found by these methods
-                                        else:
-                                            for path_to_remove in set(paths_to_remove):
-                                                self.progress.emit(f"Removing path: {path_to_remove}")
-                                                try:
-                                                    if os.path.isdir(path_to_remove):
-                                                        shutil.rmtree(path_to_remove)
-                                                    elif os.path.isfile(path_to_remove):
-                                                        os.remove(path_to_remove)
-                                                except Exception as e:
-                                                    self.progress.emit(f"Failed to remove {path_to_remove}: {e}")
-                                                    # Don't set success = False, rely on final check
-                                        
-                                        # Final check
-                                        if not check_benepar_model(model_name):
-                                            if found_something or not installed_models: # If we removed something OR it wasn't listed as installed initially
-                                                 message = f"Successfully uninstalled {self.model_type} model {model_name}."
-                                                 success = True
+                        # Final Install Message/Status
+                        success = install_success
+                        message = f"Successfully installed {self.model_type} model {model_name}." if success else \
+                                  f"Failed to install/verify {self.model_type} model {model_name} (code: {return_code}). Check logs."
+                        self.progress.emit(message)
+                                      
+                    # --- UNINSTALL ACTION --- 
+                    elif self.action == 'uninstall':
+                        uninstall_success = True # Track overall uninstall success
+                        
+                        # Check if present first (no subprocess needed)
+                        is_present = False
+                        if self.model_type == 'spacy':
+                            is_present = model_name in find_installed_spacy_models()
+                        elif self.model_type == 'benepar':
+                            is_present = model_name in find_installed_benepar_models()
+                            
+                        if not is_present:
+                            message = f"{self.model_type} model {model_name} is not installed."
+                            success = True # Already uninstalled
+                        else:
+                            self.progress.emit(f"Attempting to uninstall {self.model_type} model {model_name}...")
+                            
+                            # spaCy Uninstall (uses pip)
+                            if self.model_type == 'spacy':
+                                cmd_uninstall = [sys.executable, "-m", "pip", "uninstall", "-y", model_name]
+                                rc_uninstall, out_uninstall = self._run_subprocess_and_stream(cmd_uninstall, f"pip uninstall {model_name}")
+                                # Check return code AND output message from pip
+                                pip_failed = rc_uninstall != 0 and not any("not installed" in line.lower() for line in out_uninstall)
+                                if pip_failed:
+                                     self.progress.emit(f"Pip uninstall command failed or reported issues.")
+                                     # Don't set uninstall_success=False yet, try file removal
+                                     
+                                # Manual File Removal (No Stream)
+                                self.progress.emit("Checking spaCy data directory for removal...")
+                                try:
+                                    data_path = spacy.util.get_data_path()
+                                    if data_path and os.path.exists(data_path):
+                                        model_path = os.path.join(data_path, model_name)
+                                        if os.path.exists(model_path):
+                                            self.progress.emit(f"Removing {model_path}...")
+                                            if os.path.isdir(model_path):
+                                                shutil.rmtree(model_path)
                                             else:
-                                                 # It was listed as installed, but we didn't find paths to remove, yet check says it's gone.
-                                                 message = f"Model {model_name} is no longer detected, but specific files were not found for removal."
-                                                 success = True
-                                        else:
-                                            message = f"Failed to completely uninstall {model_name}. It may still be available."
-                                            success = False
-                                            
-                                    except Exception as e:
-                                        message = f"Error uninstalling Benepar model: {e}"
-                                        success = False
+                                                os.remove(model_path)
+                                except Exception as e:
+                                    self.progress.emit(f"Could not access/remove from spaCy data directory: {e}")
+                                    # Don't mark as failure just for this
+                                    
+                                # Final spaCy Check
+                                if not check_spacy_model(model_name):
+                                    uninstall_success = True
+                                    message = f"Successfully uninstalled spaCy model {model_name}."
+                                else:
+                                    uninstall_success = False
+                                    message = f"Failed to completely uninstall spaCy model {model_name}."
+
+                            # Benepar Uninstall (Manual File Ops)
+                            elif self.model_type == 'benepar':
+                                found_something = False
+                                removal_errors = False
+                                try:
+                                    import nltk
+                                    self.progress.emit(f"Checking NLTK paths for {model_name} files...")
+                                    # Check directory
+                                    try:
+                                        model_dir_path = nltk.data.find(f'models/{model_name}')
+                                        if os.path.exists(model_dir_path):
+                                            found_something = True
+                                            self.progress.emit(f"Removing directory: {model_dir_path}")
+                                            try:
+                                                if os.path.isdir(model_dir_path):
+                                                    shutil.rmtree(model_dir_path)
+                                                else:
+                                                    os.remove(model_dir_path)
+                                            except Exception as e:
+                                                self.progress.emit(f"Failed to remove {model_dir_path}: {e}")
+                                                removal_errors = True
+                                    except LookupError:
+                                        self.progress.emit(f"Directory models/{model_name} not found.")
+                                        
+                                    # Check zip file
+                                    nltk_paths = nltk.data.path
+                                    for nltk_path in set(nltk_paths):
+                                        models_dir = os.path.join(nltk_path, "models")
+                                        if not os.path.isdir(models_dir):
+                                            continue
+                                        zip_path = os.path.join(models_dir, model_name + ".zip")
+                                        if os.path.exists(zip_path):
+                                            found_something = True
+                                            self.progress.emit(f"Removing zip file: {zip_path}")
+                                            try:
+                                                os.remove(zip_path)
+                                            except Exception as e:
+                                                self.progress.emit(f"Failed to remove zip file {zip_path}: {e}")
+                                                removal_errors = True
+                                                    
+                                except Exception as e:
+                                    message = f"Error checking/removing Benepar model files: {e}"
+                                    uninstall_success = False
+                                
+                                # Final Benepar Check (only if no error above)
+                                if uninstall_success:
+                                    if not check_benepar_model(model_name):
+                                        if found_something and not removal_errors:
+                                            message = f"Successfully uninstalled Benepar model {model_name}."
+                                            uninstall_success = True
+                                        elif not found_something:
+                                            message = f"Benepar model {model_name} was not found (already uninstalled?)"
+                                            uninstall_success = True
+                                        else: # Found something but had removal errors
+                                             message = f"Attempted uninstall of Benepar model {model_name}, but errors occurred."
+                                             uninstall_success = False
+                                    else:
+                                        message = f"Failed to completely uninstall Benepar model {model_name}."
+                                        uninstall_success = False
+                                        
+                        # Set overall success based on uninstall result
+                        success = uninstall_success
+                        # Ensure message is set if not already
+                        if not message:
+                            message = f"Uninstall process finished for {model_name}. Final status: {'Success' if success else 'Failed'}."
+                        self.progress.emit(message) # Emit final status for uninstall
                             
         except Exception as e:
             success = False
-            message = f"An unexpected error occurred: {e}"
+            message = f"An unexpected error occurred during model action: {e}"
             logging.error(f"Model action worker error: {e}", exc_info=True)
-
+            self.progress.emit(message) # Emit error to status label
+            self.log_message.emit(f"FATAL ERROR: {message}") # Emit error to log
+            
         self.progress.emit("Operation complete.") # Keep this final generic message
         self.finished.emit(success, message) 

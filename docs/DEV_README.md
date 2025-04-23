@@ -54,47 +54,5 @@ README.md                 # Main project README (user-focused)
     *   Integrates `StatusBar`, `EnhancedLogPanel`, `SettingsDialog`, `HelpDialog`.
     *   Manages application state (e.g., whether processing is active, results data).
 *   **`widgets/settings_dialog.py`**: A multi-page dialog (`QStackedWidget` + `QListWidget`) for:
-    *   **Models Page**: Displaying installed models (spaCy, Benepar, NLTK), allowing install/uninstall actions (using `ModelActionWorker`), selecting usage preferences, running model cleanup (`CleanWorker`).
-    *   **Core Page**: Checking for updates to the `anpe` core library via PyPI and running `pip install --upgrade anpe` (`CoreUpdateWorker`).
-    *   **About Page**: Displaying version info and licenses.
-*   **`widgets/result_display.py`**: Uses a `QTreeView` with a custom model (`ResultModel`) to show hierarchical noun phrase results.
-*   **`workers/`**: Contains `QObject` subclasses with a `run` method designed to be executed in a `QThreadPool`. They emit signals (`pyqtSignal`) to communicate progress, results, or errors back to the main thread (`MainWindow`).
-*   **`theme.py`**: Defines color constants and generates Qt Stylesheets (QSS) for a consistent look and feel.
-*   **`resource_manager.py`**: Loads icons dynamically, facilitating packaging (e.g., with PyInstaller).
-
-## Core Logic Flow
-
-1.  **Startup**: `app.py` -> `SplashScreen`.
-2.  **Initialization**: `SplashScreen` starts `ExtractorInitializer` (in `main_window.py`) to check for essential model *types*.
-3.  **Main Window Launch**: `SplashScreen` signals completion/error -> `app.py` creates and shows `MainWindow`, passing initial status.
-4.  **Input**: User adds files/text via `main_window.py` UI elements (e.g., `FileListWidget`, `QTextEdit`).
-5.  **Configuration**: User sets options (checkboxes, spinboxes, `StructureFilterWidget`) in `main_window.py`.
-6.  **Processing**: 
-    *   User clicks "Process".
-    *   `main_window.py` gathers configuration and input.
-    *   It creates either an `ExtractionWorker` (single) or `BatchWorker` (multiple files).
-    *   The worker is submitted to the global `QThreadPool`.
-    *   `MainWindow` connects to the worker's signals (`progress`, `finished`, `error`).
-    *   UI is updated based on worker signals (status bar, progress bar, log panel).
-7.  **Results**: 
-    *   Worker emits results via `finished` signal.
-    *   `main_window.py` receives results, stores them, updates the `ResultDisplayWidget`, and switches to the Output tab.
-8.  **Export**: User clicks "Export" -> `main_window.py` uses `QFileDialog` and calls the `anpe` core library's export function.
-9.  **Settings**: User clicks gear icon -> `main_window.py` opens `SettingsDialog`. Actions within the dialog (e.g., install model, update core) use their own background workers.
-
-## Dependencies
-
-*   **PyQt6**: GUI framework.
-*   **anpe**: The core noun phrase extraction library.
-    *   *Transitive dependencies*: spaCy, benepar, NLTK, etc. (Managed by the `anpe` package itself).
-
-See `minimal_requirements.txt` for direct GUI dependencies and the `anpe` package for its requirements.
-
-## Development Notes
-
-*   **Threading**: Background tasks are crucial for responsiveness. Use `QThreadPool` and `QObject` workers emitting signals. Avoid blocking the main GUI thread.
-*   **Styling**: UI styling is primarily done via QSS in `theme.py`. Use the defined color constants.
-*   **Resource Management**: Use `ResourceManager.get_icon()` etc., to ensure resources are found correctly, especially when packaged.
-*   **Logging**: A custom `QtLogHandler` routes standard Python logging messages to the `EnhancedLogPanel` in the UI.
-*   **Model Management**: Core model installation/checking logic resides within the `anpe` library (`anpe.utils`). The GUI interacts with these functions, often via workers in `settings_dialog.py`.
-*   **Cross-Platform**: Built with PyQt, aiming for cross-platform compatibility (Windows, macOS, Linux), though testing might be required. 
+    *   **Models Page**: Displaying installed spaCy/Benepar models, allowing install/uninstall actions (using `ModelActionWorker`), selecting usage preferences, running model cleanup (`CleanWorker`). (NLTK is used implicitly by Benepar).
+    *   **Core Page**: Checking for updates to the `

@@ -8,15 +8,17 @@ import sys
 import logging
 import nltk # Need nltk for the status check part (will move to page) - Still needed for ModelsPage NLTK status check
 import importlib.metadata # For getting core version
+import json # For parsing PyPI response
+import sys # <<< Added for Python version
 
-from PyQt6.QtCore import Qt, QThread, QObject, pyqtSignal, pyqtSlot, QSize, QSettings, QTimer, QEvent
+from PyQt6.QtCore import Qt, QThread, QObject, pyqtSignal, pyqtSlot, QSize, QSettings, QTimer, QEvent, QPoint, QUrl # Added QPoint, QUrl
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QGroupBox,
     QGridLayout, QProgressBar, QMessageBox, QWidget, QSpacerItem, QSizePolicy,
     QApplication, QFrame, QStackedWidget, QListWidget, QListWidgetItem, 
-    QSplitter, QFormLayout, QComboBox
+    QSplitter, QFormLayout, QComboBox, QTextEdit, QToolButton # Added QToolButton
 )
-from PyQt6.QtGui import QIcon, QPixmap
+from PyQt6.QtGui import QIcon, QPixmap, QTextCursor, QColor, QTransform, QDesktopServices # <<< Added QDesktopServices
 
 from anpe_gui.theme import ERROR_COLOR, PRIMARY_COLOR, get_scroll_bar_style, LIGHT_HOVER_BLUE # Import theme elements
 from anpe_gui.resource_manager import ResourceManager # ADDED THIS IMPORT
@@ -25,11 +27,10 @@ from anpe_gui.widgets.activity_indicator import PulsingActivityIndicator # IMPOR
 from anpe_gui.workers.settings_workers import CoreUpdateWorker, CleanWorker, InstallDefaultsWorker, ModelActionWorker
 
 # Assuming these utilities exist and work as expected
-# (We will need more specific imports later in the page widgets)
 try:
     from anpe.utils.setup_models import (
-        check_spacy_model, check_benepar_model, check_nltk_models, setup_models,
-        SPACY_MODEL_MAP, BENEPAR_MODEL_MAP, install_nltk_models, install_spacy_model, install_benepar_model, # Import maps and new functions
+        check_spacy_model, check_benepar_model, setup_models, # Removed check_nltk_models
+        SPACY_MODEL_MAP, BENEPAR_MODEL_MAP, install_spacy_model, install_benepar_model, # Removed install_nltk_models
         DEFAULT_SPACY_ALIAS, DEFAULT_BENEPAR_ALIAS # Explicitly import defaults
     )
     from anpe.utils.clean_models import clean_all
@@ -49,7 +50,6 @@ except ImportError as e:
     CORE_PACKAGE_NAME = "anpe"
     def check_spacy_model(*args, **kwargs): return False
     def check_benepar_model(*args, **kwargs): return False
-    def check_nltk_models(*args, **kwargs): return False
     def setup_models(*args, **kwargs): return False
     def clean_all(*args, **kwargs): return {}
     def find_installed_spacy_models(): return []
@@ -76,13 +76,17 @@ class ModelsPage(QWidget):
         self.setObjectName("ModelsPage")
         self.settings = QSettings("rcverse", "ANPE_GUI") # For usage persistence
         self.model_status = model_status # Store initial status
+        self.management_group = None # Initialize attribute
+        
+        # --- Store base icon --- 
+        # self.down_arrow_icon = ResourceManager.get_icon("down_arrow.svg") # REMOVED
+        # -----------------------
         
         # Store refs to status labels - these will be created in setup_ui
         self.spacy_status_label = None
         self.spacy_aliases_label = None
         self.benepar_status_label = None
         self.benepar_aliases_label = None
-        self.nltk_status_label = None
         
         self.install_worker_thread = None
         self.install_worker = None
@@ -90,6 +94,10 @@ class ModelsPage(QWidget):
         self.clean_worker = None
         
         self.status_labels = {} # key: full_model_name, value: QLabel
+        
+        # For log dialog
+        self.log_dialog = None
+        self.log_text = ""
         
         # Metadata for manageable models (Updated descriptions and sizes)
         self.manageable_models = [
@@ -104,7 +112,6 @@ class ModelsPage(QWidget):
         self.manageable_models = [m for m in self.manageable_models if m.get('name')] 
         
         self.action_buttons = {} # key: alias, value: QPushButton
-        self.nltk_action_button = None # Button for NLTK actions
         
         self.setup_ui()
         self.connect_signals()
@@ -144,7 +151,7 @@ class ModelsPage(QWidget):
         explanation_style = "font-size: 9pt; color: #666; padding-top: 5px;" # Style for explanation labels
         
         spacy_explanation_label = QLabel(
-            "spaCy models handle sentence segmentation and initial structural analysis. "
+            "spaCy models handle sentence segmentation and structural analysis. "
             "Smaller models (e.g., 'sm') are faster but less accurate. Larger models ('lg', 'trf') "
             "offer higher accuracy but require more resources."
         )
@@ -166,8 +173,8 @@ class ModelsPage(QWidget):
         main_layout.addWidget(usage_group)
 
         # --- Model Installation & Management --- 
-        management_group = QGroupBox("Manage Models / Resources")
-        management_layout = QVBoxLayout(management_group)
+        self.management_group = QGroupBox("Manage Models / Resources") # Assign to self
+        management_layout = QVBoxLayout(self.management_group) # Use self.management_group
         management_layout.setContentsMargins(10, 10, 10, 10) # Padding inside group
         management_layout.setSpacing(8) # Spacing within group
 
@@ -197,7 +204,7 @@ class ModelsPage(QWidget):
         spacy_header_layout = QHBoxLayout(spacy_header_widget)
         spacy_header_layout.setContentsMargins(0,0,0,0)
         spacy_header_layout.setSpacing(5)
-        spacy_header_label = QLabel("spaCy MODELS")
+        spacy_header_label = QLabel("spaCy Models")
         spacy_header_label.setStyleSheet(header_style)
         self.spacy_status_label = QLabel("(Checking status...)") # Status label here
         self.spacy_status_label.setStyleSheet(status_style)
@@ -206,15 +213,6 @@ class ModelsPage(QWidget):
         spacy_header_layout.addStretch()
         grid_layout.addWidget(spacy_header_widget, current_row, 0, 1, 3) 
         current_row += 1
-
-        # Subheaders (REMOVED)
-        # subheader_name_spacy = QLabel("Model Name")
-        # subheader_name_spacy.setStyleSheet(subheader_style)
-        # subheader_desc_spacy = QLabel("Description")
-        # subheader_desc_spacy.setStyleSheet(subheader_style)
-        # grid_layout.addWidget(subheader_name_spacy, current_row, 0)
-        # grid_layout.addWidget(subheader_desc_spacy, current_row, 1)
-        # current_row += 1
 
         # spaCy Models
         for model_info in [m for m in self.manageable_models if m['type'] == 'spacy']:
@@ -249,7 +247,7 @@ class ModelsPage(QWidget):
         benepar_header_layout = QHBoxLayout(benepar_header_widget)
         benepar_header_layout.setContentsMargins(0,0,0,0)
         benepar_header_layout.setSpacing(5)
-        benepar_header_label = QLabel("Benepar MODELS")
+        benepar_header_label = QLabel("Benepar Models")
         benepar_header_label.setStyleSheet(header_style)
         self.benepar_status_label = QLabel("(Checking status...)") # Status label here
         self.benepar_status_label.setStyleSheet(status_style)
@@ -258,15 +256,6 @@ class ModelsPage(QWidget):
         benepar_header_layout.addStretch()
         grid_layout.addWidget(benepar_header_widget, current_row, 0, 1, 3) 
         current_row += 1
-
-        # Subheaders (REMOVED)
-        # subheader_name_benepar = QLabel("Model Name")
-        # subheader_name_benepar.setStyleSheet(subheader_style)
-        # subheader_desc_benepar = QLabel("Description")
-        # subheader_desc_benepar.setStyleSheet(subheader_style)
-        # grid_layout.addWidget(subheader_name_benepar, current_row, 0)
-        # grid_layout.addWidget(subheader_desc_benepar, current_row, 1)
-        # current_row += 1
 
         # Benepar Models
         for model_info in [m for m in self.manageable_models if m['type'] == 'benepar']:
@@ -288,56 +277,6 @@ class ModelsPage(QWidget):
             grid_layout.addWidget(action_button, current_row, 2, Qt.AlignmentFlag.AlignCenter)
             self.action_buttons[model_info['alias']] = action_button
             current_row += 1
-
-        # Separator
-        separator_benepar = QFrame()
-        separator_benepar.setFrameShape(QFrame.Shape.HLine)
-        separator_benepar.setFixedHeight(1)
-        separator_benepar.setStyleSheet("background-color: #e0e0e0; margin-top: 5px; margin-bottom: 5px;")
-        grid_layout.addWidget(separator_benepar, current_row, 0, 1, 3)
-        current_row += 1
-
-        # --- NLTK Section --- 
-        nltk_header_widget = QWidget()
-        nltk_header_layout = QHBoxLayout(nltk_header_widget)
-        nltk_header_layout.setContentsMargins(0,0,0,0)
-        nltk_header_layout.setSpacing(5)
-        nltk_header_label = QLabel("NLTK RESOURCES")
-        nltk_header_label.setStyleSheet(header_style)
-        self.nltk_status_label = QLabel("(Checking status...)") # Status label here
-        self.nltk_status_label.setStyleSheet(status_style)
-        nltk_header_layout.addWidget(nltk_header_label)
-        nltk_header_layout.addWidget(self.nltk_status_label)
-        nltk_header_layout.addStretch()
-        grid_layout.addWidget(nltk_header_widget, current_row, 0, 1, 3) 
-        current_row += 1
-
-        # Subheaders (REMOVED)
-        # subheader_name_nltk = QLabel("Resources")
-        # subheader_name_nltk.setStyleSheet(subheader_style)
-        # subheader_desc_nltk = QLabel("Description")
-        # subheader_desc_nltk.setStyleSheet(subheader_style)
-        # grid_layout.addWidget(subheader_name_nltk, current_row, 0)
-        # grid_layout.addWidget(subheader_desc_nltk, current_row, 1)
-        # current_row += 1
-
-        # NLTK Resources
-        nltk_name_label = QLabel("punkt, punkt_tab")
-        nltk_name_label.setStyleSheet(model_name_style)
-        
-        nltk_desc_label = QLabel("Required sentence tokenizers (~40MB)") # Added size
-        nltk_desc_label.setStyleSheet(desc_style)
-        nltk_desc_label.setWordWrap(True)
-        self.nltk_action_button = QPushButton("Checking...")
-        self.nltk_action_button.setFixedWidth(80) # Reduced width
-        self.nltk_action_button.setFixedHeight(24)
-        self.nltk_action_button.setProperty("model_type", "nltk")
-        self.nltk_action_button.clicked.connect(self.run_model_action)
-        
-        grid_layout.addWidget(nltk_name_label, current_row, 0, Qt.AlignmentFlag.AlignVCenter)
-        grid_layout.addWidget(nltk_desc_label, current_row, 1, Qt.AlignmentFlag.AlignVCenter)
-        grid_layout.addWidget(self.nltk_action_button, current_row, 2, Qt.AlignmentFlag.AlignCenter)
-        current_row += 1
 
         management_layout.addWidget(management_grid_widget) # Add grid to the group layout
 
@@ -368,17 +307,33 @@ class ModelsPage(QWidget):
         self.model_action_status_label.setWordWrap(True)
         self.model_action_status_label.setStyleSheet("color: #666; font-style: italic; font-size: 9pt;")
 
-        feedback_layout.addWidget(self.model_action_indicator) # Add indicator first
+        # --- Details Button (Show Log Dialog) ---
+        self.show_details_button = QToolButton()
+        self.show_details_button.setIcon(ResourceManager.get_icon("external-link.svg"))  # Use external-link icon
+        self.show_details_button.setIconSize(QSize(12, 12)) # Smaller icon
+        self.show_details_button.setFixedSize(22, 22) # Round button size
+        self.show_details_button.setToolTip("Show Action Details Log")
+        self.show_details_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.show_details_button.setStyleSheet("""
+            QToolButton {
+                background-color: #e0e0e0;
+                border: none;
+                border-radius: 11px; /* Half of size */
+                padding: 0px;
+            }
+            QToolButton:hover {
+                background-color: #cccccc;
+            }
+            QToolButton:pressed {
+                background-color: #bbbbbb;
+            }
+        """)
+        
+        # --- Adjust Layout Order --- 
+        feedback_layout.addWidget(self.show_details_button) # Add ToolButton first
+        feedback_layout.addWidget(self.model_action_indicator) # Then indicator
         feedback_layout.addWidget(self.model_action_status_label, 1) # Label takes stretch
-
-        # Remove the old progress bar and its layout
-        # self.model_action_progress = QProgressBar()
-        # self.model_action_progress.setVisible(False)
-        # self.model_action_progress.setTextVisible(False)
-        # self.model_action_progress.setFixedHeight(6) # Even smaller progress bar
-        # self.model_action_progress.setStyleSheet(f""" QProgressBar {{ border: 1px solid #ccc; border-radius: 2px; background-color: #f5f5f5; }} QProgressBar::chunk {{ background-color: {PRIMARY_COLOR}; }} """)
-        # feedback_layout.addWidget(self.model_action_status_label)
-        # feedback_layout.addWidget(self.model_action_progress)
+        # --------------------------
 
         feedback_actions_layout.addWidget(feedback_widget, 1) # Feedback takes expanding space
 
@@ -404,8 +359,7 @@ class ModelsPage(QWidget):
         feedback_actions_layout.addWidget(button_widget) # Add buttons container (fixed size)
         management_layout.addLayout(feedback_actions_layout) # Add actions layout to group
 
-        main_layout.addWidget(management_group) # Add management group to main layout
-        main_layout.addStretch(1) # Push content up
+        main_layout.addWidget(self.management_group) # Use self.management_group
 
         # NOTE: Initial UI update is now called from __init__ after setup_ui completes
 
@@ -417,7 +371,8 @@ class ModelsPage(QWidget):
         self.refresh_button.clicked.connect(self.refresh_status)
         # Connect the new button to the dynamic handler (to be created)
         self.install_clean_button.clicked.connect(self.handle_install_clean_click)
-        # self.clean_button.clicked.connect(self.run_clean) # Remove old connection
+        # Connect the details button to show log dialog
+        self.show_details_button.clicked.connect(self._show_log_dialog)
 
     def load_usage_settings(self):
         """Load saved model usage preferences and set combo boxes.
@@ -502,7 +457,6 @@ class ModelsPage(QWidget):
         # Extract data from the dictionary (handle potential None)
         installed_spacy_models = status_data.get('spacy_models', [])
         installed_benepar_models = status_data.get('benepar_models', [])
-        nltk_present_overall = status_data.get('nltk_present', False)
         init_error = status_data.get('error') # Check if there was an initial error
 
         # Calculate worker status first
@@ -543,16 +497,6 @@ class ModelsPage(QWidget):
             self.benepar_status_label.setText(status_text)
             self.benepar_status_label.setToolTip("No compatible Benepar models found.")
 
-        # Update NLTK Status Label
-        if nltk_present_overall:
-            status_text = "(<b style='color:green;'>Ready</b>)"
-            self.nltk_status_label.setText(status_text)
-            self.nltk_status_label.setToolTip("Required NLTK resources found.")
-        else:
-            status_text = "(<b style='color:red;'>Missing</b>)"
-            self.nltk_status_label.setText(status_text)
-            self.nltk_status_label.setToolTip("Required NLTK resources are missing.")
-
         # Update Action Buttons (based on installed status)
         for model in self.manageable_models:
             alias = model['alias']
@@ -578,21 +522,6 @@ class ModelsPage(QWidget):
             # Force style re-evaluation after changing property
             button.style().unpolish(button)
             button.style().polish(button)
-
-        # NLTK Action Button
-        if self.nltk_action_button:
-            if nltk_present_overall:
-                self.nltk_action_button.setText("Uninstall") # Changed text
-                self.nltk_action_button.setProperty("danger", True) # Set danger property
-                self.nltk_action_button.setToolTip("Uninstall NLTK tokenizers (punkt, punkt_tab).")
-            else:
-                self.nltk_action_button.setText("Install NLTK")
-                self.nltk_action_button.setProperty("danger", False) # Remove danger property
-                self.nltk_action_button.setToolTip("Install NLTK tokenizers (punkt, punkt_tab).")
-            # Force style re-evaluation
-            self.nltk_action_button.style().unpolish(self.nltk_action_button)
-            self.nltk_action_button.style().polish(self.nltk_action_button)
-
         # Update usage combos based on installed models
         self._update_usage_combos(installed_spacy_models, installed_benepar_models)
 
@@ -614,8 +543,7 @@ class ModelsPage(QWidget):
             default_benepar_name = BENEPAR_MODEL_MAP[DEFAULT_BENEPAR_ALIAS]
             all_defaults_present = (
                 default_spacy_name in installed_spacy_models and
-                default_benepar_name in installed_benepar_models and
-                nltk_present_overall
+                default_benepar_name in installed_benepar_models
             )
         except KeyError: # Handle case where default alias might not be in map (shouldn't happen)
             logging.error("Default model alias not found in map during UI update.")
@@ -630,15 +558,14 @@ class ModelsPage(QWidget):
         # Update the install/clean button dynamically
         if alt_modifier_pressed or all_defaults_present:
             self.install_clean_button.setText("Clean All")
-            self.install_clean_button.setToolTip("Clean all installed ANPE models and resources (spaCy, Benepar, NLTK).\
-Requires restart if models were in use.")
+            self.install_clean_button.setToolTip("Clean all installed ANPE models and resources (spaCy, Benepar).")
             self.install_clean_button.setProperty("danger", True)
         else: # Models missing and Alt not pressed
             self.install_clean_button.setText("Install Defaults")
+            # Use the names determined above, even if fallback N/A
             self.install_clean_button.setToolTip(f"Install required default models:\
 - spaCy: {default_spacy_name}\
 - Benepar: {default_benepar_name}\
-- NLTK: punkt, punkt_tab\
 (Hold Alt to Clean All instead)")
             self.install_clean_button.setProperty("danger", False)
         # Force style re-evaluation
@@ -666,13 +593,12 @@ Requires restart if models were in use.")
             status_update = {
                 'spacy_models': find_installed_spacy_models(),
                 'benepar_models': find_installed_benepar_models(),
-                'nltk_present': check_nltk_models(['punkt', 'punkt_tab']),
                 'error': None
             }
             # Status label text updated within _update_ui_from_status
         except Exception as e:
             logging.error(f"Error during manual refresh: {e}", exc_info=True)
-            status_update = {'spacy_models': [], 'benepar_models': [], 'nltk_present': False, 'error': f'Refresh error: {e}'}
+            status_update = {'spacy_models': [], 'benepar_models': [], 'error': f'Refresh error: {e}'} # Removed 'nltk_present': False
             # Error message set within _update_ui_from_status
 
         # --- DEBUG LOGGING --- 
@@ -697,8 +623,6 @@ Requires restart if models were in use.")
         model_action_enabled_state = enabled
         for alias, button in self.action_buttons.items():
             button.setEnabled(model_action_enabled_state)
-        if self.nltk_action_button:
-            self.nltk_action_button.setEnabled(model_action_enabled_state)
         
         # Enable/disable usage combos (only disable if worker running)
         self.spacy_usage_combo.setEnabled(enabled)
@@ -722,7 +646,7 @@ Requires restart if models were in use.")
         else:
             action = None # Should not happen if button text is updated correctly
         
-        if not model_type or not action or (model_type != 'nltk' and not alias):
+        if not model_type or not action or not alias:
             logging.error("Missing model info on button signal.")
             QMessageBox.critical(self.window(), "Error", "Internal error: Could not determine action from button.")
             return
@@ -735,11 +659,8 @@ Requires restart if models were in use.")
         # Confirmation for uninstall
         if action == "uninstall":
             confirm_message = ""
-            if model_type == 'nltk':
-                 confirm_message = f"Are you sure you want to uninstall the required NLTK resources (punkt, punkt_tab)?"
-            else:
-                 model_name = SPACY_MODEL_MAP.get(alias) if model_type == 'spacy' else BENEPAR_MODEL_MAP.get(alias)
-                 confirm_message = f"Are you sure you want to uninstall the {model_type} model '{alias}' ({model_name})?"
+            model_name = SPACY_MODEL_MAP.get(alias) if model_type == 'spacy' else BENEPAR_MODEL_MAP.get(alias)
+            confirm_message = f"Are you sure you want to uninstall the {model_type} model '{alias}' ({model_name})?"
                  
             reply = QMessageBox.question(
                 self.window(),
@@ -755,6 +676,7 @@ Requires restart if models were in use.")
         self.model_action_status_label.setText(f"Starting {action} for {model_type} model '{alias}'...")
         self.model_action_indicator.setVisible(True) # Show indicator
         self.model_action_indicator.start()          # Start animation
+        self._clear_log()                            # Clear log text
         
         # Cleanup previous thread/worker (this part is fine)
         if self.install_worker: # Reuse install_worker attribute name
@@ -764,20 +686,19 @@ Requires restart if models were in use.")
             self.install_worker_thread.wait()
             self.install_worker_thread.deleteLater()
             
-        # Pass alias=None for NLTK
-        self.install_worker = ModelActionWorker(action, model_type, alias if model_type != 'nltk' else None)
+        self.install_worker = ModelActionWorker(action, model_type, alias)
         self.install_worker_thread = QThread(self) 
         self.install_worker.moveToThread(self.install_worker_thread)
         
         # Connect signals
         self.install_worker.progress.connect(self.model_action_status_label.setText)
         self.install_worker.finished.connect(self.on_model_action_finished) # Use the updated finished slot
+        self.install_worker.log_message.connect(self._append_log_details) # Connect log signal (PENDING WORKER CHANGE)
         self.install_worker_thread.started.connect(self.install_worker.run)
 
         # Cleanup connections - REMOVE deleteLater calls here
         self.install_worker.finished.connect(self.install_worker_thread.quit) # Quit is okay
-        # self.install_worker.finished.connect(self.install_worker.deleteLater) # REMOVE THIS
-        # self.install_worker_thread.finished.connect(self.install_worker_thread.deleteLater) # REMOVE THIS
+
         
         self.install_worker_thread.start()
         
@@ -786,7 +707,8 @@ Requires restart if models were in use.")
         """Handle completion of any model install/uninstall worker with explicit wait."""
         logging.debug("on_model_action_finished started.")
         self.model_action_indicator.stop()           # Stop animation
-        self.model_action_indicator.setVisible(False) # Hide indicator
+        # REMOVED: self.model_action_indicator.setVisible(False) # Keep visible for idle glow
+
         
         # Store references before clearing
         worker_to_delete = self.install_worker
@@ -810,6 +732,13 @@ Requires restart if models were in use.")
                 if worker_to_delete:
                     worker_to_delete.progress.disconnect()
                     worker_to_delete.finished.disconnect()
+                    # Disconnect log signal (PENDING WORKER CHANGE)
+                    try: 
+                        worker_to_delete.log_message.disconnect(self._append_log_details)
+                    except TypeError:
+                        logging.debug("Log message signal likely already disconnected.")
+                    except AttributeError:
+                        logging.debug("Worker might not have log_message signal yet.")
                 thread_to_wait.started.disconnect()
                 thread_to_wait.finished.disconnect()
             except TypeError: # Signals might already be disconnected
@@ -854,11 +783,10 @@ Requires restart if models were in use.")
         # --- Use the (now updated) model_status instead of re-checking --- 
         detected_spacy = []
         detected_benepar = []
-        detected_nltk = False
+        # detected_nltk = False # Removed NLTK detection variable
         if self.model_status: # Check if status dict exists
             detected_spacy = self.model_status.get('spacy_models', [])
             detected_benepar = self.model_status.get('benepar_models', [])
-            detected_nltk = self.model_status.get('nltk_present', False)
         else:
             # Fallback if status is somehow missing (shouldn't happen ideally)
             logging.warning("model_status not found in run_clean. Confirmation message may be incomplete.")
@@ -882,10 +810,10 @@ Requires restart if models were in use.")
         else:
              message_parts.append(" • <b>Benepar:</b> (None detected)<br>")
              
-        if detected_nltk:
-            message_parts.append(" • <b>NLTK:</b> <b>punkt</b>, <b>punkt_tab</b><br>")
-        else:
-             message_parts.append(" • <b>NLTK:</b> (None detected)<br>")
+        # if detected_nltk: # Removed NLTK message part
+            # message_parts.append(" • <b>NLTK:</b> <b>Core Data</b><br>") # Changed text
+        # else:
+             # message_parts.append(" • <b>NLTK:</b> (None detected)<br>")
 
         message_parts.append(
             "<br>from all known locations on your system.<br>"
@@ -910,6 +838,7 @@ Requires restart if models were in use.")
         self.model_action_status_label.setText("Starting cleanup...")
         self.model_action_indicator.setVisible(True) # Show indicator
         self.model_action_indicator.start()          # Start animation
+        self._clear_log()                            # Clear log text
         
         # Cleanup previous thread/worker (this part is fine)
         if self.clean_worker:
@@ -926,6 +855,7 @@ Requires restart if models were in use.")
         # Connect signals
         self.clean_worker.progress.connect(self.model_action_status_label.setText)
         self.clean_worker.finished.connect(self.on_clean_finished) # Our explicit cleanup slot
+        self.clean_worker.log_message.connect(self._append_log_details) # Connect log signal (PENDING WORKER CHANGE)
         self.clean_worker_thread.started.connect(self.clean_worker.run)
 
         # Clean up connections - REMOVE deleteLater calls here
@@ -940,7 +870,8 @@ Requires restart if models were in use.")
         """Handle completion of the clean process."""
         logging.debug("on_clean_finished started.") # Add logging
         self.model_action_indicator.stop()           # Stop animation
-        self.model_action_indicator.setVisible(False) # Hide indicator
+        # REMOVED: self.model_action_indicator.setVisible(False) # Keep visible for idle glow
+
         
         # Store references to worker and thread before clearing them later
         worker_to_delete = self.clean_worker
@@ -970,7 +901,15 @@ Requires restart if models were in use.")
             # Disconnect signals to avoid potential double cleanup or calls after deletion
             try:
                 if worker_to_delete:
+                    worker_to_delete.progress.disconnect() # Added progress disconnect
                     worker_to_delete.finished.disconnect()
+                    # Disconnect log signal (PENDING WORKER CHANGE)
+                    try: 
+                        worker_to_delete.log_message.disconnect(self._append_log_details)
+                    except TypeError:
+                        logging.debug("Log message signal likely already disconnected.")
+                    except AttributeError:
+                        logging.debug("Worker might not have log_message signal yet.")
                 thread_to_wait.started.disconnect()
                 thread_to_wait.finished.disconnect()
             except TypeError: # Signals might already be disconnected
@@ -1032,11 +971,9 @@ Requires restart if models were in use.")
                 default_benepar_name = BENEPAR_MODEL_MAP[DEFAULT_BENEPAR_ALIAS]
                 installed_spacy = self.model_status.get('spacy_models', [])
                 installed_benepar = self.model_status.get('benepar_models', [])
-                nltk_present = self.model_status.get('nltk_present', False)
                 all_defaults_present = (
                     default_spacy_name in installed_spacy and
-                    default_benepar_name in installed_benepar and
-                    nltk_present
+                    default_benepar_name in installed_benepar
                 )
             except Exception as e:
                 logging.error(f"Error re-checking default model presence on click: {e}")
@@ -1066,7 +1003,7 @@ Requires restart if models were in use.")
         reply = QMessageBox.question(
             self.window(),
             "Confirm Install Defaults",
-            "This will attempt to download and install any missing default ANPE models (spaCy-md, Benepar-default, NLTK). Proceed?",
+            "This will attempt to download and install any missing default ANPE models (spaCy-md, Benepar-default). Proceed?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.Yes
         )
@@ -1077,6 +1014,7 @@ Requires restart if models were in use.")
         self.model_action_status_label.setText("Starting default installation...")
         self.model_action_indicator.setVisible(True)
         self.model_action_indicator.start()
+        self._clear_log()                            # Clear log text
 
         # Cleanup previous thread/worker (use dedicated attributes)
         if hasattr(self, 'install_defaults_worker') and self.install_defaults_worker:
@@ -1093,6 +1031,7 @@ Requires restart if models were in use.")
         # Connect signals
         self.install_defaults_worker.progress.connect(self.model_action_status_label.setText)
         self.install_defaults_worker.finished.connect(self.on_install_defaults_finished)
+        self.install_defaults_worker.log_message.connect(self._append_log_details) # Connect log signal (PENDING WORKER CHANGE)
         self.install_defaults_thread.started.connect(self.install_defaults_worker.run)
 
         # Clean up connections
@@ -1105,7 +1044,7 @@ Requires restart if models were in use.")
         """Handle completion of the default install process."""
         logging.debug("on_install_defaults_finished started.")
         self.model_action_indicator.stop()
-        self.model_action_indicator.setVisible(False)
+        # REMOVED: self.model_action_indicator.setVisible(False) # Keep visible for idle glow
 
         # Store references before clearing
         worker_to_delete = self.install_defaults_worker if hasattr(self, 'install_defaults_worker') else None
@@ -1129,6 +1068,13 @@ Requires restart if models were in use.")
                     # Assuming signals: progress, finished
                     worker_to_delete.progress.disconnect()
                     worker_to_delete.finished.disconnect()
+                    # Disconnect log signal (PENDING WORKER CHANGE)
+                    try: 
+                        worker_to_delete.log_message.disconnect(self._append_log_details)
+                    except TypeError:
+                        logging.debug("Log message signal likely already disconnected.")
+                    except AttributeError:
+                        logging.debug("Worker might not have log_message signal yet.")
                 thread_to_wait.started.disconnect()
                 thread_to_wait.finished.disconnect()
             except TypeError: # Signals might already be disconnected
@@ -1162,6 +1108,112 @@ Requires restart if models were in use.")
 
     # --- End Dynamic Action Handling ---
 
+    # --- Log Panel Handling ---
+
+    @pyqtSlot(str)
+    def _append_log_details(self, message: str):
+        """Appends a message to the log details."""
+        self.log_text += message + "\n"
+        
+        # If log dialog exists and is visible, update it
+        if self.log_dialog and self.log_dialog.isVisible():
+            self.log_dialog.text_edit.append(message)
+    
+    @pyqtSlot()
+    def _show_log_dialog(self):
+        """Shows a dialog with the log details."""
+        # Create dialog if it doesn't exist
+        if not self.log_dialog:
+            parent_dialog = self.window()
+            self.log_dialog = QDialog(parent_dialog)
+            self.log_dialog.setWindowTitle("Model Action Details")
+            self.log_dialog.setMinimumSize(600, 300)
+            
+            # Create layout
+            layout = QVBoxLayout(self.log_dialog)
+            
+            # Create text edit
+            self.log_dialog.text_edit = QTextEdit()
+            self.log_dialog.text_edit.setReadOnly(True)
+            self.log_dialog.text_edit.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)
+            self.log_dialog.text_edit.setStyleSheet("""
+                QTextEdit { 
+                    background-color: #f8f8f8; 
+                    border: 1px solid #e0e0e0; 
+                    border-radius: 3px; 
+                    font-family: Consolas, monaco, monospace; 
+                    font-size: 9pt; 
+                    color: #333;
+                }
+            """)
+            
+            # Set placeholder text
+            self.log_dialog.text_edit.setPlaceholderText("Model install/update details will be displayed here.")
+            
+            # Add current log text if any
+            if self.log_text:
+                self.log_dialog.text_edit.setText(self.log_text)
+            
+            # Add clear button
+            clear_button = QPushButton("Clear Log")
+            clear_button.clicked.connect(self._clear_log)
+            clear_button.setFixedWidth(100)
+            
+            # Add button layout
+            button_layout = QHBoxLayout()
+            button_layout.addStretch(1)
+            button_layout.addWidget(clear_button)
+            
+            # Add widgets to layout
+            layout.addWidget(self.log_dialog.text_edit)
+            layout.addLayout(button_layout)
+            
+            # Position dialog relative to main window
+            self._center_dialog_on_parent(self.log_dialog)
+        
+        # Show the dialog
+        self.log_dialog.show()
+        self.log_dialog.raise_()
+        self.log_dialog.activateWindow()
+    
+    def _clear_log(self):
+        """Clears the log text."""
+        self.log_text = ""
+        if self.log_dialog and self.log_dialog.isVisible():
+            self.log_dialog.text_edit.clear()
+    
+    def _center_dialog_on_parent(self, dialog):
+        """Centers a dialog on its parent."""
+        parent = dialog.parent()
+        if parent:
+            parent_geo = parent.geometry()
+            dialog_geo = dialog.geometry()
+            
+            # Calculate center position
+            x = parent_geo.x() + (parent_geo.width() - dialog_geo.width()) / 2
+            y = parent_geo.y() + (parent_geo.height() - dialog_geo.height()) / 2
+            
+            # --- Cast to int early --- 
+            x_int = int(x)
+            y_int = int(y)
+            # --- End Cast ---
+            
+            # Ensure dialog is within screen bounds
+            # Use integer coordinates for screenAt
+            screen = QApplication.screenAt(QPoint(x_int, y_int)) 
+            if not screen:
+                screen = QApplication.primaryScreen()
+            
+            if screen:
+                screen_geo = screen.availableGeometry()
+                # Adjust using integer coordinates
+                x_int = max(screen_geo.x(), min(x_int, screen_geo.x() + screen_geo.width() - dialog_geo.width()))
+                y_int = max(screen_geo.y(), min(y_int, screen_geo.y() + screen_geo.height() - dialog_geo.height()))
+            
+            dialog.move(x_int, y_int) # Use final integer coordinates
+
+    # --- End Log Panel Handling ---
+
     # --- Event Handling for Alt Key --- 
 
     def _update_dynamic_button_state(self, alt_pressed_hint: bool | None = None):
@@ -1181,11 +1233,10 @@ Requires restart if models were in use.")
                 default_benepar_name = BENEPAR_MODEL_MAP[DEFAULT_BENEPAR_ALIAS]
                 installed_spacy = self.model_status.get('spacy_models', [])
                 installed_benepar = self.model_status.get('benepar_models', [])
-                nltk_present = self.model_status.get('nltk_present', False)
+
                 all_defaults_present = (
                     default_spacy_name in installed_spacy and
-                    default_benepar_name in installed_benepar and
-                    nltk_present
+                    default_benepar_name in installed_benepar
                 )
             except Exception as e:
                 logging.error(f"Error determining default model presence for dynamic button: {e}")
@@ -1202,7 +1253,7 @@ Requires restart if models were in use.")
         # Update the install/clean button dynamically
         if alt_modifier_pressed or all_defaults_present:
             self.install_clean_button.setText("Clean All")
-            self.install_clean_button.setToolTip("Clean all installed ANPE models and resources (spaCy, Benepar, NLTK).")
+            self.install_clean_button.setToolTip("Clean all installed ANPE models and resources (spaCy, Benepar).")
             self.install_clean_button.setProperty("danger", True)
         else: # Models missing and Alt not pressed
             self.install_clean_button.setText("Install Defaults")
@@ -1210,7 +1261,6 @@ Requires restart if models were in use.")
             self.install_clean_button.setToolTip(f"Install required default models:\
 - spaCy: {default_spacy_name}\
 - Benepar: {default_benepar_name}\
-- NLTK: punkt, punkt_tab\
 (Hold Alt to Clean All instead)")
             self.install_clean_button.setProperty("danger", False)
             
@@ -1219,6 +1269,15 @@ Requires restart if models were in use.")
         self.install_clean_button.style().polish(self.install_clean_button)
 
     # --- End Event Handling ---
+
+    def is_worker_running(self) -> bool:
+        """Check if any model management worker thread is active."""
+        install_active = self.install_worker_thread and self.install_worker_thread.isRunning()
+        clean_active = self.clean_worker_thread and self.clean_worker_thread.isRunning()
+        defaults_active = hasattr(self, 'install_defaults_thread') and self.install_defaults_thread and self.install_defaults_thread.isRunning()
+        model_action_active = self.install_worker_thread and self.install_worker_thread.isRunning() # Reuse install worker for model actions
+        
+        return install_active or clean_active or defaults_active or model_action_active
 
 
 class CorePage(QWidget):
@@ -1231,7 +1290,23 @@ class CorePage(QWidget):
         self.worker = None
         self.current_version = "N/A"
         self.latest_version = "N/A"
-        
+        # Log attributes
+        self.log_dialog = None 
+        self.log_text = ""
+        # Environment info attributes
+        self.python_version = "N/A"
+        self.spacy_version = "N/A"
+        self.benepar_version = "N/A"
+        self.nltk_version = "N/A" # <<< Added NLTK version attribute
+        # UI element attributes
+        self.core_action_indicator = None
+        self.show_core_log_button = None
+        # Environment labels
+        self.python_version_label = None
+        self.spacy_version_label = None
+        self.benepar_version_label = None
+        self.nltk_version_label = None # <<< Added NLTK label attribute
+
         self.setup_ui()
         self.load_initial_data()
 
@@ -1241,10 +1316,29 @@ class CorePage(QWidget):
         layout.setSpacing(15)
 
         # Use QGroupBox for better visual separation
-        group_box = QGroupBox("ANPE Core Package Status")
-        group_layout = QVBoxLayout(group_box)
-        group_layout.setSpacing(10)
-        
+        status_group_box = QGroupBox("ANPE Core Package") # Renamed group box
+        status_group_layout = QVBoxLayout(status_group_box)
+        status_group_layout.setSpacing(10)
+
+        # --- Explanatory Text ---
+        explanation_style = "font-size: 9pt; color: #444; margin-bottom: 10px;"
+        explanation_label1 = QLabel(
+            "This GUI application is built upon the <b>ANPE core</b> Python library, "
+            "which handles the underlying noun phrase extraction logic."
+        )
+        explanation_label1.setWordWrap(True)
+        explanation_label1.setStyleSheet(explanation_style)
+        status_group_layout.addWidget(explanation_label1)
+
+        explanation_label2 = QLabel(
+            "Keeping the core library updated ensures you have the latest features, "
+            "performance improvements, and bug fixes."
+        )
+        explanation_label2.setWordWrap(True)
+        explanation_label2.setStyleSheet(explanation_style)
+        status_group_layout.addWidget(explanation_label2)
+
+        # --- Version Status Form ---
         form_layout = QFormLayout()
         form_layout.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
         form_layout.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
@@ -1256,46 +1350,157 @@ class CorePage(QWidget):
         self.check_update_button = QPushButton("Check for Updates")
         self.status_label = QLabel("Ready to check for updates.")
         self.status_label.setWordWrap(True)
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setVisible(False)
-        self.progress_bar.setRange(0, 100) # For determinate, 0,0 for indeterminate
+
+        # --- Activity Indicator --- 
+        self.core_action_indicator = PulsingActivityIndicator()
+        self.core_action_indicator.setFixedSize(20, 20)
+        self.core_action_indicator.setVisible(False)
+        self.core_action_indicator.set_color(PRIMARY_COLOR)
+        # --------------------------
+
+        # --- Details Button (Show Log Dialog) --- 
+        self.show_core_log_button = QToolButton()
+        self.show_core_log_button.setIcon(ResourceManager.get_icon("external-link.svg"))
+        self.show_core_log_button.setIconSize(QSize(12, 12))
+        self.show_core_log_button.setFixedSize(22, 22)
+        self.show_core_log_button.setToolTip("Show Core Action Details Log")
+        self.show_core_log_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.show_core_log_button.setStyleSheet("""
+            QToolButton { background-color: #e0e0e0; border: none; border-radius: 11px; padding: 0px; }
+            QToolButton:hover { background-color: #cccccc; }
+            QToolButton:pressed { background-color: #bbbbbb; }
+        """)
+        # -----------------------------------------
 
         form_layout.addRow("Current Installed Version:", self.current_version_label)
         form_layout.addRow("Latest Available Version:", self.latest_version_label)
         
+        # --- Status, Indicator, and Log Button Layout --- 
+        status_feedback_layout = QHBoxLayout()
+        status_feedback_layout.setSpacing(8)
+        status_feedback_layout.setContentsMargins(0, 5, 0, 5)
+        status_feedback_layout.addWidget(self.show_core_log_button) # Add log button
+        status_feedback_layout.addWidget(self.core_action_indicator) # Add indicator
+        status_feedback_layout.addWidget(self.status_label, 1) # Status label takes stretch
+        # ------------------------------------------------
+
+        # --- Button Layout --- 
         button_layout = QHBoxLayout()
         button_layout.addWidget(self.check_update_button)
+        # --- Add PyPI Button ---
+        self.pypi_button = QPushButton("View on PyPI")
+        self.pypi_button.setToolTip("Open the ANPE project page on the Python Package Index (PyPI)")
+        button_layout.addWidget(self.pypi_button)
+        # ----------------------
         button_layout.addStretch()
-        
-        group_layout.addLayout(form_layout)
-        group_layout.addWidget(self.status_label)
-        group_layout.addWidget(self.progress_bar)
-        group_layout.addLayout(button_layout)
-        group_layout.addStretch(1) # Push content to top
-        
-        layout.addWidget(group_box)
-        layout.addStretch(1) # Push group box to top
-        
-        # Connect button signal
+        # --------------------
+
+        status_group_layout.addLayout(form_layout)
+        status_group_layout.addLayout(status_feedback_layout) # Add the combined feedback layout
+        status_group_layout.addLayout(button_layout)
+        # REMOVED: status_group_layout.addStretch(1) # Stretch removed from here
+
+        layout.addWidget(status_group_box)
+
+        # --- Environment Details Group Box ---
+        env_group_box = QGroupBox("Environment Details")
+        env_layout = QVBoxLayout(env_group_box)
+        env_layout.setSpacing(8)
+
+        env_form_layout = QFormLayout()
+        env_form_layout.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+        env_form_layout.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
+        env_form_layout.setHorizontalSpacing(20)
+        env_form_layout.setVerticalSpacing(8) # Slightly tighter spacing
+
+        self.python_version_label = QLabel("Checking...")
+        self.spacy_version_label = QLabel("Checking...")
+        self.benepar_version_label = QLabel("Checking...")
+        self.nltk_version_label = QLabel("Checking...") # <<< Create NLTK label
+
+        env_form_layout.addRow("Python Version:", self.python_version_label)
+        env_form_layout.addRow("spaCy Version:", self.spacy_version_label)
+        env_form_layout.addRow("Benepar Version:", self.benepar_version_label)
+        env_form_layout.addRow("NLTK Version:", self.nltk_version_label) # <<< Add NLTK row
+
+        env_layout.addLayout(env_form_layout)
+        layout.addWidget(env_group_box)
+        # -----------------------------------
+
+        layout.addStretch(1) # Add stretch to main layout to push groups up
+
+        # Connect button signals
         self.check_update_button.clicked.connect(self.handle_core_action)
-        
+        self.show_core_log_button.clicked.connect(self._show_core_log_dialog)
+        self.pypi_button.clicked.connect(self._open_pypi_page) # Connect PyPI button
+
     def load_initial_data(self):
         """Get the current installed version (assuming core is installed)."""
+        # --- Fetch Core Version ---
         try:
-            # Assume core is installed, directly get version
             self.current_version = importlib.metadata.version(CORE_PACKAGE_NAME)
             self.current_version_label.setText(self.current_version)
             self.status_label.setText("Ready to check for updates.")
+        except importlib.metadata.PackageNotFoundError:
+            # Handle case where core package itself might be missing (unlikely if GUI runs)
+            self.current_version = "N/A (Not Found)"
+            self.current_version_label.setText(f"<i style='color: {ERROR_COLOR};'>{self.current_version}</i>")
+            self.status_label.setText("ANPE core package not found.")
+            logging.error(f"Core package '{CORE_PACKAGE_NAME}' not found.")
+            self.check_update_button.setEnabled(False) # Disable check/update if core missing
+            self.check_update_button.setText("Core Missing")
+            return # Skip further checks if core is missing
         except Exception as e:
-            # Error getting version even though core is expected
             self.current_version = "N/A (Error)"
             self.current_version_label.setText(f"<i style='color: {ERROR_COLOR};'>{self.current_version}</i>")
             self.status_label.setText(f"Error reading core version: {e}")
             logging.error(f"Error getting current core version: {e}", exc_info=True)
-        finally:
-            # Button should always be enabled unless worker running
-            self.check_update_button.setEnabled(True)
-            self.check_update_button.setText("Check for Updates") # Ensure initial text
+            # Button state handled below
+
+        # Button should always be enabled unless worker running (initial state)
+        self.check_update_button.setEnabled(True)
+        self.check_update_button.setText("Check for Updates") # Ensure initial text
+
+        # --- Fetch Environment Details ---
+        # Python Version
+        self.python_version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+        self.python_version_label.setText(self.python_version)
+
+        # spaCy Version
+        try:
+            self.spacy_version = importlib.metadata.version("spacy")
+            self.spacy_version_label.setText(self.spacy_version)
+        except importlib.metadata.PackageNotFoundError:
+            self.spacy_version = "N/A (Not Found)"
+            self.spacy_version_label.setText(f"<i style='color: orange;'>{self.spacy_version}</i>")
+        except Exception as e:
+            self.spacy_version = "N/A (Error)"
+            self.spacy_version_label.setText(f"<i style='color: {ERROR_COLOR};'>{self.spacy_version}</i>")
+            logging.error(f"Error getting spacy version: {e}", exc_info=True)
+
+        # Benepar Version
+        try:
+            self.benepar_version = importlib.metadata.version("benepar")
+            self.benepar_version_label.setText(self.benepar_version)
+        except importlib.metadata.PackageNotFoundError:
+            self.benepar_version = "N/A (Not Found)"
+            self.benepar_version_label.setText(f"<i style='color: orange;'>{self.benepar_version}</i>")
+        except Exception as e:
+            self.benepar_version = "N/A (Error)"
+            self.benepar_version_label.setText(f"<i style='color: {ERROR_COLOR};'>{self.benepar_version}</i>")
+            logging.error(f"Error getting benepar version: {e}", exc_info=True)
+
+        # NLTK Version
+        try:
+            self.nltk_version = importlib.metadata.version("nltk")
+            self.nltk_version_label.setText(self.nltk_version)
+        except importlib.metadata.PackageNotFoundError:
+            self.nltk_version = "N/A (Not Found)"
+            self.nltk_version_label.setText(f"<i style='color: orange;'>{self.nltk_version}</i>")
+        except Exception as e:
+            self.nltk_version = "N/A (Error)"
+            self.nltk_version_label.setText(f"<i style='color: {ERROR_COLOR};'>{self.nltk_version}</i>")
+            logging.error(f"Error getting nltk version: {e}", exc_info=True)
 
     @pyqtSlot()
     def handle_core_action(self):
@@ -1320,13 +1525,15 @@ class CorePage(QWidget):
         
         if button_text == "Check for Updates":
             self.status_label.setText("Checking PyPI for latest version...")
-            self.progress_bar.setRange(0, 0) # Indeterminate
-            self.progress_bar.setVisible(True)
+            self.core_action_indicator.setVisible(True)
+            self.core_action_indicator.start()
             self.check_update_button.setEnabled(False)
             self.latest_version_label.setText("Checking...")
             
             # Connect check signals
             self.worker.check_finished.connect(self.on_check_finished)
+            # Connect log signal for check (if worker emits any)
+            self.worker.log_message.connect(self._append_core_log_details) 
             self.worker_thread.started.connect(self.worker.run_check)
             # Cleanup connections
             self.worker.check_finished.connect(self.worker_thread.quit)
@@ -1335,7 +1542,7 @@ class CorePage(QWidget):
             
             self.worker_thread.start()
             
-        elif button_text == "Update ANPE Core":
+        elif "Update ANPE Core" in button_text: # Make check more robust
             reply = QMessageBox.question(
                 self.window(), 
                 "Confirm Update",
@@ -1351,14 +1558,14 @@ class CorePage(QWidget):
                  return
                  
             self.status_label.setText("Starting update process...")
-            self.progress_bar.setRange(0, 100) # Determinate for update (or -1 in worker)
-            self.progress_bar.setValue(0)
-            self.progress_bar.setVisible(True)
+            self.core_action_indicator.setVisible(True)
+            self.core_action_indicator.start()
             self.check_update_button.setEnabled(False)
             
             # Connect update signals
             self.worker.update_progress.connect(self.on_update_progress)
             self.worker.update_finished.connect(self.on_update_finished)
+            self.worker.log_message.connect(self._append_core_log_details) # Connect log signal
             self.worker_thread.started.connect(self.worker.run_update)
             # Cleanup connections
             self.worker.update_finished.connect(self.worker_thread.quit)
@@ -1370,7 +1577,8 @@ class CorePage(QWidget):
     @pyqtSlot(str, str, str)
     def on_check_finished(self, latest_version, current_version, error_string):
         """Handle the result of the PyPI version check."""
-        self.progress_bar.setVisible(False)
+        self.core_action_indicator.stop()
+        # REMOVED: self.core_action_indicator.setVisible(False) # Keep visible for idle glow
         self.worker_thread = None # Allow new actions
         self.worker = None
         
@@ -1388,6 +1596,7 @@ class CorePage(QWidget):
             # Determine if an action is needed (update only, assume installed)
             can_install_or_update = latest_version != "N/A"
             needs_update = False
+            
             if self.current_version != "N/A (Error)" and latest_version != "N/A":
                  # Basic version comparison (consider using 'packaging' library for robustness if needed)
                  try:
@@ -1403,26 +1612,22 @@ class CorePage(QWidget):
             if needs_update:
                 self.status_label.setText(f"Update available (Version {latest_version}).")
                 self.check_update_button.setText(f"Update ANPE Core ({latest_version})")
-                self.check_update_button.setEnabled(True)
+                self.check_update_button.setEnabled(True) # Original logic: enable if update needed
             else: # Up-to-date or latest is N/A
                 self.status_label.setText("ANPE core package is up to date.")
                 self.check_update_button.setText("Up to Date")
                 self.check_update_button.setEnabled(False) # Disable if up to date
-                
+
     @pyqtSlot(int, str)
     def on_update_progress(self, value, message):
-        """Update progress bar and status label during update."""
-        if value == -1: # Indeterminate
-             self.progress_bar.setRange(0, 0)
-        else:
-             self.progress_bar.setRange(0, 100)
-             self.progress_bar.setValue(value)
-        self.status_label.setText(message)
+        """Update status label during update. Value is ignored for indicator."""
+        self.status_label.setText(message) # Just update the status label
 
     @pyqtSlot(bool, str)
     def on_update_finished(self, success, message):
         """Handle completion of the update process."""
-        self.progress_bar.setVisible(False)
+        self.core_action_indicator.stop()
+        # REMOVED: self.core_action_indicator.setVisible(False) # Keep visible for idle glow
         self.worker_thread = None # Allow new actions
         self.worker = None
         
@@ -1436,12 +1641,133 @@ class CorePage(QWidget):
              self.check_update_button.setText("Check for Updates")
              self.check_update_button.setEnabled(True)
         else:
+             # Error message already appended to log in worker
              QMessageBox.warning(self.window(), "Update Failed", message)
-             self.status_label.setText("Update failed. Check logs for details.")
-             # Keep button as Update? Or revert to Check?
-             # Let's revert to Check for simplicity, user can try again
-             self.check_update_button.setText("Check for Updates")
+             self.status_label.setText(f"<span style='color: {ERROR_COLOR};'>Update failed. See details or logs.</span>")
+             # Reset button state to allow re-check/re-try
+             self.check_update_button.setText("Check for Updates") 
              self.check_update_button.setEnabled(True)
+
+    # --- Log Dialog Methods (Adapted from ModelsPage) --- 
+
+    @pyqtSlot(str)
+    def _append_core_log_details(self, message: str):
+        """Appends a message to the core action log details."""
+        self.log_text += message + "\n"
+        
+        # If log dialog exists and is visible, update it
+        if self.log_dialog and self.log_dialog.isVisible():
+            self.log_dialog.text_edit.append(message)
+    
+    @pyqtSlot()
+    def _show_core_log_dialog(self):
+        """Shows a dialog with the core action log details."""
+        logging.debug("CorePage: _show_core_log_dialog called.") # Add logging
+        # Create dialog if it doesn't exist
+        if not self.log_dialog:
+            parent_dialog = self.window()
+            self.log_dialog = QDialog(parent_dialog)
+            self.log_dialog.setWindowTitle("Core Action Details") # Updated Title
+            self.log_dialog.setMinimumSize(600, 300)
+            
+            # Create layout
+            layout = QVBoxLayout(self.log_dialog)
+            
+            # Create text edit
+            self.log_dialog.text_edit = QTextEdit()
+            self.log_dialog.text_edit.setReadOnly(True)
+            self.log_dialog.text_edit.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)
+            self.log_dialog.text_edit.setStyleSheet("""
+                QTextEdit { 
+                    background-color: #f8f8f8; 
+                    border: 1px solid #e0e0e0; 
+                    border-radius: 3px; 
+                    font-family: Consolas, monaco, monospace; 
+                    font-size: 9pt; 
+                    color: #333;
+                }
+            """)
+            
+            # Set placeholder text
+            self.log_dialog.text_edit.setPlaceholderText("Core action log details will be displayed here.")
+            
+            # Add current log text if any
+            if self.log_text:
+                self.log_dialog.text_edit.setText(self.log_text)
+            
+            # Add clear button
+            clear_button = QPushButton("Clear Log")
+            clear_button.clicked.connect(self._clear_log)
+            clear_button.setFixedWidth(100)
+            
+            # Add button layout
+            button_layout = QHBoxLayout()
+            button_layout.addStretch(1)
+            button_layout.addWidget(clear_button)
+            
+            # Add widgets to layout
+            layout.addWidget(self.log_dialog.text_edit)
+            layout.addLayout(button_layout)
+            
+            # Position dialog relative to main window
+            self._center_dialog_on_parent(self.log_dialog)
+        
+        # Show the dialog
+        self.log_dialog.show()
+        self.log_dialog.raise_()
+        self.log_dialog.activateWindow()
+    
+    def _clear_log(self):
+        """Clears the log text."""
+        self.log_text = ""
+        if self.log_dialog and self.log_dialog.isVisible():
+            self.log_dialog.text_edit.clear()
+    
+    def _center_dialog_on_parent(self, dialog):
+        """Centers a dialog on its parent."""
+        parent = dialog.parent()
+        if parent:
+            parent_geo = parent.geometry()
+            dialog_geo = dialog.geometry()
+            
+            # Calculate center position
+            x = parent_geo.x() + (parent_geo.width() - dialog_geo.width()) / 2
+            y = parent_geo.y() + (parent_geo.height() - dialog_geo.height()) / 2
+            
+            # --- Cast to int early --- 
+            x_int = int(x)
+            y_int = int(y)
+            # --- End Cast ---
+            
+            # Ensure dialog is within screen bounds
+            # Use integer coordinates for screenAt
+            screen = QApplication.screenAt(QPoint(x_int, y_int)) 
+            if not screen:
+                screen = QApplication.primaryScreen()
+            
+            if screen:
+                screen_geo = screen.availableGeometry()
+                # Adjust using integer coordinates
+                x_int = max(screen_geo.x(), min(x_int, screen_geo.x() + screen_geo.width() - dialog_geo.width()))
+                y_int = max(screen_geo.y(), min(y_int, screen_geo.y() + screen_geo.height() - dialog_geo.height()))
+            
+            dialog.move(x_int, y_int) # Use final integer coordinates
+
+    # --- End Log Panel Handling ---
+
+    def is_worker_running(self) -> bool:
+        """Check if the core update worker thread is active."""
+        return self.worker_thread and self.worker_thread.isRunning()
+
+    # --- PyPI Link Method ---
+    def _open_pypi_page(self):
+        """Opens the ANPE PyPI project page in the default web browser."""
+        url = QUrl("https://pypi.org/project/anpe/")
+        if not QDesktopServices.openUrl(url):
+            logging.error(f"Could not open PyPI URL: {url.toString()}")
+            QMessageBox.warning(self, "Error", f"Could not open the PyPI project page in your browser:\n{url.toString()}")
+    # -----------------------
+
 
 class AboutPage(QWidget):
     """Displays About information: versions, author, links, acknowledgements."""
@@ -1659,9 +1985,10 @@ class SettingsDialog(QDialog):
         logging.debug(f"SettingsDialog.__init__: Received model_status = {model_status}") # LOGGING
         self.model_status = model_status # Store the passed status
         self.setWindowTitle("ANPE Settings")
-        # Increased default/minimum height
-        self.setMinimumSize(700, 600) # Increased height
-        self.resize(800, 700)        # Increased height
+        # Set minimum size, but let initial size be determined by layout
+        self.setMinimumSize(700, 600) 
+        # self.resize(800, 700) # REMOVED - Let layout determine initial size
+        # self.initial_size = None # REMOVED
 
         # Store references to page widgets
         self.models_page = None
@@ -1842,3 +2169,41 @@ class SettingsDialog(QDialog):
 
         # Call the base class implementation for standard event processing
         return super().eventFilter(source, event)
+
+    def closeEvent(self, event):
+        """Prevent closing the dialog if a background task is running."""
+        model_worker_active = False
+        core_worker_active = False
+
+        # Check ModelsPage worker status
+        if self.models_page:
+            try:
+                model_worker_active = self.models_page.is_worker_running()
+            except Exception as e:
+                logging.error(f"Error checking ModelsPage worker status: {e}")
+                # Assume active on error to be safe? Or ignore?
+                # Let's log and assume inactive to avoid blocking closure indefinitely on error.
+                model_worker_active = False 
+
+        # Check CorePage worker status
+        if self.core_page:
+            try:
+                core_worker_active = self.core_page.is_worker_running()
+            except Exception as e:
+                logging.error(f"Error checking CorePage worker status: {e}")
+                core_worker_active = False
+
+        if model_worker_active or core_worker_active:
+            logging.warning("Attempted to close SettingsDialog while worker thread is running.")
+            QMessageBox.warning(
+                self,
+                "Operation in Progress",
+                "A background operation (model install/update/clean) is currently running.\n"
+                "Please wait for it to complete before closing this window.",
+                QMessageBox.StandardButton.Ok
+            )
+            event.ignore()  # Prevent the window from closing
+        else:
+            logging.debug("SettingsDialog close event accepted.")
+            # Optional: Add any other cleanup needed before closing?
+            event.accept()  # Allow the window to close
