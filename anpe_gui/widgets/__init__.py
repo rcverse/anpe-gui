@@ -2,10 +2,6 @@
 Widget components for the ANPE GUI application.
 """
 
-# REMOVED Imports for moved workers and log handler
-# from anpe_gui.widgets.extraction_worker import ExtractionWorker
-# from anpe_gui.widgets.batch_worker import BatchWorker
-# from anpe_gui.widgets.log_handler import QtLogHandler
 
 # Keep widget imports
 # from anpe_gui.widgets.step_indicator import StepIndicator

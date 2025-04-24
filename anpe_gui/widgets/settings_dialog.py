@@ -12,7 +12,7 @@ import json # For parsing PyPI response
 import sys # <<< Added for Python version
 from typing import Optional
 
-from PyQt6.QtCore import Qt, QThread, QObject, pyqtSignal, pyqtSlot, QSize, QSettings, QTimer, QEvent, QPoint, QUrl # Added QPoint, QUrl
+from PyQt6.QtCore import Qt, QThread, QObject, pyqtSignal, pyqtSlot, QSize, QSettings, QTimer, QEvent, QPoint, QUrl, QSize # Added QSize
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QGroupBox,
     QGridLayout, QProgressBar, QMessageBox, QWidget, QSpacerItem, QSizePolicy,
@@ -577,18 +577,21 @@ class ModelsPage(QWidget):
         self.install_clean_button.style().unpolish(self.install_clean_button)
         self.install_clean_button.style().polish(self.install_clean_button)
 
-        # Update the general status label
+        # Update the general status label and indicator
         if check_error: # Use the error from the status check
-            self.model_action_status_label.setText(f"Error checking status: {check_error}")
+            self.model_action_status_label.setText(f"Error: {check_error}")
             self.model_action_indicator.warn() # Show warning state if check failed
         elif not is_any_worker_running: # Only set "updated" if no worker is active
-             self.model_action_status_label.setText("Model status updated.")
-             # If no worker is running and there was no error during the check,
-             # set the indicator to idle. Worker completion slots handle success/failure states.
-             self.model_action_indicator.idle() # Explicitly set idle if no error and no worker running
-        # If a worker IS running, the status label text and indicator state
-        # should reflect the ongoing operation (handled by worker start signals).
-        # The final state is set in the respective on_..._finished slots.
+            # Check if models are missing even if check was successful
+            if not installed_spacy_models or not installed_benepar_models:
+                self.model_action_status_label.setText("Models missing. Please install the required models.") # Optional message change
+                self.model_action_indicator.warn() # <<< SET WARNING STATE IF MODELS MISSING
+            else:
+                # Successful check, all models present, no worker running
+                self.model_action_status_label.setText("Model status updated.")
+                self.model_action_indicator.idle() # Set idle only if everything is OK
+        # If a worker IS running, the status label/indicator state is handled by worker signals
+        # ---------------------------------------------------------------------
 
         # --- Load persistent usage settings AFTER combo boxes are populated ---
         self.load_usage_settings()
@@ -671,13 +674,15 @@ class ModelsPage(QWidget):
         logging.debug(f"ModelsPage: is_worker_running() after UI update and clearing refs: {any_worker_running_after}")
 
         # --- Set final indicator/status text ---
-        # This should happen regardless of button state
-        if not status_data.get('error'):
-             self.model_action_status_label.setText("Model status updated.")
-             self.model_action_indicator.idle()
+        # The final state is now fully determined by _update_ui_from_status
+        if status_data.get('error'):
+            # Error occurred during the check itself, _update_ui_from_status handled this
+            pass 
         else:
-            # Error was already logged in _update_ui_from_status, indicator set to warn there
-             pass # Status label and indicator are already set by _update_ui_from_status
+            # Status check succeeded, _update_ui_from_status handled whether
+            # models are present/missing and set the indicator accordingly (idle/warn).
+            # No need to set indicator to idle() here anymore.
+            pass
 
         # --- Re-enable buttons reliably ---
         # Now that the status check worker/thread references are cleared,
@@ -1992,12 +1997,12 @@ class AboutPage(QWidget):
         # --- Header Section ---
         header_widget = QWidget()
         header_layout = QHBoxLayout(header_widget)
-        header_layout.setSpacing(20)
+        header_layout.setSpacing(15) # Reduced spacing
         header_layout.setContentsMargins(0, 0, 0, 10)
 
         # Icon (left)
         icon_label = QLabel()
-        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        icon_label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
         # Need ResourceManager - assume it's importable or handle import error
         try:
              from anpe_gui.resource_manager import ResourceManager
@@ -2015,20 +2020,26 @@ class AboutPage(QWidget):
         # Title/Subtitle (right)
         title_container = QWidget()
         title_layout = QVBoxLayout(title_container)
-        title_layout.setContentsMargins(0, 0, 0, 0)
-        title_layout.setSpacing(5)
-        title_layout.addStretch(1)
+        title_layout.setContentsMargins(0, 0, 0, 0) # Reset margins
+        title_layout.setSpacing(2) # Reduced spacing between title and subtitle
+        # REMOVED: title_layout.addStretch(1) # Let alignment handle vertical position
 
         title_label = QLabel("ANPE")
         title_label.setStyleSheet(f"font-size: 24px; font-weight: bold; color: {PRIMARY_COLOR};")
+        # title_label.setAlignment(Qt.AlignmentFlag.AlignBottom) # Let default alignment handle
         title_layout.addWidget(title_label)
 
         subtitle_label = QLabel("Another Noun Phrase Extractor")
         subtitle_label.setStyleSheet("font-size: 16px; color: #666666;")
+        # subtitle_label.setAlignment(Qt.AlignmentFlag.AlignTop) # Let default alignment handle
         title_layout.addWidget(subtitle_label)
-        title_layout.addStretch(1)
+        # REMOVED: title_layout.addStretch(1)
 
-        header_layout.addWidget(title_container, 1)
+        # Add the title container to the header layout
+        header_layout.addWidget(title_container, 1) # Give it stretch factor 1
+        # Align the whole title container vertically slightly above center? Or keep center?
+        header_layout.setAlignment(title_container, Qt.AlignmentFlag.AlignVCenter) # Keep VCenter for now
+
         main_layout.addWidget(header_widget)
 
         # --- Info Grid ---
@@ -2127,6 +2138,20 @@ class AboutPage(QWidget):
         button_layout.setSpacing(10)
 
         project_page_button = QPushButton("Visit Project Page")
+        # Add GitHub icon to the button
+        try:
+             # Apply stylesheet for spacing BEFORE setting icon
+             project_page_button.setStyleSheet("padding-left: 5px; text-align: left;") # Add left padding to text
+
+             github_icon = ResourceManager.get_icon("github-mark.svg")
+             if not github_icon.isNull():
+                  project_page_button.setIcon(github_icon)
+                  project_page_button.setIconSize(QSize(16, 16)) # Adjust size as needed
+             else:
+                  logging.warning("Could not load github-mark.svg for About page.")
+        except Exception as e:
+             logging.error(f"Error loading GitHub icon for About page: {e}")
+
         project_page_button.clicked.connect(self._visit_project_page)
         button_layout.addWidget(project_page_button)
         

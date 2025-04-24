@@ -3,11 +3,18 @@ Enhanced log panel widget with filtering, clear, and copy capabilities.
 """
 
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTextEdit,
-                             QComboBox, QPushButton, QLabel, QApplication)
-from PyQt6.QtCore import Qt, pyqtSlot
-from PyQt6.QtGui import QTextCursor, QColor, QTextCharFormat, QBrush, QFont
+                             QComboBox, QPushButton, QLabel, QApplication,
+                             QMessageBox, QFileDialog, QFrame)
+from PyQt6.QtCore import Qt, pyqtSlot, QUrl, QSize
+from PyQt6.QtGui import QTextCursor, QColor, QTextCharFormat, QBrush, QFont, QDesktopServices
 import logging # Import logging for level constants
+import platform # For system info
+import sys      # For Python version
+import importlib.metadata # For package versions
+from datetime import datetime # For timestamp
+import os       # For path operations
 from anpe_gui.theme import get_scroll_bar_style
+from anpe_gui.resource_manager import ResourceManager # Keep for now, might be used elsewhere
 
 class EnhancedLogPanel(QWidget):
     """Enhanced log panel with filtering and copy functionality."""
@@ -50,17 +57,17 @@ class EnhancedLogPanel(QWidget):
         self.clear_button.clicked.connect(self.clear_log)
         self.clear_button.setProperty("secondary", True)
         
-        self.copy_button = QPushButton("Copy")
-        self.copy_button.setToolTip("Copy log content to clipboard")
-        self.copy_button.clicked.connect(self.copy_to_clipboard)
-        self.copy_button.setProperty("secondary", True)
+        self.export_button = QPushButton("Export")
+        self.export_button.setToolTip("Export logs and system info to a file for reporting.")
+        self.export_button.clicked.connect(self.prompt_export)
+        self.export_button.setProperty("secondary", True)
         
         self.header_layout.addWidget(self.title_label)
         self.header_layout.addStretch()
         self.header_layout.addWidget(self.filter_label)
         self.header_layout.addWidget(self.filter_combo)
         self.header_layout.addWidget(self.clear_button)
-        self.header_layout.addWidget(self.copy_button)
+        self.header_layout.addWidget(self.export_button)
         
         self.layout.addLayout(self.header_layout)
         
@@ -140,6 +147,160 @@ class EnhancedLogPanel(QWidget):
         self._log_entries.clear()
         self.log_text.clear()
 
-    def copy_to_clipboard(self):
-        """Copy the entire log content to the system clipboard."""
-        QApplication.clipboard().setText(self.log_text.toPlainText()) 
+    def prompt_export(self):
+        """Show a confirmation dialog before exporting logs and system info."""
+        confirm_msg = QMessageBox(self.window())
+        confirm_msg.setIcon(QMessageBox.Icon.Information)
+        confirm_msg.setWindowTitle("Confirm Log Export")
+        confirm_msg.setText(
+            "This will gather log entries and system information "
+            "(OS, Python, ANPE versions, etc.) into a single file."
+        )
+        confirm_msg.setInformativeText(
+            "This file can be helpful for diagnosing issues or reporting bugs.\n\n"
+            "Do you want to proceed?"
+        )
+        confirm_msg.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel)
+        confirm_msg.setDefaultButton(QMessageBox.StandardButton.Yes)
+        
+        ret = confirm_msg.exec()
+        
+        if ret == QMessageBox.StandardButton.Yes:
+            self.export_log_file()
+        else:
+            logging.debug("Log export cancelled by user.")
+
+    def export_log_file(self):
+        """Gather info, ask for save location, and write the log file."""
+        try:
+            system_info = self._gather_system_info()
+            
+            # Prepare log content
+            log_content_parts = [
+                "========================================",
+                "        ANPE GUI Log Export",
+                "========================================",
+                f"Exported: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+                "\n--- System Information ---",
+                system_info,
+                "\n--- Log Entries ---"
+            ]
+            
+            # Append all log entries, regardless of current filter
+            for entry in self._log_entries:
+                level_name = logging.getLevelName(entry["level"])
+                log_content_parts.append(f"[{level_name}] {entry['message']}")
+            
+            full_log_content = "\n".join(log_content_parts)
+            
+            # Suggest filename
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            suggested_filename = f"anpe_gui_log_{timestamp}.log"
+            
+            # Ask for save location
+            save_path, _ = QFileDialog.getSaveFileName(
+                self,
+                "Save Log File As...",
+                suggested_filename,
+                "Log Files (*.log);;Text Files (*.txt);;All Files (*)"
+            )
+            
+            if save_path:
+                try:
+                    with open(save_path, 'w', encoding='utf-8') as f:
+                        f.write(full_log_content)
+                    logging.info(f"Log file exported successfully to: {save_path}")
+                    self._show_export_success_dialog(save_path)
+                except Exception as e:
+                    logging.error(f"Error writing log file to {save_path}: {e}", exc_info=True)
+                    QMessageBox.critical(
+                        self, 
+                        "Export Error", 
+                        f"Failed to write log file.\nError: {e}"
+                    )
+            else:
+                logging.info("Log export save operation cancelled.")
+                
+        except Exception as e:
+            logging.error(f"Error during log export preparation: {e}", exc_info=True)
+            QMessageBox.critical(
+                self, 
+                "Export Error", 
+                f"An unexpected error occurred during export preparation.\nError: {e}"
+            )
+
+    def _gather_system_info(self) -> str:
+        """Collects system, Python, and package information."""
+        info_parts = []
+        try:
+            # OS Info
+            info_parts.append(f"OS: {platform.system()} {platform.release()} ({platform.version()})")
+            info_parts.append(f"Architecture: {platform.machine()} ({platform.architecture()[0]})")
+            
+            # Python Info
+            info_parts.append(f"Python Version: {sys.version}")
+            info_parts.append(f"Python Executable: {sys.executable}")
+            
+            # ANPE GUI Version
+            try:
+                from anpe_gui.version import __version__ as gui_version
+                info_parts.append(f"ANPE GUI Version: {gui_version}")
+            except ImportError:
+                info_parts.append("ANPE GUI Version: N/A (Could not import)")
+                
+            # ANPE Core Version
+            try:
+                core_version = importlib.metadata.version("anpe")
+                info_parts.append(f"ANPE Core Version: {core_version}")
+            except importlib.metadata.PackageNotFoundError:
+                info_parts.append("ANPE Core Version: N/A (Not installed or found)")
+            except Exception as e:
+                info_parts.append(f"ANPE Core Version: Error ({e})")
+
+            # Other Relevant Packages
+            for pkg in ["spacy", "benepar", "nltk", "PyQt6"]:
+                try:
+                    version = importlib.metadata.version(pkg)
+                    info_parts.append(f"{pkg} Version: {version}")
+                except importlib.metadata.PackageNotFoundError:
+                    info_parts.append(f"{pkg} Version: N/A (Not installed or found)")
+                except Exception as e:
+                     info_parts.append(f"{pkg} Version: Error ({e})")
+
+            return "\n".join(info_parts)
+        except Exception as e:
+            logging.error(f"Failed to gather all system info: {e}", exc_info=True)
+            info_parts.append(f"\nError gathering info: {e}")
+            return "\n".join(info_parts)
+
+    def _show_export_success_dialog(self, file_path: str):
+        """Displays a standard dialog after successful log export."""
+        msg_box = QMessageBox(self.window())
+        msg_box.setIcon(QMessageBox.Icon.Information)
+        msg_box.setWindowTitle("Export Successful")
+        # Use plain text format for the path for consistency
+        msg_box.setText(f"Log file saved successfully to:\n{file_path}")
+        
+        # Add custom "View Folder" button and standard "OK" button
+        btn_view_folder = msg_box.addButton("View Folder", QMessageBox.ButtonRole.ActionRole)
+        btn_ok = msg_box.addButton(QMessageBox.StandardButton.Ok)
+        
+        msg_box.setDefaultButton(btn_ok)
+        msg_box.exec()
+        
+        # Check if "View Folder" was clicked
+        if msg_box.clickedButton() == btn_view_folder:
+            self._open_containing_folder(file_path)
+
+    def _open_containing_folder(self, file_path: str):
+        """Opens the folder containing the specified file path."""
+        folder_path = os.path.dirname(file_path)
+        url = QUrl.fromLocalFile(folder_path)
+        if not QDesktopServices.openUrl(url):
+             logging.warning(f"Could not open folder: {folder_path}")
+             QMessageBox.warning(self, "Error", f"Could not open the folder:\n{folder_path}")
+
+    # --- Removed unused methods ---
+    # def _open_github_issues(self):
+    # def _open_email_client(self, attachment_path: str | None = None):
+    # --- End Export Functionality --- 

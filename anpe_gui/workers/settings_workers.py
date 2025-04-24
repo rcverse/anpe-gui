@@ -362,7 +362,7 @@ class ModelActionWorker(QObject):
                     # --- INSTALL ACTION --- 
                     if self.action == 'install':
                         # Use functions from anpe.utils.setup_models
-                        self.progress.emit(f"Calling {self.model_type} install function for {model_name}...")
+                        self.progress.emit(f"Installing {self.model_type} model: {model_name}...")
                          
                         if self.model_type == 'spacy':
                             # Assuming install_spacy_model accepts log_callback
@@ -378,7 +378,7 @@ class ModelActionWorker(QObject):
                     # --- UNINSTALL ACTION --- 
                     elif self.action == 'uninstall':
                         # Use functions from anpe.utils.clean_models 
-                        self.progress.emit(f"Calling {self.model_type} uninstall function for {model_name}...")
+                        self.progress.emit(f"Uninstalling {self.model_type} model: {model_name}...")
                         
                         if self.model_type == 'spacy':
                             # Assuming uninstall_spacy_model accepts log_callback
