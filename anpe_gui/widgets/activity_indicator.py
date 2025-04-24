@@ -269,7 +269,7 @@ class PulsingActivityIndicator(QWidget):
         # Ripple parameters (only when a ripple exists)
         if self.ripples:
             progress = self.ripples[0]
-            ripple_max_radius = min_widget_dim * 0.70
+            ripple_max_radius = min_widget_dim * 0.55
             ripple_min_radius = ripple_max_radius * 0.10
             t = progress
             eased_progress = 1.0 - pow(1.0 - t, 3)

@@ -1472,7 +1472,8 @@ class MainWindow(QMainWindow):
         # Disable buttons during check
         if hasattr(self, 'process_button'): self.process_button.setEnabled(False)
         if hasattr(self, 'model_manage_button'): self.model_manage_button.setEnabled(False)
-        self.status_bar.showMessage("Checking model status...", status_type='busy')
+        # self.status_bar.showMessage("Checking model status...", status_type='busy') # OLD
+        self.status_bar.set_checking() # NEW - Assumes StatusBar will have this method
         
         # Create and run worker
         self.status_check_thread = QThread()
@@ -1520,23 +1521,22 @@ class MainWindow(QMainWindow):
         has_benepar = len(status_dict.get('benepar_models', [])) > 0
 
         self.extractor_ready = has_spacy and has_benepar # Modified check
-        if self.extractor_ready:
-            status_type = 'ready'
-            message = "ANPE Ready"
-            self.status_bar.showMessage(message, 3000, status_type=status_type)
-            if hasattr(self, 'process_button'): self.process_button.setEnabled(True)
-        else:
-            # Models are missing
-            missing = []
-            if not has_spacy: missing.append("spaCy")
-            if not has_benepar: missing.append("Benepar")
-            status_type = 'warning'
-            status_message = f"Missing required models: {', '.join(missing)}. Use 'Manage Models' to install."
-            self.status_bar.showMessage(status_message, 0, status_type=status_type) 
-            if hasattr(self, 'process_button'): self.process_button.setEnabled(False)
+        
+        # Show final message (clear_progress will override label text, so showMessage is less critical here)
+        final_status_type = 'ready' if self.extractor_ready else 'warning'
+        final_message = "ANPE Ready" if self.extractor_ready else f"Missing required models: {', '.join(m for m, h in [('spaCy', has_spacy), ('Benepar', has_benepar)] if not h)}. Use 'Manage Models' to install."
+        self.status_bar.showMessage(final_message, 0 if final_status_type == 'warning' else 3000, status_type=final_status_type)
+
+        if hasattr(self, 'process_button'): self.process_button.setEnabled(self.extractor_ready)
             
         # Re-enable settings button
         if hasattr(self, 'model_manage_button'): self.model_manage_button.setEnabled(True)
+        
+        # Restore status bar to idle state (shows progress bar again)
+        self.status_bar.clear_progress() # ADDED
+        # Override status message *after* clear_progress if needed (clear_progress sets it to 'ANPE Ready')
+        if not self.extractor_ready:
+            self.status_bar.showMessage(final_message, 0, status_type=final_status_type) 
         # ------------------------------------
 
         # --- Explicitly wait for thread and delete objects ---
@@ -1596,11 +1596,18 @@ class MainWindow(QMainWindow):
              # Handle case where model_status might not be a dict yet (unlikely but safe)
              self.model_status = {'error': error_msg}
 
-        self.status_bar.showMessage(f"Error checking status: {error_msg}", 0, status_type='error')
+        # Show error message (clear_progress will override this, so we call showMessage again after)
+        error_status_message = f"Error checking status: {error_msg}"
+        self.status_bar.showMessage(error_status_message, 0, status_type='error')
         if hasattr(self, 'process_button'): self.process_button.setEnabled(False)
         
         # Re-enable settings button even on error
         if hasattr(self, 'model_manage_button'): self.model_manage_button.setEnabled(True)
+        
+        # Restore status bar to idle state (shows progress bar again)
+        self.status_bar.clear_progress() # ADDED
+        # Set the error message *after* clear_progress has run
+        self.status_bar.showMessage(error_status_message, 0, status_type='error') # Re-apply error message
         # -----------------------------
 
         # --- Explicitly wait for thread and delete objects ---

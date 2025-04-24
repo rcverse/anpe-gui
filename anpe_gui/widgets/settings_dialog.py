@@ -10,6 +10,7 @@ import nltk # Need nltk for the status check part (will move to page) - Still ne
 import importlib.metadata # For getting core version
 import json # For parsing PyPI response
 import sys # <<< Added for Python version
+from typing import Optional
 
 from PyQt6.QtCore import Qt, QThread, QObject, pyqtSignal, pyqtSlot, QSize, QSettings, QTimer, QEvent, QPoint, QUrl # Added QPoint, QUrl
 from PyQt6.QtWidgets import (
@@ -24,7 +25,7 @@ from anpe_gui.theme import ERROR_COLOR, PRIMARY_COLOR, get_scroll_bar_style, LIG
 from anpe_gui.resource_manager import ResourceManager # ADDED THIS IMPORT
 from anpe_gui.widgets.activity_indicator import PulsingActivityIndicator # IMPORT THE INDICATOR
 # Import the worker classes from their new location
-from anpe_gui.workers.settings_workers import CoreUpdateWorker, CleanWorker, InstallDefaultsWorker, ModelActionWorker
+from anpe_gui.workers.settings_workers import CoreUpdateWorker, CleanWorker, InstallDefaultsWorker, ModelActionWorker, StatusCheckWorker # <<< ADDED StatusCheckWorker
 
 # Assuming these utilities exist and work as expected
 try:
@@ -88,10 +89,15 @@ class ModelsPage(QWidget):
         self.benepar_status_label = None
         self.benepar_aliases_label = None
         
+        # Worker threads and instances
         self.install_worker_thread = None
         self.install_worker = None
         self.clean_worker_thread = None
         self.clean_worker = None
+        self.install_defaults_thread = None # Already exists
+        self.install_defaults_worker = None # Already exists
+        self.status_check_thread = None   # <<< ADDED Status Check Worker Thread
+        self.status_check_worker = None   # <<< ADDED Status Check Worker
         
         self.status_labels = {} # key: full_model_name, value: QLabel
         
@@ -123,7 +129,8 @@ class ModelsPage(QWidget):
         else:
             # Fallback if no status was passed (should not happen ideally)
             logging.warning("ModelsPage: No initial status received, performing initial refresh.")
-            QTimer.singleShot(100, self.refresh_status) # Perform a check if no data
+            # Perform initial refresh asynchronously
+            QTimer.singleShot(100, self.refresh_status) # <<< Trigger async refresh
 
     def setup_ui(self):
         main_layout = QVBoxLayout(self)
@@ -300,7 +307,7 @@ class ModelsPage(QWidget):
 
         self.model_action_indicator = PulsingActivityIndicator()
         self.model_action_indicator.setFixedSize(20, 20) # Smaller indicator
-        self.model_action_indicator.setVisible(False) # Hidden initially
+        # self.model_action_indicator.setVisible(False) # Hidden initially # REMOVED
         self.model_action_indicator.set_color(PRIMARY_COLOR) # Use theme color
 
         self.model_action_status_label = QLabel("Status updated.")
@@ -368,7 +375,7 @@ class ModelsPage(QWidget):
         self.spacy_usage_combo.currentTextChanged.connect(self.save_usage_settings)
         self.benepar_usage_combo.currentTextChanged.connect(self.save_usage_settings)
         # Management actions
-        self.refresh_button.clicked.connect(self.refresh_status)
+        self.refresh_button.clicked.connect(self.refresh_status) # <<< Connects to the NEW async refresh_status
         # Connect the new button to the dynamic handler (to be created)
         self.install_clean_button.clicked.connect(self.handle_install_clean_click)
         # Connect the details button to show log dialog
@@ -457,14 +464,10 @@ class ModelsPage(QWidget):
         # Extract data from the dictionary (handle potential None)
         installed_spacy_models = status_data.get('spacy_models', [])
         installed_benepar_models = status_data.get('benepar_models', [])
-        init_error = status_data.get('error') # Check if there was an initial error
+        check_error = status_data.get('error') # Check if there was an error during status check
 
-        # Calculate worker status first
-        is_worker_running = (self.install_worker_thread and self.install_worker_thread.isRunning()) or \
-                          (self.clean_worker_thread and self.clean_worker_thread.isRunning())
-
-        # Determine button enable state (only disable if worker running)
-        self._set_buttons_enabled(not is_worker_running)
+        # Check if ANY worker is running
+        is_any_worker_running = self.is_worker_running()
 
         # Update status labels based on installed models
         # Update spaCy Status Label
@@ -534,23 +537,22 @@ class ModelsPage(QWidget):
              logging.debug(f"  Checking SpaCy '{alias_dbg}' ('{name_dbg}'): Found = {is_installed_dbg}")
         # --- END DEBUG LOGGING ---
 
-        # Update the feedback status label
+        # --- Update the feedback status label and dynamic button --- 
         # Determine if all default models are present
         try:
-            # Remove redundant imports here - rely on module-level imports
-            # from anpe.utils.setup_models import SPACY_MODEL_MAP, BENEPAR_MODEL_MAP, DEFAULT_SPACY_ALIAS, DEFAULT_BENEPAR_ALIAS
+            # Rely on module-level imports
             default_spacy_name = SPACY_MODEL_MAP[DEFAULT_SPACY_ALIAS]
             default_benepar_name = BENEPAR_MODEL_MAP[DEFAULT_BENEPAR_ALIAS]
             all_defaults_present = (
                 default_spacy_name in installed_spacy_models and
                 default_benepar_name in installed_benepar_models
             )
-        except KeyError: # Handle case where default alias might not be in map (shouldn't happen)
+        except KeyError: # Handle case where default alias might not be in map
             logging.error("Default model alias not found in map during UI update.")
-            all_defaults_present = False # Assume missing if map is broken
+            all_defaults_present = False
         except Exception as e:
             logging.error(f"Error determining default model presence: {e}")
-            all_defaults_present = False # Assume missing on error
+            all_defaults_present = False
 
         # Check keyboard modifiers for Alt key
         alt_modifier_pressed = bool(QApplication.keyboardModifiers() & Qt.KeyboardModifier.AltModifier)
@@ -563,21 +565,30 @@ class ModelsPage(QWidget):
         else: # Models missing and Alt not pressed
             self.install_clean_button.setText("Install Defaults")
             # Use the names determined above, even if fallback N/A
-            self.install_clean_button.setToolTip(f"Install required default models:\
-- spaCy: {default_spacy_name}\
-- Benepar: {default_benepar_name}\
-(Hold Alt to Clean All instead)")
+            # Need to handle potential KeyError if maps didn't load
+            spacy_name_display = SPACY_MODEL_MAP.get(DEFAULT_SPACY_ALIAS, f'{DEFAULT_SPACY_ALIAS} (N/A)')
+            benepar_name_display = BENEPAR_MODEL_MAP.get(DEFAULT_BENEPAR_ALIAS, f'{DEFAULT_BENEPAR_ALIAS} (N/A)')
+            self.install_clean_button.setToolTip(f"Install required default models:\n"
+                                              f"- spaCy: {spacy_name_display}\n"
+                                              f"- Benepar: {benepar_name_display}\n"
+                                              f"(Hold Alt to Clean All instead)")
             self.install_clean_button.setProperty("danger", False)
         # Force style re-evaluation
         self.install_clean_button.style().unpolish(self.install_clean_button)
         self.install_clean_button.style().polish(self.install_clean_button)
 
         # Update the general status label
-        if init_error:
-            self.model_action_status_label.setText(f"Error checking status: {init_error}")
-        elif not is_worker_running:
-            self.model_action_status_label.setText("Model status updated.")
-        # If a worker is running, the status label will be updated by the worker signals
+        if check_error: # Use the error from the status check
+            self.model_action_status_label.setText(f"Error checking status: {check_error}")
+            self.model_action_indicator.warn() # Show warning state if check failed
+        elif not is_any_worker_running: # Only set "updated" if no worker is active
+             self.model_action_status_label.setText("Model status updated.")
+             # If no worker is running and there was no error during the check,
+             # set the indicator to idle. Worker completion slots handle success/failure states.
+             self.model_action_indicator.idle() # Explicitly set idle if no error and no worker running
+        # If a worker IS running, the status label text and indicator state
+        # should reflect the ongoing operation (handled by worker start signals).
+        # The final state is set in the respective on_..._finished slots.
 
         # --- Load persistent usage settings AFTER combo boxes are populated ---
         self.load_usage_settings()
@@ -585,48 +596,133 @@ class ModelsPage(QWidget):
 
     @pyqtSlot()
     def refresh_status(self):
-        """Checks status of all known models and updates the UI via _update_ui_from_status."""
-        # Assume ANPE core is available
+        """Starts the asynchronous check for model statuses."""
+        if self.is_worker_running():
+            logging.warning("ModelsPage: refresh_status called while another worker is running.")
+            # Optionally provide feedback, e.g., flash the status label
+            # self.model_action_status_label.setText("Operation already in progress...")
+            # QTimer.singleShot(2000, lambda: self.model_action_status_label.setText("Previous status message...")) # Restore after delay
+            return # Don't start a new check if one is running
+
+        logging.debug("ModelsPage: Starting asynchronous status refresh.")
         self.model_action_status_label.setText("Refreshing status...")
-        QApplication.processEvents() # Ensure UI updates during check
-        try:
-            status_update = {
-                'spacy_models': find_installed_spacy_models(),
-                'benepar_models': find_installed_benepar_models(),
-                'error': None
-            }
-            # Status label text updated within _update_ui_from_status
-        except Exception as e:
-            logging.error(f"Error during manual refresh: {e}", exc_info=True)
-            status_update = {'spacy_models': [], 'benepar_models': [], 'error': f'Refresh error: {e}'} # Removed 'nltk_present': False
-            # Error message set within _update_ui_from_status
+        self._set_buttons_enabled(False) # Disable buttons during check
+        self.model_action_indicator.checking() # <<< SET STATE TO CHECKING
 
-        # --- DEBUG LOGGING --- 
-        logging.debug(f"refresh_status: Collected Status: {status_update}")
-        # --- END DEBUG LOGGING ---
+        # Clean up previous thread/worker if they somehow exist (shouldn't happen with the check above)
+        if self.status_check_worker:
+            self.status_check_worker.deleteLater()
+        if self.status_check_thread:
+            self.status_check_thread.quit()
+            self.status_check_thread.wait()
+            self.status_check_thread.deleteLater()
 
-        # Update the UI using the collected status
-        self.model_status = status_update # <--- Update the stored status
-        self._update_ui_from_status(status_update)
+        # Create and start the worker
+        self.status_check_worker = StatusCheckWorker()
+        self.status_check_thread = QThread(self)
+        self.status_check_worker.moveToThread(self.status_check_thread)
+
+        # Connect signals
+        self.status_check_worker.finished.connect(self.on_status_check_finished)
+        self.status_check_thread.started.connect(self.status_check_worker.run)
+
+        # Clean up connections (important!)
+        self.status_check_worker.finished.connect(self.status_check_thread.quit)
+        # Schedule deletion after the event loop processes the quit signal
+        self.status_check_worker.finished.connect(self.status_check_worker.deleteLater)
+        self.status_check_thread.finished.connect(self.status_check_thread.deleteLater)
+        # Clear references in the slot AFTER thread is confirmed finished
+        # Use lambda functions to ensure the correct context for setattr
+        self.status_check_worker.finished.connect(lambda: setattr(self, 'status_check_worker', None))
+        self.status_check_thread.finished.connect(lambda: setattr(self, 'status_check_thread', None))
+
+
+        self.status_check_thread.start()
+
+    @pyqtSlot(dict)
+    def on_status_check_finished(self, status_data: dict):
+        """Handles the results from the asynchronous StatusCheckWorker."""
+        logging.debug(f"ModelsPage: --- Entered on_status_check_finished ---") # <<< Added log
+        logging.debug(f"ModelsPage: Received status_data: {status_data}")
+
+        # Log thread state *before* UI update
+        thread_running_before = self.status_check_thread.isRunning() if self.status_check_thread else 'N/A'
+        logging.debug(f"ModelsPage: status_check_thread.isRunning() before UI update: {thread_running_before}")
+
+        # Store the latest status
+        self.model_status = status_data
+
+        # --- Clear worker/thread references EARLY ---
+        # Store references locally for potential deleteLater call
+        worker_to_delete = self.status_check_worker
+        thread_to_delete = self.status_check_thread
+        # Clear instance attributes so is_worker_running() sees them as gone
+        self.status_check_worker = None
+        self.status_check_thread = None
+        logging.debug("ModelsPage: Cleared status_check_worker/thread references.")
+        # ---------------------------------------------
+
+        # Update the UI based on the received status
+        # NOTE: Button enabling/disabling is NO LONGER done inside this function
+        self._update_ui_from_status(status_data)
+
+        # Log worker state *after* UI update and clearing refs
+        any_worker_running_after = self.is_worker_running()
+        logging.debug(f"ModelsPage: is_worker_running() after UI update and clearing refs: {any_worker_running_after}")
+
+        # --- Set final indicator/status text ---
+        # This should happen regardless of button state
+        if not status_data.get('error'):
+             self.model_action_status_label.setText("Model status updated.")
+             self.model_action_indicator.idle()
+        else:
+            # Error was already logged in _update_ui_from_status, indicator set to warn there
+             pass # Status label and indicator are already set by _update_ui_from_status
+
+        # --- Re-enable buttons reliably ---
+        # Now that the status check worker/thread references are cleared,
+        # check if any *other* workers are running.
+        if not self.is_worker_running(): # No need for ignore_worker_type anymore
+             self._set_buttons_enabled(True)
+             logging.debug("ModelsPage: Re-enabled buttons as no workers are active.")
+        else:
+            # If another worker started *while* the check was running, keep buttons disabled
+            logging.warning("ModelsPage: Another worker appears to be running after status check finished. Keeping buttons disabled.")
+
+        # --- Schedule deletion for the original worker/thread objects ---
+        # This happens after the slot finishes, ensuring they aren't needed anymore.
+        # Note: deleteLater was already connected to the finished signals in refresh_status
+        # We don't need to call it explicitly here unless we disconnected those signals.
+        # Let's keep the original deleteLater connections for safety.
+        # if worker_to_delete:
+        #     worker_to_delete.deleteLater()
+        # if thread_to_delete:
+        #     thread_to_delete.deleteLater()
+        # logging.debug("ModelsPage: deleteLater calls confirmed/skipped for original status worker/thread.")
+        # --------------------------------------------------------------
+
+        logging.debug("ModelsPage: --- Exiting on_status_check_finished ---") # <<< Added log
 
     def _set_buttons_enabled(self, enabled: bool):
-        """Enable/disable action buttons, optionally forcing disable (e.g., if core missing)."""
-        
-        # Enable/disable global action buttons
-        # Refresh should only be disabled if a worker is running
-        self.refresh_button.setEnabled(enabled)
-        # Assume core is present, only disable if worker running
-        self.install_clean_button.setEnabled(enabled)
-        
-        # Enable/disable buttons in the grid
-        # Assume core is present, only disable if worker running
-        model_action_enabled_state = enabled
+        """Enable/disable action buttons, considering ALL worker states."""
+        # Note: This check might be slightly delayed relative to the signal emission
+        # We rely on the calling context (e.g., on_X_finished) to know if the specific worker *just* finished.
+        is_any_worker_running = self.is_worker_running()
+        actual_enabled_state = enabled and not is_any_worker_running
+
+        # logging.debug(f"ModelsPage: _set_buttons_enabled called with enabled={enabled}. is_worker_running={is_any_worker_running}. Resulting state={actual_enabled_state}") # Verbose
+
+        # Global action buttons
+        self.refresh_button.setEnabled(actual_enabled_state)
+        self.install_clean_button.setEnabled(actual_enabled_state)
+
+        # Grid action buttons
         for alias, button in self.action_buttons.items():
-            button.setEnabled(model_action_enabled_state)
-        
-        # Enable/disable usage combos (only disable if worker running)
-        self.spacy_usage_combo.setEnabled(enabled)
-        self.benepar_usage_combo.setEnabled(enabled)
+            button.setEnabled(actual_enabled_state)
+
+        # Usage combos
+        self.spacy_usage_combo.setEnabled(actual_enabled_state)
+        self.benepar_usage_combo.setEnabled(actual_enabled_state)
 
     @pyqtSlot()
     def run_model_action(self):
@@ -674,8 +770,7 @@ class ModelsPage(QWidget):
                  
         self._set_buttons_enabled(False) # Disable all action buttons
         self.model_action_status_label.setText(f"Starting {action} for {model_type} model '{alias}'...")
-        self.model_action_indicator.setVisible(True) # Show indicator
-        self.model_action_indicator.start()          # Start animation
+        self.model_action_indicator.start() # Set state to ACTIVE
         self._clear_log()                            # Clear log text
         
         # Cleanup previous thread/worker (this part is fine)
@@ -694,19 +789,20 @@ class ModelsPage(QWidget):
         self.install_worker.progress.connect(self.model_action_status_label.setText)
         self.install_worker.finished.connect(self.on_model_action_finished) # Use the updated finished slot
         self.install_worker.log_message.connect(self._append_log_details) # Connect log signal (PENDING WORKER CHANGE)
+        logging.debug(f"ModelsPage: Connected log_message signal from worker to _append_log_details") # <<< ADD LOG
         self.install_worker_thread.started.connect(self.install_worker.run)
 
         # Cleanup connections - REMOVE deleteLater calls here
-        self.install_worker.finished.connect(self.install_worker_thread.quit) # Quit is okay
+        self.install_worker.finished.connect(self.install_worker_thread.quit)
 
         
         self.install_worker_thread.start()
         
-    @pyqtSlot(bool, str)
-    def on_model_action_finished(self, success: bool, message: str):
+    @pyqtSlot(str, str, bool, str)
+    def on_model_action_finished(self, action: str, alias: str, success: bool, message: str):
         """Handle completion of any model install/uninstall worker with explicit wait."""
-        logging.debug("on_model_action_finished started.")
-        self.model_action_indicator.stop()           # Stop animation
+        logging.debug(f"on_model_action_finished started for action='{action}', alias='{alias}', success={success}")
+        # self.model_action_indicator.stop()           # Stop animation # REMOVED
         # REMOVED: self.model_action_indicator.setVisible(False) # Keep visible for idle glow
 
         
@@ -723,6 +819,12 @@ class ModelsPage(QWidget):
              QMessageBox.information(self.window(), "Action Complete", message)
         else:
              QMessageBox.warning(self.window(), "Action Failed", message)
+
+        # --- Set Indicator state AFTER message box ---
+        if success:
+            self.model_action_indicator.idle() # Set state to IDLE on success
+        else:
+            self.model_action_indicator.warn() # Set state to WARNING on failure
 
         # --- Explicitly wait for thread and delete objects ---
         if thread_to_wait is not None:
@@ -765,12 +867,22 @@ class ModelsPage(QWidget):
              logging.debug("No model action worker thread reference found to wait on.")
         # ----------------------------------------------------
 
-        # Now that the thread is confirmed finished, update UI and signal main window
-        logging.debug("Refreshing status after model action thread wait/cleanup.")
-        self.refresh_status() # Update status labels and buttons
-        
+        # --- Update button state and UI elements directly --- 
+        # Manually update the specific button involved in the action
+        self._update_button_after_action(action, alias, success)
+
+        # Re-enable buttons if no other workers are running
+        if not self.is_worker_running(): # NEW CHECK (worker refs cleared earlier)
+            self._set_buttons_enabled(True)
+            logging.debug("on_model_action_finished: Re-enabled buttons as no other workers are active.")
+        else:
+            logging.warning("on_model_action_finished: Keeping buttons disabled as another worker is active.")
+            
+        # Signal that models *might* have changed (parent can decide to refresh if needed)
         logging.debug("Emitting models_changed signal after model action.")
-        self.models_changed.emit() # Notify parent dialog/main window
+        self.models_changed.emit() 
+        # ----------------------------------------------------
+
         logging.debug("on_model_action_finished completed.")
 
     @pyqtSlot()
@@ -836,8 +948,7 @@ class ModelsPage(QWidget):
 
         self._set_buttons_enabled(False)
         self.model_action_status_label.setText("Starting cleanup...")
-        self.model_action_indicator.setVisible(True) # Show indicator
-        self.model_action_indicator.start()          # Start animation
+        self.model_action_indicator.start() # Set state to ACTIVE
         self._clear_log()                            # Clear log text
         
         # Cleanup previous thread/worker (this part is fine)
@@ -869,7 +980,7 @@ class ModelsPage(QWidget):
     def on_clean_finished(self, results: dict):
         """Handle completion of the clean process."""
         logging.debug("on_clean_finished started.") # Add logging
-        self.model_action_indicator.stop()           # Stop animation
+        # self.model_action_indicator.stop()           # Stop animation # REMOVED
         # REMOVED: self.model_action_indicator.setVisible(False) # Keep visible for idle glow
 
         
@@ -894,6 +1005,12 @@ class ModelsPage(QWidget):
             QMessageBox.warning(self.window(), "Cleanup Incomplete", message)
             
         self.model_action_status_label.setText(message)
+
+        # --- Set Indicator state AFTER message box ---
+        if all_succeeded:
+            self.model_action_indicator.idle() # Set state to IDLE on success
+        else:
+            self.model_action_indicator.warn() # Set state to WARNING on failure
 
         # --- Explicitly wait for thread and delete objects ---
         if thread_to_wait is not None:
@@ -936,14 +1053,20 @@ class ModelsPage(QWidget):
             logging.debug("No clean worker thread reference found to wait on.")
         # ----------------------------------------------------
         
-        # Now that the thread is confirmed finished (or wasn't running), update UI safely.
-        logging.debug("Refreshing status after thread wait/cleanup.")
-        self.refresh_status() # Update status labels
-        # Note: refresh_status calls _update_ui_from_status which enables buttons if no worker is running
-        # self._set_buttons_enabled(True) # This is likely redundant now
+        # --- Update button state and UI elements directly --- 
+        # Clean action affects all buttons indirectly, state updated on manual refresh.
+        # Just re-enable buttons if appropriate.
+        if not self.is_worker_running(ignore_worker_type='clean'): # Ignore the worker that just finished
+            self._set_buttons_enabled(True)
+            logging.debug("on_clean_finished: Re-enabled buttons as no other workers are active.")
+        else:
+            logging.warning("on_clean_finished: Keeping buttons disabled as another worker is active.")
 
-        logging.debug("Emitting models_changed signal.")
-        self.models_changed.emit() # Notify parent dialog/main window
+        # Signal that models *might* have changed
+        logging.debug("Emitting models_changed signal after clean.")
+        self.models_changed.emit()
+        # ----------------------------------------------------
+
         logging.debug("on_clean_finished completed.")
 
     @pyqtSlot()
@@ -1012,8 +1135,7 @@ class ModelsPage(QWidget):
 
         self._set_buttons_enabled(False)
         self.model_action_status_label.setText("Starting default installation...")
-        self.model_action_indicator.setVisible(True)
-        self.model_action_indicator.start()
+        self.model_action_indicator.start() # Set state to ACTIVE
         self._clear_log()                            # Clear log text
 
         # Cleanup previous thread/worker (use dedicated attributes)
@@ -1043,7 +1165,7 @@ class ModelsPage(QWidget):
     def on_install_defaults_finished(self, success: bool, message: str):
         """Handle completion of the default install process."""
         logging.debug("on_install_defaults_finished started.")
-        self.model_action_indicator.stop()
+        # self.model_action_indicator.stop() # REMOVED
         # REMOVED: self.model_action_indicator.setVisible(False) # Keep visible for idle glow
 
         # Store references before clearing
@@ -1059,6 +1181,12 @@ class ModelsPage(QWidget):
              QMessageBox.information(self.window(), "Install Defaults Complete", message)
         else:
              QMessageBox.warning(self.window(), "Install Defaults Failed", message)
+
+        # --- Set Indicator state AFTER message box ---
+        if success:
+            self.model_action_indicator.idle() # Set state to IDLE on success
+        else:
+            self.model_action_indicator.warn() # Set state to WARNING on failure
 
         # --- Explicitly wait for thread and delete objects ---
         if thread_to_wait is not None:
@@ -1099,11 +1227,20 @@ class ModelsPage(QWidget):
         else:
              logging.debug("No install defaults worker thread reference found to wait on.")
 
-        # Refresh UI status and emit signal
-        logging.debug("Refreshing status after install defaults thread wait/cleanup.")
-        self.refresh_status()
+        # --- Update button state and UI elements directly --- 
+        # Install Defaults action affects buttons indirectly, state updated on manual refresh.
+        # Just re-enable buttons if appropriate.
+        if not self.is_worker_running(ignore_worker_type='defaults'): # Ignore the worker that just finished
+            self._set_buttons_enabled(True)
+            logging.debug("on_install_defaults_finished: Re-enabled buttons as no other workers are active.")
+        else:
+            logging.warning("on_install_defaults_finished: Keeping buttons disabled as another worker is active.")
+
+        # Signal that models *might* have changed
         logging.debug("Emitting models_changed signal after install defaults.")
         self.models_changed.emit()
+        # ----------------------------------------------------
+
         logging.debug("on_install_defaults_finished completed.")
 
     # --- End Dynamic Action Handling ---
@@ -1113,6 +1250,7 @@ class ModelsPage(QWidget):
     @pyqtSlot(str)
     def _append_log_details(self, message: str):
         """Appends a message to the log details."""
+        logging.debug(f"ModelsPage._append_log_details received: '{message[:100]}...'") # <<< ADD LOG
         self.log_text += message + "\n"
         
         # If log dialog exists and is visible, update it
@@ -1270,14 +1408,72 @@ class ModelsPage(QWidget):
 
     # --- End Event Handling ---
 
-    def is_worker_running(self) -> bool:
-        """Check if any model management worker thread is active."""
-        install_active = self.install_worker_thread and self.install_worker_thread.isRunning()
-        clean_active = self.clean_worker_thread and self.clean_worker_thread.isRunning()
-        defaults_active = hasattr(self, 'install_defaults_thread') and self.install_defaults_thread and self.install_defaults_thread.isRunning()
-        model_action_active = self.install_worker_thread and self.install_worker_thread.isRunning() # Reuse install worker for model actions
+    def is_worker_running(self, ignore_worker_type: str | None = None) -> bool:
+        """Check if any model management or status check worker thread is active.
+
+        Args:
+            ignore_worker_type: If provided (e.g., 'status', 'install', 'clean', 'defaults'),
+                                exclude that worker type from the check.
+        """
+        install_active = (ignore_worker_type != 'install') and self.install_worker_thread and self.install_worker_thread.isRunning()
+        clean_active = (ignore_worker_type != 'clean') and self.clean_worker_thread and self.clean_worker_thread.isRunning()
+        defaults_active = (ignore_worker_type != 'defaults') and self.install_defaults_thread and self.install_defaults_thread.isRunning()
+        status_check_active = (ignore_worker_type != 'status') and self.status_check_thread and self.status_check_thread.isRunning()
+
+        running = install_active or clean_active or defaults_active or status_check_active
+        # Optional verbose logging:
+        # if ignore_worker_type:
+        #     logging.debug(f"is_worker_running (ignoring '{ignore_worker_type}'): install={install_active}, clean={clean_active}, defaults={defaults_active}, status={status_check_active} -> {running}")
+        # else:
+        #     logging.debug(f"is_worker_running: install={install_active}, clean={clean_active}, defaults={defaults_active}, status={status_check_active} -> {running}")
+        return running
+
+    def _update_button_after_action(self, action: str, alias: Optional[str], success: bool):
+        """Update the specific button(s) involved in the last model action, or trigger refresh."""
+        logging.debug(f"_update_button_after_action called with action='{action}', alias='{alias}', success={success}")
+
+        if action in ['install', 'uninstall'] and alias:
+            button = self.action_buttons.get(alias)
+            if not button:
+                logging.warning(f"_update_button_after_action: Could not find button for alias '{alias}'")
+                return
+
+            if success:
+                # Find model name for tooltip update (handle potential missing info)
+                model_info = next((m for m in self.manageable_models if m['alias'] == alias), None)
+                model_name = model_info.get('name', f"{alias} (Unknown Name)") if model_info else f"{alias} (Unknown Name)"
+                
+                if action == 'install':
+                    button.setText("Uninstall")
+                    button.setProperty("danger", True)
+                    button.setToolTip(f"Uninstall {model_name}")
+                    logging.debug(f"Button '{alias}' updated to Uninstall state.")
+                elif action == 'uninstall':
+                    button.setText("Install")
+                    button.setProperty("danger", False)
+                    button.setToolTip(f"Install {model_name}")
+                    logging.debug(f"Button '{alias}' updated to Install state.")
+                
+                # Force style re-evaluation
+                button.style().unpolish(button)
+                button.style().polish(button)
+                # Always refresh status after a successful individual action
+                logging.debug(f"Individual action '{action}' for alias '{alias}' succeeded. Triggering refresh.")
+                QTimer.singleShot(0, self.refresh_status)
+            else:
+                # If the action failed, the state is uncertain. Trigger a refresh for accuracy.
+                logging.warning(f"Action '{action}' for alias '{alias}' failed. Triggering refresh for accurate state.")
+                # Use QTimer.singleShot to avoid potential issues calling refresh directly from within slot
+                QTimer.singleShot(0, self.refresh_status)
         
-        return install_active or clean_active or defaults_active or model_action_active
+        elif action in ['install_defaults', 'clean_all']:
+            # For global actions, the state of multiple buttons might change.
+            # Triggering a full refresh is the most reliable way to update the UI.
+            logging.debug(f"Global action '{action}' completed. Triggering refresh status.")
+            # Use QTimer.singleShot to avoid potential issues calling refresh directly from within slot
+            QTimer.singleShot(0, self.refresh_status)
+        else:
+             logging.warning(f"_update_button_after_action: Unknown action type '{action}' received.")
 
 
 class CorePage(QWidget):
@@ -1354,7 +1550,7 @@ class CorePage(QWidget):
         # --- Activity Indicator --- 
         self.core_action_indicator = PulsingActivityIndicator()
         self.core_action_indicator.setFixedSize(20, 20)
-        self.core_action_indicator.setVisible(False)
+        # self.core_action_indicator.setVisible(False) # REMOVED
         self.core_action_indicator.set_color(PRIMARY_COLOR)
         # --------------------------
 
@@ -1525,8 +1721,9 @@ class CorePage(QWidget):
         
         if button_text == "Check for Updates":
             self.status_label.setText("Checking PyPI for latest version...")
-            self.core_action_indicator.setVisible(True)
-            self.core_action_indicator.start()
+            # self.core_action_indicator.setVisible(True) # REMOVED
+            # self.core_action_indicator.start() # REMOVED
+            self.core_action_indicator.checking() # Set state to CHECKING
             self.check_update_button.setEnabled(False)
             self.latest_version_label.setText("Checking...")
             
@@ -1558,8 +1755,9 @@ class CorePage(QWidget):
                  return
                  
             self.status_label.setText("Starting update process...")
-            self.core_action_indicator.setVisible(True)
-            self.core_action_indicator.start()
+            # self.core_action_indicator.setVisible(True) # REMOVED
+            # self.core_action_indicator.start() # REMOVED
+            self.core_action_indicator.start() # Set state to ACTIVE
             self.check_update_button.setEnabled(False)
             
             # Connect update signals
@@ -1577,7 +1775,7 @@ class CorePage(QWidget):
     @pyqtSlot(str, str, str)
     def on_check_finished(self, latest_version, current_version, error_string):
         """Handle the result of the PyPI version check."""
-        self.core_action_indicator.stop()
+        # self.core_action_indicator.stop() # REMOVED
         # REMOVED: self.core_action_indicator.setVisible(False) # Keep visible for idle glow
         self.worker_thread = None # Allow new actions
         self.worker = None
@@ -1588,6 +1786,7 @@ class CorePage(QWidget):
             self.check_update_button.setText("Check for Updates")
             # Button should remain enabled to allow retrying the check
             self.check_update_button.setEnabled(True) 
+            self.core_action_indicator.warn() # Set state to WARNING on check error
             logging.error(f"Update check failed: {error_string}")
         else:
             self.latest_version = latest_version # Store latest version
@@ -1617,6 +1816,8 @@ class CorePage(QWidget):
                 self.status_label.setText("ANPE core package is up to date.")
                 self.check_update_button.setText("Up to Date")
                 self.check_update_button.setEnabled(False) # Disable if up to date
+            # Set indicator to IDLE on successful check (regardless of update needed)
+            self.core_action_indicator.idle() # Set state to IDLE on success
 
     @pyqtSlot(int, str)
     def on_update_progress(self, value, message):
@@ -1626,7 +1827,7 @@ class CorePage(QWidget):
     @pyqtSlot(bool, str)
     def on_update_finished(self, success, message):
         """Handle completion of the update process."""
-        self.core_action_indicator.stop()
+        # self.core_action_indicator.stop() # REMOVED
         # REMOVED: self.core_action_indicator.setVisible(False) # Keep visible for idle glow
         self.worker_thread = None # Allow new actions
         self.worker = None
@@ -1640,6 +1841,7 @@ class CorePage(QWidget):
              self.status_label.setText("Update successful. Check for updates again if needed.")
              self.check_update_button.setText("Check for Updates")
              self.check_update_button.setEnabled(True)
+             self.core_action_indicator.idle() # Set state to IDLE on update success
         else:
              # Error message already appended to log in worker
              QMessageBox.warning(self.window(), "Update Failed", message)
@@ -1647,6 +1849,7 @@ class CorePage(QWidget):
              # Reset button state to allow re-check/re-try
              self.check_update_button.setText("Check for Updates") 
              self.check_update_button.setEnabled(True)
+             self.core_action_indicator.warn() # Set state to WARNING on update failure
 
     # --- Log Dialog Methods (Adapted from ModelsPage) --- 
 

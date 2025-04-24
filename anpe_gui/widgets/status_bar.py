@@ -6,7 +6,7 @@ from PyQt6.QtGui import QPalette, QColor
 # Import necessary theme colors
 from ..theme import PRIMARY_COLOR, SUCCESS_COLOR, BORDER_COLOR
 # Import our new activity indicator
-from .activity_indicator import PulsingActivityIndicator
+from .activity_indicator import PulsingActivityIndicator, STATE_IDLE, STATE_ACTIVE, STATE_WARNING, STATE_ERROR, STATE_CHECKING # Import states
 
 class StatusBar(QWidget):
     """
@@ -28,15 +28,12 @@ class StatusBar(QWidget):
         # Status label for text updates
         self.status_label = QLabel("Ready")
         
-        # Progress indicator container (holds activity indicator and progress bar)
-        self.progress_container = QWidget()
-        self.progress_layout = QHBoxLayout(self.progress_container)
-        self.progress_layout.setContentsMargins(0, 0, 0, 0)
-        self.progress_layout.setSpacing(8)  # Space between activity indicator and progress bar
-        
-        # Create the pulsing activity indicator
+        # Create the pulsing activity indicator FIRST
         self.activity_indicator = PulsingActivityIndicator(self)
-        
+        self.activity_indicator.setFixedSize(24, 24) # Match progress bar height approx
+        self.activity_indicator.idle() # Start in idle state
+        self.activity_indicator.show() # Make sure it's visible
+
         # Progress bar (still used for determinate progress)
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 100)
@@ -53,10 +50,6 @@ class StatusBar(QWidget):
             QSizePolicy.Policy.Fixed
         )
         
-        # Add widgets to progress container
-        self.progress_layout.addWidget(self.activity_indicator)
-        self.progress_layout.addWidget(self.progress_bar)
-        
         # Add separator line
         self.separator = QFrame()
         self.separator.setFrameShape(QFrame.Shape.VLine)
@@ -66,23 +59,24 @@ class StatusBar(QWidget):
         self.layout.addWidget(self.status_label)
         self.layout.addStretch()
         self.layout.addWidget(self.separator)
-        self.layout.addWidget(self.progress_container)
+        # Add indicator AND progress bar
+        self.layout.addWidget(self.activity_indicator)
+        self.layout.addWidget(self.progress_bar)
         
-        # Set default idle style for progress bar
+        # Set initial state
         self.set_idle_state()
-        
-        # Activity indicator is visible but not animating during idle
-        # (removed auto-start of animation)
     
     def set_idle_state(self):
-        """Set progress bar to idle state with 'Waiting for tasks' text."""
+        """Set progress bar and indicator to idle state."""
         self.progress_bar.setValue(0)
         self.progress_bar.setFormat("Waiting for tasks")
+        self.progress_bar.show() # Ensure progress bar is visible
         
-        # Stop activity indicator animation but keep it visible
-        self.activity_indicator.stop()
+        # Set indicator to idle state
+        self.activity_indicator.idle()
+        self.activity_indicator.show()
         
-        # Apply idle styling
+        # Apply idle styling to progress bar
         self.progress_bar.setStyleSheet(f"""
             QProgressBar {{
                 border: 1px solid {BORDER_COLOR};
@@ -102,20 +96,30 @@ class StatusBar(QWidget):
 
     @pyqtSlot(str)
     def showMessage(self, message, timeout=0, status_type='info'):
-        """Update the status message and set its style property."""
+        """Update the status message, set its style property, and update indicator."""
         self.status_label.setText(message)
         # Set the 'status' property for MainWindow's stylesheet to apply
         self.status_label.setProperty('status', status_type)
         # Force style re-evaluation
         self.style().unpolish(self.status_label)
         self.style().polish(self.status_label)
+        
+        # Update indicator based on status_type (only for non-progress states)
+        if status_type in ['ready', 'success', 'info']:
+            self.activity_indicator.idle()
+        elif status_type == 'warning':
+            self.activity_indicator.warn()
+        elif status_type in ['error', 'failed']:
+            self.activity_indicator.error()
+        # 'busy' and 'checking' states handled by start_progress/update_progress/set_checking
 
     @pyqtSlot(int, str)
     def update_progress(self, value, message=None):
-        """Update the progress bar, its styling, and optionally the status message."""
-        # Start activity indicator animation if not running
-        if not self.activity_indicator.active:
-            self.activity_indicator.start()
+        """Update the progress bar, its styling, activate indicator, and optionally the status message."""
+        self.progress_bar.show()
+        self.activity_indicator.show() # Ensure indicator is visible alongside progress bar
+        # Start activity indicator animation in 'active' state
+        self.activity_indicator.start()
             
         # Set progress bar format based on value
         if value == 100:
@@ -162,16 +166,19 @@ class StatusBar(QWidget):
 
         if message:
             # Set status message with 'busy' type while progress is active
-            self.showMessage(message, status_type='busy')
+            self.showMessage(message, status_type='busy') # showMessage doesn't set busy state for indicator
 
     def start_progress(self, message="Processing..."):
         """Start an indeterminate progress operation using the activity indicator."""
+        self.progress_bar.show() # Show progress bar even in indeterminate
+        self.activity_indicator.show()
         # Start activity indicator animation
         self.activity_indicator.start()
         
         # Hide the progress bar's value and set text
         self.progress_bar.setRange(0, 0)  # Indeterminate mode
         self.progress_bar.setFormat("Processing...")
+        self.progress_bar.setValue(0) # Reset value visually for indeterminate
         
         # Apply active processing style
         self.progress_bar.setStyleSheet(f"""
@@ -196,6 +203,10 @@ class StatusBar(QWidget):
 
     def stop_progress(self, message="Complete", status_type='success'):
         """Stop the progress/activity indicator and update status, showing Completing->Complete."""
+        # Ensure progress bar is visible for the final animation
+        self.progress_bar.show()
+        self.activity_indicator.show()
+        
         # Trigger animation to 100% and show "Completing..."
         self.update_progress(100) 
 
@@ -203,22 +214,31 @@ class StatusBar(QWidget):
         QTimer.singleShot(100, lambda: self._finalize_stop_progress(message, status_type))
 
     def _finalize_stop_progress(self, message, status_type):
-        """Internal method called after a short delay to set final state."""
+        """Internal method called after a short delay to set final state and indicator."""
         # Set final format
         self.progress_bar.setFormat("Complete")
         
         # Update status message with the final status type
+        # showMessage will now also update the indicator based on the final status_type
         self.showMessage(message, status_type=status_type)
-
-        # Reset to idle state after a longer delay (unchanged)
+        
+        # We don't reset to idle immediately here, let showMessage handle the final indicator state.
+        # The idle state is set after a longer delay.
         QTimer.singleShot(3000, self.set_idle_state)
 
     def clear_progress(self):
         """Reset indicators to idle state."""
         self.set_idle_state()
         
-        # Reset status label to default 'ready' state
+        # Reset status label to default 'ready' state (calls showMessage which handles indicator)
         self.showMessage("ANPE Ready", status_type='ready')
+
+    def set_checking(self):
+        """Set the status bar to indicate a background check is in progress."""
+        self.activity_indicator.show()
+        self.progress_bar.hide() # Hide progress bar during checking state
+        self.showMessage("Checking model status...", status_type='busy') # Use busy style for label
+        self.activity_indicator.checking() # Set indicator to checking state
 
     @pyqtSlot()
     def _clear_animation_reference(self):

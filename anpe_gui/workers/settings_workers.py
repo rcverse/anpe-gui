@@ -14,6 +14,7 @@ import shutil
 import spacy
 import importlib.metadata
 import re # Import regex module
+import traceback # <<< Added for detailed error logging
 
 from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 
@@ -26,7 +27,11 @@ try:
         DEFAULT_SPACY_ALIAS, DEFAULT_BENEPAR_ALIAS, # Needed by ModelActionWorker
         setup_models # Add setup_models here
     )
-    from anpe.utils.clean_models import clean_all
+    from anpe.utils.clean_models import (
+        clean_all,
+        uninstall_spacy_model,
+        uninstall_benepar_model
+    )
     from anpe.utils.model_finder import (
         find_installed_spacy_models, find_installed_benepar_models
     )
@@ -40,18 +45,14 @@ except ImportError as e:
     DEFAULT_BENEPAR_ALIAS = "default" # Need a default value
     def check_spacy_model(*args, **kwargs): return False
     def check_benepar_model(*args, **kwargs): return False
-    def install_spacy_model(*args, **kwargs): return False
-    def install_benepar_model(*args, **kwargs): return False
-    def clean_all(*args, **kwargs): return {"spacy": False, "benepar": False}
+    def install_spacy_model(model_name, log_callback=None): return False
+    def install_benepar_model(model_name, log_callback=None): return False
+    def clean_all(log_callback=None): return {"spacy": False, "benepar": False}
+    def uninstall_spacy_model(model_name, log_callback=None): return False
+    def uninstall_benepar_model(model_name, log_callback=None): return False
     def find_installed_spacy_models(): return []
     def find_installed_benepar_models(): return []
-    # Setup models worker needs the actual function
-    # try:
-    #     from anpe.utils.setup_models import setup_models
-    # except ImportError:
-    #     def setup_models(*args, **kwargs): return False
-    # Define the dummy here if the main import failed
-    def setup_models(*args, **kwargs): 
+    def setup_models(log_callback=None):
         logging.error("Dummy setup_models called - ANPE core import failed.")
         return False
     # NLTK dummy for path finding in ModelActionWorker
@@ -239,25 +240,33 @@ class CleanWorker(QObject):
     """Worker to run clean_all in a background thread."""
     finished = pyqtSignal(dict) # Return status dictionary from clean_all
     progress = pyqtSignal(str) # To send status updates
-    log_message = pyqtSignal(str) # Added for consistency, but not used
+    log_message = pyqtSignal(str) # Signal for detailed log messages
+
+    def _emit_log_message(self, message: str):
+        """Emits the log message signal."""
+        self.log_message.emit(message.strip())
 
     @pyqtSlot()
     def run(self):
         self.progress.emit("Starting model cleanup process...")
-        results = {}
+        results = {"spacy": False, "benepar": False} # Initialize results
         try:
-            # Emit more specific messages if possible within clean_all structure (if it supports callbacks/logging)
-            # For now, use generic start/end messages
-            self.progress.emit("Cleaning spaCy models...") # Example stage message
-            # Assume clean_all internally handles stages like spaCy, Benepar, NLTK
-            results = clean_all() # Removed logger passing
-            self.progress.emit("Cleaning Benepar models...") # Example stage message
+            # Assuming clean_all now accepts log_callback and logs internally
+            results = clean_all(log_callback=self._emit_log_message) # <<< Pass callback
             self.progress.emit("Model cleanup process finished.")
+        except ImportError:
+            error_msg = "Error: Could not import ANPE clean utilities."
+            logging.error(error_msg, exc_info=True)
+            self.progress.emit(error_msg)
+            self._emit_log_message(f"ERROR: {error_msg}\n{traceback.format_exc()}")
+            results = {"spacy": False, "benepar": False, "error": error_msg}
         except Exception as e:
-            logging.error(f"Exception during background model cleanup: {e}", exc_info=True)
+            error_msg = f"Exception during background model cleanup: {e}"
+            logging.error(error_msg, exc_info=True)
             self.progress.emit(f"Error during cleanup: {e}")
+            self._emit_log_message(f"ERROR: {error_msg}\n{traceback.format_exc()}") # Send error to log panel
             # Ensure results dict still has keys even on error
-            results = {"spacy": False, "benepar": False}
+            results = {"spacy": False, "benepar": False, "error": str(e)}
         finally:
             # Ensure finished is always emitted
             self.finished.emit(results)
@@ -266,7 +275,11 @@ class InstallDefaultsWorker(QObject):
     """Worker to run setup_models with default settings."""
     progress = pyqtSignal(str)
     finished = pyqtSignal(bool, str) # success, final_message
-    log_message = pyqtSignal(str) # Added for consistency, but not used directly by this worker
+    log_message = pyqtSignal(str) # Signal for detailed log messages
+
+    def _emit_log_message(self, message: str):
+        """Emits the log message signal."""
+        self.log_message.emit(message.strip())
 
     @pyqtSlot()
     def run(self):
@@ -274,15 +287,8 @@ class InstallDefaultsWorker(QObject):
         message = ""
         try:
             self.progress.emit("Starting default model setup...")
-            # Import setup_models here to avoid potential issues if core ANPE changes
-            # Relies on the import at the top of the file now
-            # from anpe.utils.setup_models import setup_models, check_all_models_present
-
-            # Although setup_models handles checks internally, we can emit progress messages
-            self.progress.emit("Running setup for default models...")
-            # We might need callbacks or better progress reporting from setup_models in the future
-            # For now, just call it.
-            success = setup_models() # Calls with default arguments
+            # Assuming setup_models now accepts log_callback and logs internally
+            success = setup_models(log_callback=self._emit_log_message) # <<< Pass callback
 
             if success:
                 message = "Default models installed/verified successfully."
@@ -295,11 +301,13 @@ class InstallDefaultsWorker(QObject):
             message = "Error: Could not import ANPE setup utilities."
             logging.error(message, exc_info=True)
             self.progress.emit(message)
+            self._emit_log_message(f"ERROR: {message}\n{traceback.format_exc()}") # Send error to log panel
             success = False
         except Exception as e:
             message = f"An unexpected error occurred during default setup: {e}"
             logging.error(message, exc_info=True)
             self.progress.emit(message)
+            self._emit_log_message(f"ERROR: {message}\n{traceback.format_exc()}") # Send error to log panel
             success = False
         finally:
             self.finished.emit(success, message)
@@ -307,7 +315,7 @@ class InstallDefaultsWorker(QObject):
 class ModelActionWorker(QObject):
     """Worker for installing or uninstalling specific models."""
     progress = pyqtSignal(str) # Message only for progress updates
-    finished = pyqtSignal(bool, str) # success, message
+    finished = pyqtSignal(str, str, bool, str) # action, alias, success, message
     log_message = pyqtSignal(str) # For detailed subprocess output
     
     def __init__(self, action: str, model_type: str, alias: str = None):
@@ -324,47 +332,12 @@ class ModelActionWorker(QObject):
         self.model_type = model_type
         self.alias = alias
         
-    def _run_subprocess_and_stream(self, cmd: list[str], description: str) -> tuple[int, list[str]]:
-        """Helper to run a subprocess, stream its output, and return status/output."""
-        self.log_message.emit(f"--- Running: {description} ---")
-        self.log_message.emit(f"Command: {' '.join(cmd)}")
-        full_output_lines = [] # Store lines for potential return
-        return_code = -1 # Default error code
-        # Regex to remove ANSI escape codes
-        ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|(?:\[[0-?]*[ -/]*[@-~]))')
-        try:
-            process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                encoding='utf-8',
-                bufsize=1,
-                creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0 # Hide console window on Windows
-            )
-            for line in iter(process.stdout.readline, ''):
-                line_strip = line.strip()
-                # Remove ANSI codes before emitting/storing
-                cleaned_line = ansi_escape.sub('', line_strip)
-                self.log_message.emit(cleaned_line) 
-                full_output_lines.append(cleaned_line) # Store cleaned line
-            process.stdout.close()
-            return_code = process.wait()
-            self.log_message.emit(f"--- {description} finished (code: {return_code}) ---")
-        except FileNotFoundError:
-            err_msg = f"ERROR: Command not found ({cmd[0]}). Is it installed and in PATH?"
-            self.log_message.emit(err_msg)
-            full_output_lines.append(err_msg)
-            logging.error(f"Command not found: {cmd[0]}")
-            return_code = -1 # Indicate error
-        except Exception as e:
-            err_msg = f"ERROR running {description}: {e}"
-            self.log_message.emit(err_msg)
-            full_output_lines.append(err_msg)
-            logging.error(f"Error running subprocess for {description}: {e}", exc_info=True)
-            return_code = -1 # Indicate error
-        return return_code, full_output_lines
-        
+        self.gui_log_handler = None # Attribute to hold the GUI handler instance
+
+    def _emit_log_message(self, message: str):
+        """Emits the log message signal."""
+        self.log_message.emit(message.strip())
+
     @pyqtSlot()
     def run(self):
         """Execute the requested model action."""
@@ -376,8 +349,6 @@ class ModelActionWorker(QObject):
         try:
             self.progress.emit(f"Starting {action_verb.lower()} {target_desc}...")
 
-            # spaCy / Benepar (Removed redundant outer check)
-            # if self.model_type == 'spacy' or self.model_type == 'benepar': # Removed redundant check
             if not self.alias:
                 message = f"Missing alias for {self.model_type} model action."
                 success = False
@@ -390,174 +361,92 @@ class ModelActionWorker(QObject):
                 else:
                     # --- INSTALL ACTION --- 
                     if self.action == 'install':
-                        install_success = True # Track overall install success
-                        
-                        # spaCy Specific Pre-checks/Installs
-                        if self.model_type == 'spacy' and model_name.endswith('_trf'):
-                            self.progress.emit("Checking for spacy-transformers...")
-                            try:
-                                importlib.metadata.version("spacy-transformers")
-                                self.log_message.emit("'spacy-transformers' is already installed.")
-                            except importlib.metadata.PackageNotFoundError:
-                                self.progress.emit("Installing spacy-transformers dependency...")
-                                cmd_trf = [sys.executable, '-m', 'pip', 'install', "spacy[transformers]"]
-                                rc_trf, _ = self._run_subprocess_and_stream(cmd_trf, "spacy-transformers install")
-                                if rc_trf != 0:
-                                    self.progress.emit("Failed to install 'spacy-transformers'. Model install may fail.")
-                                    # Don't set install_success to False here, let model download proceed
-                                else:
-                                    self.progress.emit("'spacy-transformers' installed.")
-                                    
-                        # Main Model Download/Install
-                        self.progress.emit(f"Downloading/installing {self.model_type} model {model_name}...")
-                        return_code = -1 # Default error
+                        # Use functions from anpe.utils.setup_models
+                        self.progress.emit(f"Calling {self.model_type} install function for {model_name}...")
+                         
                         if self.model_type == 'spacy':
-                            cmd_model = [sys.executable, '-m', 'spacy', 'download', model_name]
-                            return_code, _ = self._run_subprocess_and_stream(cmd_model, f"spaCy download {model_name}")
-                            install_success = (return_code == 0) and check_spacy_model(model_name)
+                            # Assuming install_spacy_model accepts log_callback
+                            success = install_spacy_model(model_name, log_callback=self._emit_log_message) # <<< Pass callback
                         elif self.model_type == 'benepar':
-                            escaped_nltk_data_dir = NLTK_DATA_DIR.replace('\\', '\\\\')
-                            benepar_script = (
-                                f"import nltk; import benepar; import sys; "
-                                f"nltk.data.path.insert(0, r'{escaped_nltk_data_dir}'); "
-                                f"print('--- Starting benepar.download(\'{model_name}\') ---', flush=True); "
-                                f"try: benepar.download('{model_name}'); print('--- benepar.download finished ---', flush=True); sys.exit(0); "
-                                f"except Exception as e: print(f'ERROR in benepar.download: {{e}}', flush=True); sys.exit(1);"
-                            )
-                            cmd_model = [sys.executable, '-c', benepar_script]
-                            return_code, _ = self._run_subprocess_and_stream(cmd_model, f"Benepar download {model_name}")
-                            install_success = check_benepar_model(model_name) # Check after attempt
-
-                        # Final Install Message/Status
-                        success = install_success
+                            # Assuming install_benepar_model accepts log_callback
+                            success = install_benepar_model(model_name, log_callback=self._emit_log_message) # <<< Pass callback
+ 
                         message = f"Successfully installed {self.model_type} model {model_name}." if success else \
-                                  f"Failed to install/verify {self.model_type} model {model_name} (code: {return_code}). Check logs."
+                                  f"Failed to install/verify {self.model_type} model {model_name}. Check logs."
                         self.progress.emit(message)
-                                      
+                                       
                     # --- UNINSTALL ACTION --- 
                     elif self.action == 'uninstall':
-                        uninstall_success = True # Track overall uninstall success
+                        # Use functions from anpe.utils.clean_models 
+                        self.progress.emit(f"Calling {self.model_type} uninstall function for {model_name}...")
                         
-                        # Check if present first (no subprocess needed)
-                        is_present = False
                         if self.model_type == 'spacy':
-                            is_present = model_name in find_installed_spacy_models()
+                            # Assuming uninstall_spacy_model accepts log_callback
+                            success = uninstall_spacy_model(model_name, log_callback=self._emit_log_message) # <<< Pass callback
                         elif self.model_type == 'benepar':
-                            is_present = model_name in find_installed_benepar_models()
-                            
-                        if not is_present:
-                            message = f"{self.model_type} model {model_name} is not installed."
-                            success = True # Already uninstalled
+                            # Assuming uninstall_benepar_model accepts log_callback
+                            success = uninstall_benepar_model(model_name, log_callback=self._emit_log_message) # <<< Pass callback
                         else:
-                            self.progress.emit(f"Attempting to uninstall {self.model_type} model {model_name}...")
-                            
-                            # spaCy Uninstall (uses pip)
-                            if self.model_type == 'spacy':
-                                cmd_uninstall = [sys.executable, "-m", "pip", "uninstall", "-y", model_name]
-                                rc_uninstall, out_uninstall = self._run_subprocess_and_stream(cmd_uninstall, f"pip uninstall {model_name}")
-                                # Check return code AND output message from pip
-                                pip_failed = rc_uninstall != 0 and not any("not installed" in line.lower() for line in out_uninstall)
-                                if pip_failed:
-                                     self.progress.emit(f"Pip uninstall command failed or reported issues.")
-                                     # Don't set uninstall_success=False yet, try file removal
-                                     
-                                # Manual File Removal (No Stream)
-                                self.progress.emit("Checking spaCy data directory for removal...")
-                                try:
-                                    data_path = spacy.util.get_data_path()
-                                    if data_path and os.path.exists(data_path):
-                                        model_path = os.path.join(data_path, model_name)
-                                        if os.path.exists(model_path):
-                                            self.progress.emit(f"Removing {model_path}...")
-                                            if os.path.isdir(model_path):
-                                                shutil.rmtree(model_path)
-                                            else:
-                                                os.remove(model_path)
-                                except Exception as e:
-                                    self.progress.emit(f"Could not access/remove from spaCy data directory: {e}")
-                                    # Don't mark as failure just for this
-                                    
-                                # Final spaCy Check
-                                if not check_spacy_model(model_name):
-                                    uninstall_success = True
-                                    message = f"Successfully uninstalled spaCy model {model_name}."
-                                else:
-                                    uninstall_success = False
-                                    message = f"Failed to completely uninstall spaCy model {model_name}."
+                             success = False # Should not happen
+                             logging.error(f"Unknown model type for uninstall: {self.model_type}")
 
-                            # Benepar Uninstall (Manual File Ops)
-                            elif self.model_type == 'benepar':
-                                found_something = False
-                                removal_errors = False
-                                try:
-                                    import nltk
-                                    self.progress.emit(f"Checking NLTK paths for {model_name} files...")
-                                    # Check directory
-                                    try:
-                                        model_dir_path = nltk.data.find(f'models/{model_name}')
-                                        if os.path.exists(model_dir_path):
-                                            found_something = True
-                                            self.progress.emit(f"Removing directory: {model_dir_path}")
-                                            try:
-                                                if os.path.isdir(model_dir_path):
-                                                    shutil.rmtree(model_dir_path)
-                                                else:
-                                                    os.remove(model_dir_path)
-                                            except Exception as e:
-                                                self.progress.emit(f"Failed to remove {model_dir_path}: {e}")
-                                                removal_errors = True
-                                    except LookupError:
-                                        self.progress.emit(f"Directory models/{model_name} not found.")
-                                        
-                                    # Check zip file
-                                    nltk_paths = nltk.data.path
-                                    for nltk_path in set(nltk_paths):
-                                        models_dir = os.path.join(nltk_path, "models")
-                                        if not os.path.isdir(models_dir):
-                                            continue
-                                        zip_path = os.path.join(models_dir, model_name + ".zip")
-                                        if os.path.exists(zip_path):
-                                            found_something = True
-                                            self.progress.emit(f"Removing zip file: {zip_path}")
-                                            try:
-                                                os.remove(zip_path)
-                                            except Exception as e:
-                                                self.progress.emit(f"Failed to remove zip file {zip_path}: {e}")
-                                                removal_errors = True
-                                                    
-                                except Exception as e:
-                                    message = f"Error checking/removing Benepar model files: {e}"
-                                    uninstall_success = False
-                                
-                                # Final Benepar Check (only if no error above)
-                                if uninstall_success:
-                                    if not check_benepar_model(model_name):
-                                        if found_something and not removal_errors:
-                                            message = f"Successfully uninstalled Benepar model {model_name}."
-                                            uninstall_success = True
-                                        elif not found_something:
-                                            message = f"Benepar model {model_name} was not found (already uninstalled?)"
-                                            uninstall_success = True
-                                        else: # Found something but had removal errors
-                                             message = f"Attempted uninstall of Benepar model {model_name}, but errors occurred."
-                                             uninstall_success = False
-                                    else:
-                                        message = f"Failed to completely uninstall Benepar model {model_name}."
-                                        uninstall_success = False
-                                        
-                        # Set overall success based on uninstall result
-                        success = uninstall_success
-                        # Ensure message is set if not already
-                        if not message:
-                            message = f"Uninstall process finished for {model_name}. Final status: {'Success' if success else 'Failed'}."
-                        self.progress.emit(message) # Emit final status for uninstall
+                        message = f"Successfully uninstalled {self.model_type} model {model_name}." if success else \
+                                  f"Failed to uninstall {self.model_type} model {model_name}. Check logs."
+                        self.progress.emit(message)
                             
+        except ImportError:
+            success = False
+            message = f"Error: Could not import ANPE core utilities for {self.action}."
+            logging.error(message, exc_info=True)
+            self.progress.emit(message)
+            self._emit_log_message(f"ERROR: {message}\n{traceback.format_exc()}")
         except Exception as e:
             success = False
             message = f"An unexpected error occurred during model action: {e}"
             logging.error(f"Model action worker error: {e}", exc_info=True)
             self.progress.emit(message) # Emit error to status label
-            self.log_message.emit(f"FATAL ERROR: {message}") # Emit error to log
+            self._emit_log_message(f"FATAL ERROR: {message}\n{traceback.format_exc()}") # Emit error to log
             
-        self.progress.emit("Operation complete.") # Keep this final generic message
-        self.finished.emit(success, message) 
+        finally:
+            self.progress.emit("Operation complete.") # Keep this final generic message
+            self.finished.emit(self.action, self.alias, success, message)
+
+# --- NEW WORKER for Status Check ---
+
+class StatusCheckWorker(QObject):
+    """Worker to asynchronously check for installed models."""
+    finished = pyqtSignal(dict) # Emits {'spacy_models': list, 'benepar_models': list, 'error': str|None}
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        logging.debug("StatusCheckWorker initialized.")
+
+    @pyqtSlot()
+    def run(self):
+        """Check for installed models."""
+        logging.debug("StatusCheckWorker run method started.")
+        status_update = {
+            'spacy_models': [],
+            'benepar_models': [],
+            'error': None
+        }
+        try:
+            # Assuming these imports are valid in this context
+            from anpe.utils.model_finder import find_installed_spacy_models, find_installed_benepar_models
+            status_update['spacy_models'] = find_installed_spacy_models()
+            status_update['benepar_models'] = find_installed_benepar_models()
+            logging.debug(f"StatusCheckWorker found models: SpaCy={status_update['spacy_models']}, Benepar={status_update['benepar_models']}")
+        except ImportError as e:
+            error_msg = f"Core ANPE components not found for status check: {e}"
+            logging.error(error_msg)
+            status_update['error'] = error_msg
+        except Exception as e:
+            error_msg = f"Error during model status check: {e}"
+            logging.error(error_msg, exc_info=True)
+            status_update['error'] = error_msg
+
+        logging.debug(f"StatusCheckWorker emitting finished signal with data: {status_update}")
+        self.finished.emit(status_update)
+        logging.debug("StatusCheckWorker run method finished.")
+
+# --- END NEW WORKER --- 
