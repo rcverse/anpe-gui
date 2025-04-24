@@ -8,10 +8,11 @@ import os
 from pathlib import Path
 import logging
 from PyQt6.QtWidgets import QApplication
-from PyQt6.QtCore import QTimer, pyqtSlot, QObject # Added pyqtSlot, QObject
+from PyQt6.QtCore import QTimer, pyqtSlot, QObject, Qt # Added Qt
 from PyQt6.QtGui import QFont # Original import
 from anpe_gui.main_window import MainWindow
-from anpe_gui.splash_screen import SplashScreen
+# from anpe_gui.splash_screen import SplashScreen # Original
+from anpe_gui.splash_screen_alt import AltSplashScreen # USE THE ALTERNATIVE SPLASH
 from anpe_gui.theme import apply_theme
 from anpe_gui.resource_manager import ResourceManager
 
@@ -55,7 +56,8 @@ def main():
     apply_theme(app)
 
     # --- SplashScreen Setup & Initialization --- 
-    splash = SplashScreen()
+    # splash = SplashScreen() # Original
+    splash = AltSplashScreen() # Use the new alternative splash screen
     
     # --- Slot to handle completion of splash screen initialization --- 
     @pyqtSlot(object) # Decorator to mark as a slot accepting an object (the status dict)

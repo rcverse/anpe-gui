@@ -250,9 +250,24 @@ class CleanWorker(QObject):
     def run(self):
         self.progress.emit("Starting model cleanup process...")
         results = {"spacy": False, "benepar": False} # Initialize results
+        logger = logging.getLogger('clean_models') # Get the logger instance
+        # Ensure the logger has a handler if called in a context where it might not
+        # (e.g., if run directly without the main app's logging setup)
+        if not logger.handlers:
+            ch = logging.StreamHandler()
+            # Use a basic level, assuming the main app configures level properly
+            ch.setLevel(logging.DEBUG) 
+            formatter = logging.Formatter('%(name)s - %(levelname)s - %(message)s')
+            ch.setFormatter(formatter)
+            logger.addHandler(ch)
+            # Set a default level for the logger itself if it has none
+            if logger.level == logging.NOTSET: 
+                logger.setLevel(logging.INFO)
+            logger.info("CleanWorker automatically added a basic StreamHandler to 'clean_models' logger as none were found.")
+
         try:
-            # Assuming clean_all now accepts log_callback and logs internally
-            results = clean_all(log_callback=self._emit_log_message) # <<< Pass callback
+            # Pass the logger instance and force=True to clean_all
+            results = clean_all(logger=logger, log_callback=self._emit_log_message, force=True)
             self.progress.emit("Model cleanup process finished.")
         except ImportError:
             error_msg = "Error: Could not import ANPE clean utilities."
@@ -260,6 +275,12 @@ class CleanWorker(QObject):
             self.progress.emit(error_msg)
             self._emit_log_message(f"ERROR: {error_msg}\n{traceback.format_exc()}")
             results = {"spacy": False, "benepar": False, "error": error_msg}
+        except TypeError as te: # Catch the specific TypeError
+            error_msg = f"TypeError during clean_all call: {te}. This might indicate an interface mismatch."
+            logger.error(error_msg, exc_info=True)
+            self.progress.emit(error_msg)
+            self._emit_log_message(f"ERROR: {error_msg}\n{traceback.format_exc()}")
+            results = {"spacy": False, "benepar": False, "error": str(te)}
         except Exception as e:
             error_msg = f"Exception during background model cleanup: {e}"
             logging.error(error_msg, exc_info=True)

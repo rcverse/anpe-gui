@@ -12,6 +12,7 @@ STATE_ACTIVE = 'active'
 STATE_WARNING = 'warning'
 STATE_ERROR = 'error'
 STATE_CHECKING = 'checking' # New state for background checks
+STATE_LOADING = 'loading' # New state specifically for splash loading
 
 class PulsingActivityIndicator(QWidget):
     """
@@ -146,6 +147,10 @@ class PulsingActivityIndicator(QWidget):
         """Transition to the CHECKING (yellow pulse) state."""
         self._set_state(STATE_CHECKING)
 
+    def loading(self):
+        """Transition to the LOADING (faster, transparent blue ripple) state."""
+        self._set_state(STATE_LOADING)
+
     def set_color(self, color):
         """Set the base color for the ACTIVE ripple state."""
         # Note: Idle, Warning, Error colors are fixed for status indication
@@ -172,8 +177,14 @@ class PulsingActivityIndicator(QWidget):
         self._error_blink_phase = (self._error_blink_phase + self._error_blink_speed) % (2 * math.pi)
         self._checking_pulse_phase = (self._checking_pulse_phase + self._checking_pulse_speed) % (2 * math.pi)
 
-        # --- Update ACTIVE state ripple progress ---
-        progress_step = 1.0 / self.ripple_duration_steps
+        # --- Update ACTIVE/LOADING state ripple progress ---
+        # Use faster duration for LOADING state
+        duration_steps = self.ripple_duration_steps
+        if self._target_state == STATE_LOADING:
+            duration_steps = 150 # Faster completion (was 200)
+        
+        progress_step = 1.0 / duration_steps if duration_steps > 0 else 1.0 # Avoid division by zero
+        
         new_ripples = []
         for progress in self.ripples:
             new_progress = progress + progress_step
@@ -181,20 +192,15 @@ class PulsingActivityIndicator(QWidget):
                 new_ripples.append(new_progress)
         self.ripples = new_ripples
 
-        # Launch new ripple only if fully in ACTIVE state and no ripple exists
-        # Consider launching slightly before full transition for smoother feel? No, keep it simple.
-        is_fully_active = (self._target_state == STATE_ACTIVE and self._transition_progress >= 1.0)
-        if is_fully_active and not self.ripples:
-            self.ripples.append(0.0)
-
-        # --- Stop Timer? ---
-        # Decide if the timer can stop. It should run if:
-        # 1. A transition is in progress.
-        # 2. The target state is ACTIVE (for ripples).
-        # 3. The target state is IDLE, WARNING, or ERROR (for glow animations).
-        # Essentially, it should always run if the widget is visible. Let Qt handle visibility.
-        # if self._transition_progress >= 1.0 and self._target_state == STATE_IDLE and not self.ripples:
-            # self._timer.stop() # Maybe stop if purely idle? Let's keep it running for simplicity.
+        # Launch new ripple if fully in ACTIVE or LOADING state and no ripple exists
+        # Maybe allow multiple overlapping ripples for LOADING state?
+        is_fully_active_or_loading = (self._target_state in [STATE_ACTIVE, STATE_LOADING] and self._transition_progress >= 1.0)
+        
+        # Simple approach: Launch one ripple when idle
+        if is_fully_active_or_loading and not self.ripples:
+             self.ripples.append(0.0)
+        
+        # TODO: Consider launching ripples more frequently for LOADING state if desired
 
         # Trigger repaint
         self.update()
@@ -281,6 +287,41 @@ class PulsingActivityIndicator(QWidget):
 
         return params
 
+    def _get_loading_params(self, width, height):
+        """Calculates parameters for the LOADING state (transparent blue ripple)."""
+        # Initialize parameters, similar to active
+        params = {
+            'type': 'loading', # Use a distinct type for clarity
+            'glow_radius': 0.0, 'glow_alpha': 0.0,
+            'center_dot_radius': 0.0, 'center_dot_alpha': 0.0,
+            'ripple_radius': 0.0, 'ripple_alpha': 0.0,
+            'color': self.active_color
+        }
+        min_widget_dim = min(width, height)
+
+        # Center Dot parameters (more transparent)
+        center_dot_max_alpha = 75 # Increased from 50, still less than active (100)
+        center_dot_radius = min_widget_dim * 0.12 # Same size as active
+        params['center_dot_alpha'] = center_dot_max_alpha
+        params['center_dot_radius'] = center_dot_radius
+
+        # Ripple parameters (more transparent)
+        if self.ripples:
+            progress = self.ripples[0]
+            ripple_max_radius = min_widget_dim * 0.5 
+            ripple_min_radius = ripple_max_radius * 0.10
+            t = progress
+            # Use same easing for now, speed difference via ripple launch frequency?
+            eased_progress = 1.0 - pow(1.0 - t, 3)
+            current_ripple_radius = ripple_min_radius + (ripple_max_radius - ripple_min_radius) * eased_progress
+            # Reduced starting alpha significantly from active state (180)
+            base_ripple_alpha = int(140 * (1.0 - progress)) # Increased from 100, still less than active (180)
+            base_ripple_alpha = max(0, min(255, base_ripple_alpha))
+            params['ripple_alpha'] = base_ripple_alpha
+            params['ripple_radius'] = current_ripple_radius
+
+        return params
+
     def _interpolate_color(self, color1, color2, progress):
         """Linearly interpolate between two QColors."""
         r = int(color1.red() * (1.0 - progress) + color2.red() * progress)
@@ -307,48 +348,55 @@ class PulsingActivityIndicator(QWidget):
 
         # Get parameters for the state we are transitioning FROM
         from_params = {}
-        if from_state in [STATE_IDLE, STATE_WARNING, STATE_ERROR, STATE_CHECKING]: # Added CHECKING
+        if from_state in [STATE_IDLE, STATE_WARNING, STATE_ERROR, STATE_CHECKING]:
             phase = 0.0
             if from_state == STATE_IDLE: phase = self._idle_breath_phase
             elif from_state == STATE_WARNING: phase = self._warning_breath_phase
             elif from_state == STATE_ERROR: phase = self._error_blink_phase
-            elif from_state == STATE_CHECKING: phase = self._checking_pulse_phase # Added
+            elif from_state == STATE_CHECKING: phase = self._checking_pulse_phase
             from_params = self._get_glow_params(from_state, phase)
         elif from_state == STATE_ACTIVE:
             from_params = self._get_active_params(width, height)
+        elif from_state == STATE_LOADING:
+            from_params = self._get_loading_params(width, height)
 
         # Get parameters for the state we are transitioning TO
         to_params = {}
-        if to_state in [STATE_IDLE, STATE_WARNING, STATE_ERROR, STATE_CHECKING]: # Added CHECKING
+        if to_state in [STATE_IDLE, STATE_WARNING, STATE_ERROR, STATE_CHECKING]:
             phase = 0.0
             if to_state == STATE_IDLE: phase = self._idle_breath_phase
             elif to_state == STATE_WARNING: phase = self._warning_breath_phase
             elif to_state == STATE_ERROR: phase = self._error_blink_phase
-            elif to_state == STATE_CHECKING: phase = self._checking_pulse_phase # Added
+            elif to_state == STATE_CHECKING: phase = self._checking_pulse_phase
             to_params = self._get_glow_params(to_state, phase)
         elif to_state == STATE_ACTIVE:
             to_params = self._get_active_params(width, height)
+        elif to_state == STATE_LOADING:
+            to_params = self._get_loading_params(width, height)
 
         # --- Unified Interpolation --- 
         def lerp(a, b, t):
             return a * (1.0 - t) + b * t
 
-        interp_glow_radius_factor = lerp(from_params['glow_radius'], to_params['glow_radius'], progress)
-        interp_glow_alpha = lerp(from_params['glow_alpha'], to_params['glow_alpha'], progress)
-        interp_glow_color = self._interpolate_color(from_params['color'] if from_params['type'] == 'glow' else QColor(0,0,0,0),
-                                                to_params['color'] if to_params['type'] == 'glow' else QColor(0,0,0,0),
+        interp_glow_radius_factor = lerp(from_params.get('glow_radius', 0.0), to_params.get('glow_radius', 0.0), progress)
+        interp_glow_alpha = lerp(from_params.get('glow_alpha', 0.0), to_params.get('glow_alpha', 0.0), progress)
+        interp_glow_color = self._interpolate_color(from_params.get('color', QColor(0,0,0,0)) if from_params.get('type') == 'glow' else QColor(0,0,0,0),
+                                                to_params.get('color', QColor(0,0,0,0)) if to_params.get('type') == 'glow' else QColor(0,0,0,0),
                                                 progress)
 
-        interp_dot_radius = lerp(from_params['center_dot_radius'], to_params['center_dot_radius'], progress)
-        interp_dot_alpha = lerp(from_params['center_dot_alpha'], to_params['center_dot_alpha'], progress)
+        interp_dot_radius = lerp(from_params.get('center_dot_radius', 0.0), to_params.get('center_dot_radius', 0.0), progress)
+        interp_dot_alpha = lerp(from_params.get('center_dot_alpha', 0.0), to_params.get('center_dot_alpha', 0.0), progress)
 
-        interp_ripple_radius = lerp(from_params['ripple_radius'], to_params['ripple_radius'], progress)
-        interp_ripple_alpha = lerp(from_params['ripple_alpha'], to_params['ripple_alpha'], progress)
+        interp_ripple_radius = lerp(from_params.get('ripple_radius', 0.0), to_params.get('ripple_radius', 0.0), progress)
+        interp_ripple_alpha = lerp(from_params.get('ripple_alpha', 0.0), to_params.get('ripple_alpha', 0.0), progress)
 
-        # The active color applies to both dot and ripple
-        interp_active_color = self._interpolate_color(from_params['color'] if from_params['type'] == 'active' else QColor(0,0,0,0),
-                                                  to_params['color'] if to_params['type'] == 'active' else QColor(0,0,0,0),
-                                                  progress)
+        # Active/Loading color interpolation
+        active_loading_types = ['active', 'loading']
+        interp_active_color = self._interpolate_color(
+            from_params.get('color', QColor(0,0,0,0)) if from_params.get('type') in active_loading_types else QColor(0,0,0,0),
+            to_params.get('color', QColor(0,0,0,0)) if to_params.get('type') in active_loading_types else QColor(0,0,0,0),
+            progress
+        )
 
         # --- Unified Drawing --- 
 
@@ -370,11 +418,11 @@ class PulsingActivityIndicator(QWidget):
         # Draw Center Dot component
         if interp_dot_alpha > 5 and interp_dot_radius > 0.5:
             center_dot_gradient = QRadialGradient(center_f, interp_dot_radius)
-            center_color = QColor(interp_active_color) # Base color is interpolated active color
-            center_color.setAlpha(int(interp_dot_alpha)) # Apply interpolated alpha
-            center_dot_gradient.setColorAt(0.0, center_color)
+            center_color = QColor(interp_active_color) # Use interpolated active/loading color
+            center_color.setAlpha(int(interp_dot_alpha))
             edge_color = QColor(center_color)
             edge_color.setAlpha(0)
+            center_dot_gradient.setColorAt(0.0, center_color)
             center_dot_gradient.setColorAt(1.0, edge_color)
             painter.setBrush(QBrush(center_dot_gradient))
             int_radius = int(interp_dot_radius)
@@ -383,11 +431,11 @@ class PulsingActivityIndicator(QWidget):
         # Draw Ripple component
         if interp_ripple_alpha > 5 and interp_ripple_radius > 0.5:
             ripple_gradient = QRadialGradient(center_f, interp_ripple_radius)
-            center_color = QColor(interp_active_color) # Base color is interpolated active color
-            center_color.setAlpha(int(interp_ripple_alpha)) # Apply interpolated alpha
-            ripple_gradient.setColorAt(0.0, center_color)
+            center_color = QColor(interp_active_color) # Use interpolated active/loading color
+            center_color.setAlpha(int(interp_ripple_alpha))
             edge_color = QColor(center_color)
             edge_color.setAlpha(0)
+            ripple_gradient.setColorAt(0.0, center_color)
             ripple_gradient.setColorAt(1.0, edge_color)
             painter.setBrush(QBrush(ripple_gradient))
             int_radius = int(interp_ripple_radius)

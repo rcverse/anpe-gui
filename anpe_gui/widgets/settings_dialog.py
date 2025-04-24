@@ -1070,7 +1070,10 @@ class ModelsPage(QWidget):
         # Signal that models *might* have changed
         logging.debug("Emitting models_changed signal after clean.")
         self.models_changed.emit()
-        # ----------------------------------------------------
+        # --- Trigger refresh to update UI ---
+        logging.debug("Triggering refresh status after clean action.")
+        QTimer.singleShot(0, self.refresh_status)
+        # ------------------------------------
 
         logging.debug("on_clean_finished completed.")
 
@@ -1244,7 +1247,10 @@ class ModelsPage(QWidget):
         # Signal that models *might* have changed
         logging.debug("Emitting models_changed signal after install defaults.")
         self.models_changed.emit()
-        # ----------------------------------------------------
+        # --- Trigger refresh to update UI ---
+        logging.debug("Triggering refresh status after install defaults action.")
+        QTimer.singleShot(0, self.refresh_status)
+        # ------------------------------------
 
         logging.debug("on_install_defaults_finished completed.")
 
