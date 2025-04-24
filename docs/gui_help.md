@@ -75,7 +75,7 @@ This tab displays the results of the extraction process.
 *   If nested phrases were included (<option>Include nested phrases</option> was checked), the display will show the hierarchical structure. By default, nested phrases might be collapsed; click on a parent phrase entry to expand or collapse its children.
 
 #### Detached Results Viewer
-*   Click the <button>⇱</button> button (Detach) in the upper-right corner of the results area to open the results in a separate, resizable window.
+*   Click the <button><icon>external-link.svg</icon></button> button (Detach, looks like a box with an arrow) in the upper-right corner of the results area to open the results in a separate, resizable window.
 *   This detached window provides a larger view that can be moved independently.
 *   All functionality from the main view is preserved:
     *   Search filter box to quickly find specific phrases.
