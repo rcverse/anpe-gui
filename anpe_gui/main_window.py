@@ -11,6 +11,7 @@ from pathlib import Path
 from datetime import datetime # Added datetime
 import platform # Added platform
 import subprocess # Added subprocess
+import importlib.metadata # Added importlib.metadata
 
 # Import version from dedicated module
 from anpe_gui.version import __version__ as GUI_VERSION
@@ -29,11 +30,15 @@ from PyQt6.QtGui import QIcon, QTextCursor, QScreen, QPixmap, QFont, QColor, QCl
 from .theme import PRIMARY_COLOR, SECONDARY_COLOR, SUCCESS_COLOR, ERROR_COLOR, WARNING_COLOR, INFO_COLOR, BORDER_COLOR, get_scroll_bar_style, LIGHT_HOVER_BLUE, TEXT_COLOR # Update the import
 from .widgets.help_dialog import HelpDialog # Import the new dialog
 try:
-    from anpe import ANPEExtractor, __version__ as anpe_version
+    # Use importlib.metadata to get the version
+    anpe_version_str = importlib.metadata.version('anpe')
+    # Still need to import the class itself
+    from anpe import ANPEExtractor
 except ImportError:
+    # This handles the case where 'anpe' is not installed at all
     QMessageBox.critical(
-        None, 
-        "Import Error", 
+        None,
+        "Import Error",
         "Could not import ANPE library. Please make sure it's installed."
     )
     anpe_version_str = "N/A" # Use a different name to avoid conflict if ANPEExtractor fails
@@ -42,8 +47,6 @@ except ImportError:
         def __init__(self, *args, **kwargs): pass
         def extract_noun_phrases(self, *args, **kwargs): return {}
         def export_to_file(self, *args, **kwargs): pass
-else:
-    anpe_version_str = anpe_version # Use the real version if import succeeds
 
 
 from anpe_gui.workers import ExtractionWorker, BatchWorker, QtLogHandler
@@ -241,7 +244,7 @@ class MainWindow(QMainWindow):
         # Detailed information using setInformativeText
         informative_text = (
             f"Details: {details}<br><br>"
-            "Please go to the settings to install the required components."
+            "Please go to the settings to install the required models."
         )
         msg_box.setInformativeText(informative_text)
         

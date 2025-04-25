@@ -75,8 +75,8 @@ This tab displays the results of the extraction process.
 *   If nested phrases were included (<option>Include nested phrases</option> was checked), the display will show the hierarchical structure. By default, nested phrases might be collapsed; click on a parent phrase entry to expand or collapse its children.
 
 #### Detached Results Viewer
-*   Click the <button><icon>external-link.svg</icon></button> button (Detach, looks like a box with an arrow) in the upper-right corner of the results area to open the results in a separate, resizable window.
-*   This detached window provides a larger view that can be moved independently.
+*   Click the detach button (looks like a box with an arrow) in the upper-right corner of the results area to open the results in a separate, resizable window.
+*   This detached window provides a larger view that can be moved independently, allowing you to see more info.
 *   All functionality from the main view is preserved:
     *   Search filter box to quickly find specific phrases.
     *   Sorting options (by appearance order, length, or structure).
@@ -109,7 +109,7 @@ Where:
 
 ### Status Bar & Log Panel
 *   **Status Bar**: Located at the very bottom of the window. It displays the current state of the application (e.g., "ANPE Ready", "Processing...", "Export Complete", error messages). Click on the status message to toggle the Log Panel.
-*   **Log Panel**: A toggleable panel appearing above the status bar. It shows more detailed logs about processing steps, model loading, potential warnings, and errors. Useful for troubleshooting.
+*   **Log Panel**: A log panel can be toggled by clicking on the status bar. It shows more detailed logs about processing steps, model loading, potential warnings, and errors. Useful for troubleshooting.
 
 ### Settings Dialog (⚙️ Icon)
 Click the gear icon (<q>⚙️</q>) in the top-right corner to open the Settings dialog. This allows you to manage models, update the core library, and view application information.
