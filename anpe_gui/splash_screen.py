@@ -1,386 +1,381 @@
 """
-Splash screen for the ANPE GUI application.
+Alternative Splash screen for the ANPE GUI application, featuring a centered
+activity indicator behind a transparent logo.
 """
 
 import os
 import time
-import logging # Added logging
-from PyQt6.QtWidgets import (QSplashScreen, QApplication, QProgressBar, 
-                             QLabel, QVBoxLayout, QWidget)
-from PyQt6.QtGui import QPixmap, QPainter, QColor, QFont, QLinearGradient, QBrush, QRegion, QPainterPath, QPen
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QCoreApplication, QPropertyAnimation, QEasingCurve, QPointF, pyqtProperty, QRect, QRectF, QThread, QObject, pyqtSlot # Added QThread, QObject, pyqtSlot
-from anpe_gui.theme import PRIMARY_COLOR  # Import the primary color
-from anpe_gui.version import __version__ as gui_version  # Import GUI version directly from version.py
-from anpe_gui.workers.status_worker import ModelStatusChecker # Import the new worker
+import logging
+from PyQt6.QtWidgets import (QWidget, QApplication, QLabel, QVBoxLayout, 
+                             QHBoxLayout, QFrame, QSizePolicy, QStackedLayout) # Added QFrame, QSizePolicy, QStackedLayout, QHBoxLayout
+from PyQt6.QtGui import QPixmap, QPainter, QColor, QFont, QRegion, QPainterPath, QPen
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QCoreApplication, QPropertyAnimation, QEasingCurve, QPoint, QRect, QSize, QObject, pyqtSlot, QRectF, pyqtProperty, QThread # Added QThread
+from PyQt6.QtSvg import QSvgRenderer # Added for SVG rendering
 
-# --- Worker for Background Initialization --- MOVED TO status_worker.py
-# --- End Worker ---
-
-# Flag indicating if the initializer class is usable (always True now)
-# INITIALIZER_AVAILABLE = True # REMOVED
+# Import necessary components from the project
+from anpe_gui.widgets.activity_indicator import PulsingActivityIndicator, STATE_IDLE, STATE_ACTIVE, STATE_CHECKING, STATE_ERROR, STATE_WARNING, STATE_LOADING # Added STATE_LOADING
+from anpe_gui.theme import PRIMARY_COLOR, SUCCESS_COLOR, WARNING_COLOR, ERROR_COLOR
+from anpe_gui.version import __version__ as gui_version
+from anpe_gui.workers.status_worker import ModelStatusChecker
+from anpe_gui.resource_manager import ResourceManager
 
 # Attempt to import ANPE core version (still needed for display)
 try:
-    from anpe import __version__ as core_version  # Import core version
+    from anpe import __version__ as core_version
 except ImportError:
-    core_version = "N/A"  # Fallback if core version can't be imported
+    core_version = "N/A"
 
 
-class SplashScreen(QSplashScreen):
+class SplashScreen(QWidget): # Changed from QSplashScreen to QWidget for custom layout
     """
-    Custom splash screen with banner, progress bar, and actual initialization.
+    Alternative splash screen with a large activity indicator behind the logo
+    and a separate status message area below.
     """
-    # Emits the final status dictionary or None on error when check is done
     initialization_complete = pyqtSignal(object)
-    
-    # Signal emitted when fade-out is complete and the splash can truly close (Kept from previous logic)
     fade_out_complete = pyqtSignal()
-    
-    def __init__(self, banner_path=None):
-        """
-        Initialize the splash screen using the provided banner or fallback.
-        """
-        # Create a custom banner instead of loading from file
-        pixmap = self._create_custom_banner()
-        
-        super().__init__(pixmap)
-        self.pixmap_height = pixmap.height()
-        self.pixmap_width = pixmap.width()
-        
-        # Window flags
-        self.setWindowFlags(Qt.WindowType.WindowStaysOnTopHint | 
+
+    # Define sizes
+    INDICATOR_SIZE = 300 # Size of the pulsing indicator background
+    LOGO_SIZE = 280    # Logical size of the logo overlay
+    PILLAR_HEIGHT = 40 # New fixed height for capsule shape
+    PILLAR_MAX_WIDTH_FACTOR = 0.8 # Pillar width relative to indicator
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        # --- Window Setup ---
+        self.setWindowFlags(Qt.WindowType.SplashScreen | # Use SplashScreen flag for behavior
+                           Qt.WindowType.WindowStaysOnTopHint |
                            Qt.WindowType.FramelessWindowHint)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground) # Allow transparency
+        self.setStyleSheet("background-color: transparent;") # Ensure widget background is clear
+
+        # Overall layout
+        self.main_layout = QVBoxLayout(self)
+        self.main_layout.setContentsMargins(0, 0, 0, 0)
+        self.main_layout.setSpacing(0)
+
+        # --- Top Area (Indicator + Logo) ---
+        self.top_container = QWidget()
+        self.top_container.setFixedSize(self.INDICATOR_SIZE, self.INDICATOR_SIZE)
+        self.top_container.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         
-        # --- Define border radius before using it ---
-        self.border_radius = 10 # Define radius for consistency
+        self.stacked_layout = QStackedLayout(self.top_container)
+        self.stacked_layout.setContentsMargins(0,0,0,0)
+        self.stacked_layout.setStackingMode(QStackedLayout.StackingMode.StackAll) # Overlay items
+
+        # Activity Indicator (Background)
+        self.activity_indicator = PulsingActivityIndicator()
+        self.activity_indicator.setFixedSize(self.INDICATOR_SIZE, self.INDICATOR_SIZE)
+        self.stacked_layout.addWidget(self.activity_indicator)
+
+        # Logo Label (Foreground)
+        self.logo_label = QLabel()
+        self.logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # Load and set the PNG logo pixmap
+        self._load_and_set_logo() 
+        self.stacked_layout.addWidget(self.logo_label)
+
+        # Explicitly set the logo label as the current widget to ensure it's on top
+        self.stacked_layout.setCurrentWidget(self.logo_label)
+
+        # --- Bottom Area (Status Pillar) ---
+        self.status_pillar = QFrame()
+        self.status_pillar.setFixedHeight(self.PILLAR_HEIGHT) # Set fixed height
+        # Constrain width relative to indicator size
+        max_pillar_width = int(self.INDICATOR_SIZE * self.PILLAR_MAX_WIDTH_FACTOR)
+        self.status_pillar.setMaximumWidth(max_pillar_width)
+        self.status_pillar.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed) # Fixed height, max width
+        # Calculate radius for capsule shape
+        pillar_radius = self.PILLAR_HEIGHT // 2
+        self.status_pillar.setStyleSheet(f"""
+            QFrame {{
+                background-color: white;
+                border-radius: {pillar_radius}px; /* Capsule shape */
+            }}
+        """)
+        pillar_layout = QVBoxLayout(self.status_pillar)
+        # Adjust margins for new height/shape
+        pillar_layout.setContentsMargins(pillar_radius, 5, pillar_radius, 5) 
+        pillar_layout.setSpacing(0) # Reduce spacing if needed
+
+        self.status_label = QLabel("Initializing...")
+        self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # Make font bold and slightly larger
+        self.status_label.setStyleSheet("color: #333; font-size: 12pt; font-weight: bold;") 
+
+        pillar_layout.addWidget(self.status_label)
+
+        # --- Assemble Main Layout ---
+        # Center the top container horizontally
+        h_layout_top = QHBoxLayout()
+        h_layout_top.addStretch()
+        h_layout_top.addWidget(self.top_container)
+        h_layout_top.addStretch()
         
-        # Setup content widget below banner
-        self.setup_content_area()
+        # Center the pillar horizontally
+        h_layout_bottom = QHBoxLayout()
+        h_layout_bottom.addStretch()
+        h_layout_bottom.addWidget(self.status_pillar)
+        h_layout_bottom.addStretch()
         
-        # Set fixed size for the entire splash window
-        content_height = self.content_widget.sizeHint().height()
-        total_height = self.pixmap_height + content_height
-        self.setFixedSize(self.pixmap_width, total_height)
-        
-        # Initialization state
+        self.main_layout.addLayout(h_layout_top)
+        # Add specific spacing between logo area and pillar
+        self.main_layout.addSpacing(3) # Reduced from 5
+        self.main_layout.addLayout(h_layout_bottom)
+        self.main_layout.addSpacing(10) # Add some padding below pillar
+
+        # Adjust window size - make width slightly larger than indicator for padding
+        total_height = self.INDICATOR_SIZE + self.PILLAR_HEIGHT + 20 # Indicator + Spacing + Pillar + Spacing
+        self.setFixedSize(self.INDICATOR_SIZE + 40, total_height) # Wider padding
+
+        # --- Initialization State (Copied from original) ---
         self.init_thread = None
         self.init_worker = None
-        self.final_init_status = None # To store the result
-        self.status_label.setText("Initializing...")
+        self.final_init_status = None
+        self.activity_indicator.checking() # Start in checking state
 
-        # Animation setup
+        # --- Animation Setup (Copied from original) ---
         self._fade_animation = None
-        self.setWindowOpacity(0.0) # Start fully transparent for fade-in
+        self.setWindowOpacity(0.0)
 
         # Center the splash screen
         self._center_on_screen()
 
-    def _create_custom_banner(self):
-        """Create a custom banner with logo on left and text on right."""
-        width, height = 560, 200  # Wider banner for better spacing
-        pixmap = QPixmap(width, height)
-        pixmap.fill(Qt.GlobalColor.transparent)  # Start with transparent background
-        
-        # Create high-quality painter with anti-aliasing
-        painter = QPainter(pixmap)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
-        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
-        
-        # Elegant background with subtle gradient
-        gradient = QLinearGradient(0, 0, width, height)
-        gradient.setColorAt(0, QColor("#f9f9f9"))  # Light color start
-        gradient.setColorAt(1, QColor("#f0f0f0"))  # Slightly darker end
-        painter.fillRect(0, 0, width, height, QBrush(gradient))
-        
-        # Clear separation - left side for logo, right side for text
-        logo_section_width = 220  # Dedicated width for logo
-        text_section_width = width - logo_section_width
-        
-        # Left side: Logo only
-        from anpe_gui.resource_manager import ResourceManager
-        
-        # Load the PNG with higher resolution for better quality
-        logo = ResourceManager.get_pixmap("app_icon.png")
-        
-        # Get device pixel ratio for high DPI displays
-        device_pixel_ratio = QApplication.primaryScreen().devicePixelRatio()
-        
-        # Scale logo to appropriate size while maintaining aspect ratio
-        # Multiply by device pixel ratio to ensure crisp display on high DPI screens
-        logo_size = 160
-        target_size = int(logo_size * device_pixel_ratio)
-        
-        # Only scale down, not up to avoid pixelation
-        if logo.width() > target_size or logo.height() > target_size:
-            logo = logo.scaled(target_size, target_size, 
-                            Qt.AspectRatioMode.KeepAspectRatio, 
-                            Qt.TransformationMode.SmoothTransformation)
-        
-        # Set the device pixel ratio to ensure proper rendering
-        # This is a crucial step for high DPI displays
-        if device_pixel_ratio > 1.0:
-            logo.setDevicePixelRatio(device_pixel_ratio)
+    def _load_and_set_logo(self):
+        """Loads the PNG logo and sets it on the label, handling HiDPI."""
+        try:
+            # Use the standard PNG icon
+            logo_pixmap = ResourceManager.get_pixmap("app_icon.png")
+            if logo_pixmap.isNull():
+                 logging.error("Failed to load app_icon.png")
+                 return
+
+            # Determine device pixel ratio for high-DPI rendering
+            dpr = self.devicePixelRatioF() if hasattr(self, 'devicePixelRatioF') else QApplication.primaryScreen().devicePixelRatio()
             
-        # Calculate display size (adjusted for device pixel ratio)
-        display_size = logo_size
-        
-        # Center the logo in the left section
-        logo_x = (logo_section_width - display_size) // 2
-        logo_y = (height - display_size) // 2
-        
-        # Draw the pixmap at the calculated position
-        painter.drawPixmap(logo_x, logo_y, display_size, display_size, logo)
-        
-        # Add a subtle separator line between logo and text
-        separator_x = logo_section_width
-        painter.setPen(QPen(QColor(220, 220, 220), 1))  # Lighter color for separator
-        painter.drawLine(separator_x, 40, separator_x, height - 40)
-        
-        # Right side: Text content - nothing else
-        text_start_x = logo_section_width + 30  # Start text with padding after separator
-        
-        # Draw main title "ANPE" using PRIMARY_COLOR
-        primary_color = QColor(PRIMARY_COLOR)
-        title_gradient = QLinearGradient(text_start_x, 0, text_start_x + 200, 0)
-        title_gradient.setColorAt(0, primary_color.lighter(110))  # Slightly lighter version
-        title_gradient.setColorAt(1, primary_color)  # Primary color
-        
-        # Use system fonts with better fallbacks for sharper text
-        title_font = QFont()
-        title_font.setFamily("Segoe UI")
-        title_font.setPointSize(48)
-        title_font.setWeight(QFont.Weight.Bold)
-        if not QFont(title_font).exactMatch():
-            title_font.setFamily("Arial")
-            if not QFont(title_font).exactMatch():
-                title_font.setFamily(title_font.defaultFamily())
-            
-        painter.setFont(title_font)
-        # Use QPen with width 1.5 for slightly bolder, crisper text
-        painter.setPen(QPen(QBrush(title_gradient), 1.5))
-        
-        # Draw title in its own region with proper vertical centering
-        title_rect = QRect(text_start_x, 40, text_section_width - 40, 80)
-        painter.drawText(title_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignBottom, "ANPE")
-        
-        # Draw subtitle with proper spacing below the title - LIGHTER COLOR
-        subtitle_font = QFont()
-        subtitle_font.setFamily("Segoe UI")
-        subtitle_font.setPointSize(14)
-        subtitle_font.setWeight(QFont.Weight.Normal)
-        if not QFont(subtitle_font).exactMatch():
-            subtitle_font.setFamily("Arial")
-            if not QFont(subtitle_font).exactMatch():
-                subtitle_font.setFamily(subtitle_font.defaultFamily())
-                
-        painter.setFont(subtitle_font)
-        painter.setPen(QColor("#666666"))  # Darker gray for better contrast and readability
-        
-        # Subtitle in its own region below the title
-        subtitle_rect = QRect(text_start_x, 105, text_section_width - 40, 30)
-        painter.drawText(subtitle_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop, 
-                        "Another Noun Phrase Extractor")
-        
-        # Add version info with improved rendering
-        version_font = QFont()
-        version_font.setFamily("Segoe UI")
-        version_font.setPointSize(9)  # Smaller font size
-        version_font.setWeight(QFont.Weight.Normal)  # Lighter weight
-        
-        if not QFont(version_font).exactMatch():
-            version_font.setFamily("Arial")
-            if not QFont(version_font).exactMatch():
-                version_font.setFamily(version_font.defaultFamily())
-                
-        painter.setFont(version_font)
-        painter.setPen(QColor("#777777"))  # Lighter color
-        
-        version_rect = QRect(text_start_x, 155, text_section_width - 40, 20)
-        version_text = f"GUI v{gui_version} | Core v{core_version}"
-        painter.drawText(version_rect, Qt.AlignmentFlag.AlignLeft, version_text)
-        
-        # Add author credit with improved rendering
-        credit_font = QFont()
-        credit_font.setFamily("Segoe UI")
-        credit_font.setPointSize(8)  # Smaller font size
-        credit_font.setWeight(QFont.Weight.Normal)
-        
-        if not QFont(credit_font).exactMatch():
-            credit_font.setFamily("Arial")
-            if not QFont(credit_font).exactMatch():
-                credit_font.setFamily(credit_font.defaultFamily())
-                
-        painter.setFont(credit_font)
-        painter.setPen(QColor("#888888"))  # Lighter color
-        
-        credit_rect = QRect(text_start_x, 175, text_section_width - 40, 20)
-        painter.drawText(credit_rect, Qt.AlignmentFlag.AlignLeft, "@rcverse")
-        
-        painter.end()
-        return pixmap
+            # Create a properly scaled pixmap if DPR > 1
+            if dpr > 1.0:
+                physical_logo_size = int(self.LOGO_SIZE * dpr)
+                # Scale the loaded pixmap smoothly to the target physical size
+                # Use scaled() which returns a new pixmap
+                scaled_pixmap = logo_pixmap.scaled(physical_logo_size, physical_logo_size, 
+                                                 Qt.AspectRatioMode.KeepAspectRatio,
+                                                 Qt.TransformationMode.SmoothTransformation)
+                # Set DPR on the *new* scaled pixmap
+                scaled_pixmap.setDevicePixelRatio(dpr)
+                final_pixmap = scaled_pixmap
+            else:
+                # For standard DPI, just use the original pixmap
+                final_pixmap = logo_pixmap 
+                # Ensure DPR is set even for 1.0 for consistency if needed, though usually implicit
+                final_pixmap.setDevicePixelRatio(1.0)
 
-    def setup_content_area(self):
-        """Set up the widget holding progress bar and status text with improved styles."""
-        self.content_widget = QWidget(self)
-        # Set background to white. Removed rounded bottom corners.
-        self.content_widget.setStyleSheet(f"""
-            background-color: white; 
-            border-bottom-left-radius: 0px; /* Ensure square */
-            border-bottom-right-radius: 0px; /* Ensure square */
-            border-top-left-radius: 0px; 
-            border-top-right-radius: 0px;
-        """) 
-        self.content_layout = QVBoxLayout(self.content_widget)
-        self.content_layout.setContentsMargins(25, 10, 25, 15) # Reduced top/bottom margins
-        self.content_layout.setSpacing(5) # Reduced spacing
+            # Set the prepared pixmap on the label
+            self.logo_label.setPixmap(final_pixmap)
+            self.logo_label.setFixedSize(self.LOGO_SIZE, self.LOGO_SIZE)
+            self.logo_label.setScaledContents(True)
 
-        # Status label
-        self.status_label = QLabel("Loading...")
-        self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        # Use a slightly larger, darker font
-        self.status_label.setStyleSheet("color: #444; font-size: 10pt;")
-
-        self.content_layout.addWidget(self.status_label)
-
-        # Position the content widget below the pixmap
-        # Adjust height calculation since progress bar is removed
-        self.content_widget.adjustSize() # Recalculate size based on content (just the label now)
-        content_height_hint = self.content_widget.sizeHint().height()
-        self.content_widget.setGeometry(0, self.pixmap_height, 
-                                      self.pixmap_width, content_height_hint)
+        except Exception as e:
+            logging.error(f"Error loading/setting PNG logo: {e}", exc_info=True)
 
     def _center_on_screen(self):
         """Center the splash screen on the primary display."""
-        screen = QApplication.primaryScreen().geometry()
-        self.move(screen.center() - self.rect().center())
+        if QApplication.primaryScreen():
+            screen = QApplication.primaryScreen().geometry()
+            self.move(screen.center() - self.rect().center())
+        else:
+             logging.warning("Could not get primary screen geometry to center splash.")
+             # Fallback: center based on available screens? Or just default position.
+             pass 
 
-    # Override drawContents to prevent default drawing over our content widget
-    def drawContents(self, painter):
-        pass # We handle drawing via the content widget
-
-    def showMessage(self, message, alignment=Qt.AlignmentFlag.AlignLeft, color=QColor("black")):
-        """Display a message (overrides QSplashScreen method)."""
-        # Use our custom label instead
+    # --- Message Handling ---
+    def showMessage(self, message, alignment=None, color=None): # Args ignored, kept for compatibility if needed
+        """Display a message on the status label."""
         self.status_label.setText(message)
-        # self.repaint() # Not needed as label updates automatically
+        # REMOVED: State changes should be handled explicitly in init callbacks
+        # if "success" in message.lower():
+        #     self.activity_indicator.idle() # Use idle (green) for success
+        # elif "fail" in message.lower() or "error" in message.lower():
+        #     self.activity_indicator.error()
+        # else:
+        #     # Keep checking or default to active if needed?
+        #     # Let external calls manage indicator state mostly.
+        #     pass
 
-    # Removed set_progress method - progress will be handled by init logic
-
+    # --- Fade Animations (Copied & Adapted) ---
     def _fade(self, start_value, end_value, duration, on_finish=None):
         """Helper function to create and run fade animation."""
-        if self._fade_animation:
-            self._fade_animation.stop() # Stop existing animation
+        if self._fade_animation and self._fade_animation.state() == QPropertyAnimation.State.Running:
+            self._fade_animation.stop() 
 
-        self._fade_animation = QPropertyAnimation(self, b"windowOpacity")
+        self._fade_animation = QPropertyAnimation(self, b"windowOpacity", self) # Parent 'self'
         self._fade_animation.setDuration(duration)
-        self._fade_animation.setStartValue(float(start_value)) # Ensure float
-        self._fade_animation.setEndValue(float(end_value))     # Ensure float
+        self._fade_animation.setStartValue(float(start_value))
+        self._fade_animation.setEndValue(float(end_value))
         self._fade_animation.setEasingCurve(QEasingCurve.Type.InOutQuad)
-        
+
+        # Ensure previous connections are cleared before connecting new ones
+        try:
+            self._fade_animation.finished.disconnect()
+        except TypeError:
+            pass # No connection existed
+
         if on_finish:
-            # Disconnect previous connections to avoid multiple calls
-            try:
-                self._fade_animation.finished.disconnect() 
-            except TypeError: # No connection exists
-                pass 
             self._fade_animation.finished.connect(on_finish)
-            
+            # Ensure cleanup happens *after* fade finishes
+            self._fade_animation.finished.connect(self._cleanup_animation) 
+
         self._fade_animation.start()
+
+    @pyqtSlot()
+    def _cleanup_animation(self):
+        # Disconnect the cleanup itself to prevent multiple calls if restarted
+        try:
+            self._fade_animation.finished.disconnect(self._cleanup_animation)
+        except TypeError:
+            pass 
+        # print("Fade animation finished, cleaning up.") # Debug
+        # self._fade_animation = None # Don't nullify immediately, state check might be needed
 
     def fade_in(self, duration=300):
         """Fade the splash screen in."""
-        self.setWindowOpacity(0.0) # Ensure starting point
-        self.show() # Make it visible before animating opacity
+        self.setWindowOpacity(0.0)
+        self.show()
+        self.raise_() # Try explicitly raising the window
+        self.activateWindow() # Try explicitly activating the window
         self._fade(0.0, 1.0, duration)
 
     def fade_out(self, duration=300):
         """Fade the splash screen out."""
-        # Ensure we start from full opacity for the fade-out effect
-        current_opacity = self.windowOpacity()
-        # Connect the fade animation's finished signal to actually close the window
-        self._fade(current_opacity, 0.0, duration, self._on_fade_out_complete) 
+        current_opacity = self.windowOpacity
+        self._fade(current_opacity, 0.0, duration, self._on_fade_out_complete)
 
+    @pyqtSlot()
     def _on_fade_out_complete(self):
         """Called when the fade-out animation finishes."""
-        logging.debug("Splash fade out complete.")
-        self.fade_out_complete.emit() # Emit signal *before* closing
-        self.close() # Actually close the window now
-        self._fade_animation = None # Clean up animation object
+        logging.debug("AltSplash fade out complete.")
+        self.fade_out_complete.emit()
+        self.close() # Close the widget
 
-    # --- Initialization Logic --- 
 
+    # --- Initialization Logic (Copied & Adapted) ---
     def start_initialization(self):
         """Start the background model check using ModelStatusChecker."""
-        self.status_label.setText("Checking model status...")
-        logging.info("Splash: Starting background initialization check...")
-        QCoreApplication.processEvents() # Ensure UI updates
+        self.showMessage("Loading ANPE...")
+        self.activity_indicator.loading() # USE NEW LOADING STATE
+        logging.info("AltSplash: Starting background initialization check...")
+        QCoreApplication.processEvents()
 
-        # Check if a thread is already running (unlikely here, but good practice)
         if self.init_thread and self.init_thread.isRunning():
-            logging.warning("Splash: Initialization thread already running.")
+            logging.warning("AltSplash: Initialization thread already running.")
             return
 
         try:
-            # 1. Create Worker
             self.init_worker = ModelStatusChecker()
-        except Exception as e: # Catch potential issues creating the worker
-            logging.error(f"Splash: Failed to create ModelStatusChecker: {e}", exc_info=True)
-            # Emit error directly if worker creation fails
+        except Exception as e:
+            logging.error(f"AltSplash: Failed to create ModelStatusChecker: {e}", exc_info=True)
             self._emit_completion({'error': f"Failed to start check: {e}"})
             return
 
-        # 2. Create Thread and Move Worker
         self.init_thread = QThread(self)
         self.init_worker.moveToThread(self.init_thread)
 
-        # 3. Connect Signals
+        # Connect signals
         self.init_thread.started.connect(self.init_worker.run)
-        # Connect NEW signals from ModelStatusChecker to existing slots
         self.init_worker.status_checked.connect(self._on_init_success)
         self.init_worker.error_occurred.connect(self._on_init_error)
-        # Cleanup connections
         self.init_worker.status_checked.connect(self.init_thread.quit)
         self.init_worker.error_occurred.connect(self.init_thread.quit)
         self.init_thread.finished.connect(self.init_worker.deleteLater)
         self.init_thread.finished.connect(self.init_thread.deleteLater)
-        # Clear references when thread finishes
         self.init_thread.finished.connect(self._clear_init_references)
 
-        # 4. Start the Thread
         self.init_thread.start()
 
     @pyqtSlot()
     def _clear_init_references(self):
-        """Clear worker and thread references when the thread finishes."""
-        logging.debug("Splash: Clearing init worker and thread references.")
+        logging.debug("AltSplash: Clearing init worker and thread references.")
         self.init_worker = None
         self.init_thread = None
 
-    @pyqtSlot(object) # Receives the status dictionary 
+    @pyqtSlot(object)
     def _on_init_success(self, status_dict):
-        """Slot called when the background initialization check completes successfully."""
-        logging.info(f"Splash Screen: Initialization check successful. Status: {status_dict}")
+        logging.info(f"AltSplash: Initialization check successful. Status: {status_dict}")
         self.final_init_status = status_dict
-        self.showMessage("ANPE initialization successful.") # Refined message
+        self.showMessage("ANPE initialization successful.")
+        # self.activity_indicator.idle() # REMOVED: Keep loading animation running on success
         self._emit_completion(self.final_init_status)
-        
+
     @pyqtSlot(str)
     def _on_init_error(self, error_message):
-        """Slot called when the background initialization check fails."""
-        logging.error(f"Splash Screen: Initialization check failed: {error_message}")
-        # Create a status dictionary representing the error
-        error_status = {
-            'spacy_models': [], 'benepar_models': [],
-            'error': error_message
-        }
+        logging.error(f"AltSplash: Initialization check failed: {error_message}")
+        error_status = {'spacy_models': [], 'benepar_models': [], 'error': error_message}
         self.final_init_status = error_status
-        self.showMessage(f"Initialization failed: {error_message.split(':')[0]}...") # Show short error
+        self.showMessage(f"Initialization failed: {error_message.split(':')[0]}...")
+        self.activity_indicator.error() # Switch to red blink on error
         self._emit_completion(self.final_init_status)
 
     def _emit_completion(self, status):
-        """Emits the final signal and prepares for fade-out (but doesn't start it yet)."""
-        logging.debug(f"Splash screen emitting initialization_complete with status: {status}")
+        logging.debug(f"AltSplash emitting initialization_complete with status: {status}")
         self.initialization_complete.emit(status)
-        # The fade_out will be triggered externally by the main application logic
-        # after the main window is created and shown.
+        # Fade out is triggered externally by app.py
+
+# --- pyqtProperty for opacity animation ---
+    def getWindowOpacity(self):
+        return super().windowOpacity()
+
+    def setWindowOpacity(self, opacity):
+        super().setWindowOpacity(opacity)
+
+    # Define the property
+    windowOpacity = pyqtProperty(float, getWindowOpacity, setWindowOpacity)
+
+
+# --- Example Usage (for testing standalone) ---
+if __name__ == '__main__':
+    import sys
+    logging.basicConfig(level=logging.DEBUG) # Enable debug logging for test
+
+    app = QApplication(sys.argv)
+
+    # --- Mock ModelStatusChecker for testing ---
+    class MockModelStatusChecker(QObject):
+        status_checked = pyqtSignal(object)
+        error_occurred = pyqtSignal(str)
+        
+        def run(self):
+            print("Mock checker running...")
+            QTimer.singleShot(2000, self._finish_success) # Simulate success after 2s
+            # QTimer.singleShot(2000, self._finish_error) # Simulate error after 2s
+            
+        def _finish_success(self):
+            print("Mock checker success.")
+            self.status_checked.emit({'spacy_models': ['en_core_web_sm'], 'benepar_models': ['benepar_en3'], 'error': None})
+            
+        def _finish_error(self):
+            print("Mock checker error.")
+            self.error_occurred.emit("Mock Error: Model not found")
+            
+    # --- Monkey patch the original checker ---
+    original_checker = ModelStatusChecker
+    ModelStatusChecker = MockModelStatusChecker 
+    # --- End Mocking ---
+
+    splash = SplashScreen()
+
+    # Connect signal to fade out splash after init (for testing)
+    def handle_complete(status):
+        print(f"Test: Init complete: {status}")
+        # QTimer.singleShot(500, splash.fade_out) # REMOVED: Don't fade out automatically
+
+    splash.initialization_complete.connect(handle_complete)
+    # splash.fade_out_complete.connect(app.quit) # REMOVED: Don't quit automatically
+
+    splash.fade_in()
+    splash.start_initialization()
+
+    # Restore original checker if needed (though app quits here)
+    # ModelStatusChecker = original_checker 
+
+    sys.exit(app.exec()) 

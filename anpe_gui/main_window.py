@@ -1726,8 +1726,11 @@ class MainWindow(QMainWindow):
     # --- Help Function --- 
     def show_help(self, anchor: Optional[str] = None): # Modified to accept optional anchor
         """Creates and shows the custom HelpDialog, optionally scrolling to an anchor."""
-        base_dir = get_base_path()
-        help_file_path = base_dir / "docs" / "gui_help.md" # Use base_dir and correct filename
+        # base_dir = get_base_path() # No longer needed for this
+        # help_file_path = base_dir / "docs" / "gui_help.md" # Old path
+
+        # Use ResourceManager to get the correct path
+        help_file_path = ResourceManager.get_resource_path("gui_help.md") 
 
         # Check if file exists before creating dialog
         if not help_file_path.is_file():
