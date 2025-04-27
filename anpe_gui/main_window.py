@@ -205,7 +205,7 @@ class MainWindow(QMainWindow):
                 message = "ANPE Ready"
                 self.status_bar.showMessage(message, 3000, status_type=status_type)
                 if hasattr(self, 'process_button'): self.process_button.setEnabled(True)
-                logging.info("MainWindow initialized successfully.")
+                logging.debug("MainWindow initialized successfully.")
             else:
                 # Models are missing, but no other error occurred
                 self.extractor_ready = False
@@ -1437,7 +1437,7 @@ class MainWindow(QMainWindow):
             if not isinstance(handler, QtLogHandler):
                 logger.removeHandler(handler)
         
-        logging.info("Logging initialized.")
+        logging.debug("Logging initialized.")
         return log_widget
     
     def log(self, message: str, level: int = logging.INFO):

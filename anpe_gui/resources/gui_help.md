@@ -5,7 +5,7 @@ Welcome to the ANPE (Another Noun Phrase Extractor) GUI! This application provid
 ## Starting the app
 When you start the app, ANPE will automatically check for required language models in the background. 
 
-If any essential model *types* are missing, the status bar will display a warning (e.g., "Missing required models: spaCy model(s), NLTK data. Use 'Manage Models' (⚙️ icon) to install.") and the "Process" button will remain disabled.
+If any essential model are missing, the status bar will display a warning (e.g., "Missing required models: spaCy model(s), NLTK data. Use 'Manage Models' (⚙️ icon) to install.") and the "Process" button will remain disabled.
 
 Model installation and management are handled through the <button>Settings</button> dialog, accessible via the gear icon (<q>⚙️</q>) in the top-right corner. This dialog requires an internet connection for downloading models.
 
@@ -111,7 +111,7 @@ Where:
 *   **Status Bar**: Located at the very bottom of the window. It displays the current state of the application (e.g., "ANPE Ready", "Processing...", "Export Complete", error messages). Click on the status message to toggle the Log Panel.
 *   **Log Panel**: A log panel can be toggled by clicking on the status bar. It shows more detailed logs about processing steps, model loading, potential warnings, and errors. Useful for troubleshooting.
 
-### Settings Dialog (⚙️ Icon)
+### Settings Dialog
 Click the gear icon (<q>⚙️</q>) in the top-right corner to open the Settings dialog. This allows you to manage models, update the core library, and view application information.
 
 #### Models Page

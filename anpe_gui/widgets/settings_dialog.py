@@ -1303,15 +1303,16 @@ class ModelsPage(QWidget):
             if self.log_text:
                 self.log_dialog.text_edit.setText(self.log_text)
             
-            # Add clear button
-            clear_button = QPushButton("Clear Log")
-            clear_button.clicked.connect(self._clear_log)
-            clear_button.setFixedWidth(100)
+            # Add close button
+            close_button = QPushButton("Close") # Changed text
+            # REMOVED: clear_button.clicked.connect(self._clear_log)
+            close_button.clicked.connect(self.log_dialog.accept) # Connect to accept
+            close_button.setFixedWidth(100)
             
             # Add button layout
             button_layout = QHBoxLayout()
             button_layout.addStretch(1)
-            button_layout.addWidget(clear_button)
+            button_layout.addWidget(close_button) # Changed variable name
             
             # Add widgets to layout
             layout.addWidget(self.log_dialog.text_edit)
@@ -1324,12 +1325,6 @@ class ModelsPage(QWidget):
         self.log_dialog.show()
         self.log_dialog.raise_()
         self.log_dialog.activateWindow()
-    
-    def _clear_log(self):
-        """Clears the log text."""
-        self.log_text = ""
-        if self.log_dialog and self.log_dialog.isVisible():
-            self.log_dialog.text_edit.clear()
     
     def _center_dialog_on_parent(self, dialog):
         """Centers a dialog on its parent."""
@@ -1909,15 +1904,16 @@ class CorePage(QWidget):
             if self.log_text:
                 self.log_dialog.text_edit.setText(self.log_text)
             
-            # Add clear button
-            clear_button = QPushButton("Clear Log")
-            clear_button.clicked.connect(self._clear_log)
-            clear_button.setFixedWidth(100)
+            # Add close button
+            close_button = QPushButton("Close") # Changed text
+            # REMOVED: clear_button.clicked.connect(self._clear_log)
+            close_button.clicked.connect(self.log_dialog.accept) # Connect to accept
+            close_button.setFixedWidth(100)
             
             # Add button layout
             button_layout = QHBoxLayout()
             button_layout.addStretch(1)
-            button_layout.addWidget(clear_button)
+            button_layout.addWidget(close_button) # Changed variable name
             
             # Add widgets to layout
             layout.addWidget(self.log_dialog.text_edit)
@@ -1930,12 +1926,6 @@ class CorePage(QWidget):
         self.log_dialog.show()
         self.log_dialog.raise_()
         self.log_dialog.activateWindow()
-    
-    def _clear_log(self):
-        """Clears the log text."""
-        self.log_text = ""
-        if self.log_dialog and self.log_dialog.isVisible():
-            self.log_dialog.text_edit.clear()
     
     def _center_dialog_on_parent(self, dialog):
         """Centers a dialog on its parent."""

@@ -254,7 +254,7 @@ class SplashScreen(QWidget): # Changed from QSplashScreen to QWidget for custom 
     @pyqtSlot()
     def _on_fade_out_complete(self):
         """Called when the fade-out animation finishes."""
-        logging.debug("AltSplash fade out complete.")
+        logging.debug("Splash fade out complete.")
         self.fade_out_complete.emit()
         self.close() # Close the widget
 
@@ -264,17 +264,17 @@ class SplashScreen(QWidget): # Changed from QSplashScreen to QWidget for custom 
         """Start the background model check using ModelStatusChecker."""
         self.showMessage("Loading ANPE...")
         self.activity_indicator.loading() # USE NEW LOADING STATE
-        logging.info("AltSplash: Starting background initialization check...")
+        logging.info("Splash: Starting background initialization check...")
         QCoreApplication.processEvents()
 
         if self.init_thread and self.init_thread.isRunning():
-            logging.warning("AltSplash: Initialization thread already running.")
+            logging.warning("Splash: Initialization thread already running.")
             return
 
         try:
             self.init_worker = ModelStatusChecker()
         except Exception as e:
-            logging.error(f"AltSplash: Failed to create ModelStatusChecker: {e}", exc_info=True)
+            logging.error(f"Splash: Failed to create ModelStatusChecker: {e}", exc_info=True)
             self._emit_completion({'error': f"Failed to start check: {e}"})
             return
 
@@ -295,13 +295,13 @@ class SplashScreen(QWidget): # Changed from QSplashScreen to QWidget for custom 
 
     @pyqtSlot()
     def _clear_init_references(self):
-        logging.debug("AltSplash: Clearing init worker and thread references.")
+        logging.debug("Splash: Clearing init worker and thread references.")
         self.init_worker = None
         self.init_thread = None
 
     @pyqtSlot(object)
     def _on_init_success(self, status_dict):
-        logging.info(f"AltSplash: Initialization check successful. Status: {status_dict}")
+        logging.info(f"Splash: Initialization check successful. Status: {status_dict}")
         self.final_init_status = status_dict
         self.showMessage("ANPE initialization successful.")
         # self.activity_indicator.idle() # REMOVED: Keep loading animation running on success
@@ -309,7 +309,7 @@ class SplashScreen(QWidget): # Changed from QSplashScreen to QWidget for custom 
 
     @pyqtSlot(str)
     def _on_init_error(self, error_message):
-        logging.error(f"AltSplash: Initialization check failed: {error_message}")
+        logging.error(f"Splash: Initialization check failed: {error_message}")
         error_status = {'spacy_models': [], 'benepar_models': [], 'error': error_message}
         self.final_init_status = error_status
         self.showMessage(f"Initialization failed: {error_message.split(':')[0]}...")
@@ -317,7 +317,7 @@ class SplashScreen(QWidget): # Changed from QSplashScreen to QWidget for custom 
         self._emit_completion(self.final_init_status)
 
     def _emit_completion(self, status):
-        logging.debug(f"AltSplash emitting initialization_complete with status: {status}")
+        logging.debug(f"Splash emitting initialization_complete with status: {status}")
         self.initialization_complete.emit(status)
         # Fade out is triggered externally by app.py
 

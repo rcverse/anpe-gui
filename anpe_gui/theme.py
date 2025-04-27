@@ -353,6 +353,7 @@ def get_stylesheet():
         min-height: 20px; /* Adjusted min-height */
         background-color: white;
         min-width: 80px; 
+        combobox-popup: 0;
     }}
     QComboBox:focus {{
         border: 1px solid {PRIMARY_COLOR};
@@ -380,7 +381,7 @@ def get_stylesheet():
     /* Style the dropdown view */
     QComboBox QAbstractItemView {{
         background-color: {BACKGROUND_COLOR};
-        border: 1px solid {BORDER_COLOR};
+        border: none; /* Explicitly remove border */
         padding: 2px 0px; /* Add slight vertical padding to view */
         outline: 0px; /* Remove focus outline */
         border-radius: 2px; /* Add slight rounding */
@@ -388,16 +389,28 @@ def get_stylesheet():
     /* Style individual items */
     QComboBox QAbstractItemView::item {{
         padding: 5px 10px; /* Increased padding for taller items */
-        background-color: {BACKGROUND_COLOR}; /* Default background */
+        background-color: transparent; /* Use transparent background by default */
         color: {TEXT_COLOR}; /* Default text */
         min-height: 22px; /* Increased min height */
         outline: 0;
+        border: none; /* Ensure no borders on items */
     }}
-    /* Removed :selected style for dropdown items to avoid hover conflicts */
-    /* Style hovered items (not selected) */
+    /* Style selected items (when not hovered) - using a slightly darker blue */
+    QComboBox QAbstractItemView::item:selected {{
+        background-color: {SECONDARY_COLOR}20; /* Light wash of secondary color */
+        color: {TEXT_COLOR};
+        outline: 0;
+    }}
+    /* Style hovered items (when not selected) */
     QComboBox QAbstractItemView::item:hover {{
-        background-color: {LIGHT_HOVER_BLUE}; /* Light blue hover */
-        color: {TEXT_COLOR}; /* Keep default text color on hover */
+        background-color: {LIGHT_HOVER_BLUE} !important; /* Light blue hover (Forced) */
+        color: {TEXT_COLOR};
+        outline: 0;
+    }}
+    /* Style selected AND hovered items - ensure hover color takes precedence */
+    QComboBox QAbstractItemView::item:selected:hover {{
+        background-color: {LIGHT_HOVER_BLUE} !important; /* Explicitly use light blue (Forced) */
+        color: {TEXT_COLOR};
         outline: 0;
     }}
 

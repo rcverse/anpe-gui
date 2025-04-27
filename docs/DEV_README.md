@@ -46,7 +46,7 @@ README.md                 # Main project README (user-focused)
 
 ## Key Components
 
-*   **`app.py`**: Sets up `QApplication`, theme, handles High-DPI scaling, initiates the `AltSplashScreen`.
+*   **`app.py`**: Sets up `QApplication`, theme, handles High-DPI scaling, initiates the `SplashScreen`.
 *   **`splash_screen_alt.py`**: Shows splash image overlaying a `PulsingActivityIndicator`, runs initial model presence check in a background thread (`ModelStatusChecker` in `workers/status_worker.py`), signals completion or error to `app.py`.
 *   **`main_window.py`**: The central hub. 
     *   Builds the main UI using `QTabWidget` for Input/Output.

@@ -36,6 +36,9 @@ def main():
     app.setApplicationName("ANPE GUI")
     app.setOrganizationName("ANPE")
     
+    # Force Fusion style for consistent look across platforms (especially macOS)
+    app.setStyle("Fusion")
+    
     # REMOVED: Initialize resource manager (no longer needed)
     # ResourceManager.initialize()
     
