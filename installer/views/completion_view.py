@@ -53,70 +53,73 @@ class CompletionViewWidget(QWidget):
         # Status Title
         self.status_title = QLabel("Setup Status") # Placeholder text
         self.status_title.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-        self.status_title.setStyleSheet(TITLE_LABEL_STYLE)
+        self.status_title.setStyleSheet("font-size: 26px; font-weight: bold; color: #0078D7; font-family: 'Segoe UI', Arial, sans-serif;")
         header_layout.addWidget(self.status_title, 1)  # Stretch factor 1
         
         layout.addLayout(header_layout)
         
-        # Add separator line with better styling
-        separator = QFrame()
-        separator.setFrameShape(QFrame.Shape.HLine)
-        separator.setFrameShadow(QFrame.Shadow.Sunken)
-        separator.setStyleSheet("background-color: #e0e0e0; border: none; height: 1px;")
-        separator.setFixedHeight(1)
-        layout.addWidget(separator)
-        
-        # Only add a small spacing after separator
-        layout.addSpacing(10)
+        # Add spacing instead of separator
+        layout.addSpacing(15)
 
         # --- Info Text ---
         self.info_text = QLabel("Details about the setup process outcome...") # Placeholder
         self.info_text.setWordWrap(True)
         self.info_text.setAlignment(Qt.AlignmentFlag.AlignLeft)
-        self.info_text.setStyleSheet("font-size: 14px; color: #333333;")
+        self.info_text.setStyleSheet("font-size: 15px; color: #333333; font-family: 'Segoe UI', Arial, sans-serif; line-height: 140%;")
         layout.addWidget(self.info_text)
         
         # --- Error Highlight Label (only shown on failure) ---
         self.error_highlight = QLabel()
         self.error_highlight.setWordWrap(True)
-        self.error_highlight.setStyleSheet("font-size: 13px; color: #DD3333; background-color: #FFEEEE; padding: 8px; border-radius: 4px;")
+        self.error_highlight.setStyleSheet("""
+            font-size: 13px; 
+            color: #DD3333; 
+            background-color: #FFEEEE; 
+            padding: 12px; 
+            border-radius: 6px;
+            border-left: 4px solid #DD3333;
+            margin: 8px 0px;
+            font-family: 'Segoe UI', Arial, sans-serif;
+        """)
         self.error_highlight.setVisible(False)
         layout.addWidget(self.error_highlight)
         
         # --- Log Viewer (only shown on failure) ---
         self.log_container = QWidget()
         log_layout = QVBoxLayout(self.log_container)
-        log_layout.setContentsMargins(0, 8, 0, 0)
-        log_layout.setSpacing(5)
+        log_layout.setContentsMargins(0, 12, 0, 0)
+        log_layout.setSpacing(8)
         
         # Add log header and Export button on the same line
         log_header_layout = QHBoxLayout()
         
         log_header = QLabel("Setup Log:")
-        log_header.setStyleSheet("font-weight: bold; color: #555555;")
+        log_header.setStyleSheet("font-weight: bold; color: #444444; font-family: 'Segoe UI', Arial, sans-serif; font-size: 14px;")
         log_header_layout.addWidget(log_header)
         
         log_header_layout.addStretch()
         
         # Export log button - moved to the header line
         export_button = QPushButton("Export Log")
+        export_button.setCursor(Qt.CursorShape.PointingHandCursor)
         export_button.setStyleSheet("""
             QPushButton {
-                background-color: #005A9C;
+                background-color: #0078D7;
                 color: white;
                 border: none;
-                border-radius: 3px;
-                padding: 3px 8px;
-                font-size: 11px;
+                border-radius: 4px;
+                padding: 4px 10px;
+                font-size: 12px;
+                font-family: 'Segoe UI', Arial, sans-serif;
             }
             QPushButton:hover {
-                background-color: #0066b2;
+                background-color: #1A88E1;
             }
             QPushButton:pressed {
-                background-color: #005299;
+                background-color: #005A9E;
             }
         """)
-        export_button.setFixedSize(80, 24)  # Make button smaller
+        export_button.setFixedSize(90, 26)  # Make button slightly larger
         export_button.clicked.connect(self._export_log)
         log_header_layout.addWidget(export_button)
         
@@ -125,9 +128,16 @@ class CompletionViewWidget(QWidget):
         self.log_viewer = QTextEdit()
         self.log_viewer.setReadOnly(True)
         self.log_viewer.setFont(QFont("Consolas", 9))
-        self.log_viewer.setStyleSheet(LOG_TEXT_AREA_STYLE)
-        self.log_viewer.setMinimumHeight(100)  # Reduced height
-        self.log_viewer.setMaximumHeight(150)  # Added maximum height
+        self.log_viewer.setStyleSheet("""
+            background-color: #F8F8F8; 
+            border: 1px solid #E0E0E0;
+            border-radius: 5px;
+            padding: 8px;
+            selection-background-color: #0078D7;
+            selection-color: white;
+        """)
+        self.log_viewer.setMinimumHeight(120)  # Increased height slightly
+        self.log_viewer.setMaximumHeight(180)  # Increased maximum height
         log_layout.addWidget(self.log_viewer)
         
         layout.addWidget(self.log_container)
@@ -136,11 +146,11 @@ class CompletionViewWidget(QWidget):
         # --- Reporting Instructions (only shown on failure) ---
         self.report_container = QWidget()
         report_layout = QVBoxLayout(self.report_container)
-        report_layout.setContentsMargins(0, 5, 0, 5)
-        report_layout.setSpacing(3)  # Reduced spacing
+        report_layout.setContentsMargins(0, 10, 0, 5)
+        report_layout.setSpacing(5)
         
         report_label = QLabel("Report this issue:")
-        report_label.setStyleSheet("font-weight: bold; color: #555555;")
+        report_label.setStyleSheet("font-weight: bold; color: #444444; font-family: 'Segoe UI', Arial, sans-serif; font-size: 14px;")
         report_layout.addWidget(report_label)
         
         # Put reporting links and note on the same line
@@ -148,21 +158,21 @@ class CompletionViewWidget(QWidget):
         
         github_link = QLabel('<a href="https://github.com/rcverse/Another-Noun-Phrase-Extractor/issues">GitHub Issue</a>')
         github_link.setOpenExternalLinks(True)
-        github_link.setStyleSheet("font-size: 13px;")
+        github_link.setStyleSheet("font-size: 13px; font-family: 'Segoe UI', Arial, sans-serif;")
         links_layout.addWidget(github_link)
         
-        links_layout.addWidget(QLabel("|"))
+        links_layout.addWidget(QLabel("•"))
         
         email_link = QLabel('<a href="mailto:rcverse6@gmail.com">Email</a>')
         email_link.setOpenExternalLinks(True)
-        email_link.setStyleSheet("font-size: 13px;")
+        email_link.setStyleSheet("font-size: 13px; font-family: 'Segoe UI', Arial, sans-serif;")
         links_layout.addWidget(email_link)
         
-        links_layout.addSpacing(15)  # Add some spacing before the note
+        links_layout.addSpacing(20)  # Add more spacing before the note
         
         # Add the note on the same line
         report_note = QLabel("Please include the exported log file with your report.")
-        report_note.setStyleSheet("font-size: 12px; font-style: italic; color: #666666;")
+        report_note.setStyleSheet("font-size: 12px; font-style: italic; color: #666666; font-family: 'Segoe UI', Arial, sans-serif;")
         links_layout.addWidget(report_note)
         
         links_layout.addStretch()
@@ -175,8 +185,14 @@ class CompletionViewWidget(QWidget):
         layout.addStretch(1)
 
         # --- Options (Windows Specific, shown on success) ---
-        options_layout = QVBoxLayout()
-        options_layout.setSpacing(8)
+        self.options_container = QWidget()
+        options_layout = QVBoxLayout(self.options_container)
+        options_layout.setSpacing(12)
+        options_layout.setContentsMargins(0, 5, 0, 5)
+        
+        options_title = QLabel("Installation Options")
+        options_title.setStyleSheet("font-weight: bold; color: #444444; font-family: 'Segoe UI', Arial, sans-serif; font-size: 14px;")
+        options_layout.addWidget(options_title)
         
         self.shortcut_checkbox = QCheckBox("Create Desktop/Start Menu Shortcut")
         self.shortcut_checkbox.setChecked(True) # Default to checked
@@ -184,10 +200,21 @@ class CompletionViewWidget(QWidget):
             QCheckBox {
                 font-size: 14px;
                 spacing: 10px;
+                font-family: 'Segoe UI', Arial, sans-serif;
+                padding: 3px;
             }
             QCheckBox::indicator {
-                width: 16px;
-                height: 16px;
+                width: 18px;
+                height: 18px;
+            }
+            QCheckBox::indicator:checked {
+                background-color: #0078D7;
+                border: 2px solid #0078D7;
+                border-radius: 3px;
+            }
+            QCheckBox::indicator:unchecked {
+                border: 2px solid #999999;
+                border-radius: 3px;
             }
         """)
         options_layout.addWidget(self.shortcut_checkbox)
@@ -198,37 +225,65 @@ class CompletionViewWidget(QWidget):
             QCheckBox {
                 font-size: 14px;
                 spacing: 10px;
+                font-family: 'Segoe UI', Arial, sans-serif;
+                padding: 3px;
             }
             QCheckBox::indicator {
-                width: 16px;
-                height: 16px;
+                width: 18px;
+                height: 18px;
+            }
+            QCheckBox::indicator:checked {
+                background-color: #0078D7;
+                border: 2px solid #0078D7;
+                border-radius: 3px;
+            }
+            QCheckBox::indicator:unchecked {
+                border: 2px solid #999999;
+                border-radius: 3px;
             }
         """)
         options_layout.addWidget(self.launch_checkbox)
         
         # Add options with spacing
-        layout.addLayout(options_layout)
-        layout.addSpacing(10)
+        layout.addWidget(self.options_container)
+        layout.addSpacing(20)
 
         # --- Complete/Close Button ---
         button_layout = QHBoxLayout()
         button_layout.addStretch()
         
         self.complete_button = QPushButton("Complete") # Text changes based on state
+        self.complete_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.complete_button.setObjectName("CompleteButton")
-        self.complete_button.setStyleSheet(PRIMARY_BUTTON_STYLE)
-        self.complete_button.setFixedWidth(120)  # Set a fixed width
+        self.complete_button.setStyleSheet("""
+            QPushButton {
+                background-color: #0078D7;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 8px 16px;
+                font-size: 14px;
+                font-weight: bold;
+                font-family: 'Segoe UI', Arial, sans-serif;
+                min-width: 120px;
+            }
+            QPushButton:hover {
+                background-color: #1A88E1;
+            }
+            QPushButton:pressed {
+                background-color: #005A9E;
+            }
+        """)
         self.complete_button.clicked.connect(self._handle_complete)
         
         button_layout.addWidget(self.complete_button)
         button_layout.addStretch()
         
         layout.addLayout(button_layout)
-        layout.addSpacing(5)  # Small margin at the bottom
+        layout.addSpacing(8)  # Small margin at the bottom
 
         # Hide options initially, shown by set_success_state
-        self.shortcut_checkbox.setVisible(False)
-        self.launch_checkbox.setVisible(False)
+        self.options_container.setVisible(False)
 
     def set_success_state(self, success: bool, log_content: str = "", error_message: str = None):
         """Configure the view based on the setup outcome."""
@@ -240,15 +295,33 @@ class CompletionViewWidget(QWidget):
         if success:
             self.logger.debug("Configuring view for SUCCESS state.")
             self.status_title.setText("Setup Complete!")
-            self.status_title.setStyleSheet(TITLE_LABEL_STYLE)
+            self.status_title.setStyleSheet("font-size: 26px; font-weight: bold; color: #00A86B; font-family: 'Segoe UI', Arial, sans-serif;")
             self.info_text.setText(
                 "ANPE has been successfully installed and is ready to use.\n\n"
                 "Feedbacks are welcome! Please report any issues or suggestions to rcverse6@gmail.com."
             )
-            self.shortcut_checkbox.setVisible(True)
-            self.launch_checkbox.setVisible(True)
+            self.options_container.setVisible(True)
             self.complete_button.setText("Complete")
-            self.logger.debug("Set options checkboxes visible, button text to 'Complete'.")
+            self.complete_button.setStyleSheet("""
+                QPushButton {
+                    background-color: #00A86B;
+                    color: white;
+                    border: none;
+                    border-radius: 4px;
+                    padding: 8px 16px;
+                    font-size: 14px;
+                    font-weight: bold;
+                    font-family: 'Segoe UI', Arial, sans-serif;
+                    min-width: 120px;
+                }
+                QPushButton:hover {
+                    background-color: #00BF78;
+                }
+                QPushButton:pressed {
+                    background-color: #009960;
+                }
+            """)
+            self.logger.debug("Set options container visible, button text to 'Complete'.")
             
             # Hide error components
             self.log_container.setVisible(False)
@@ -258,12 +331,30 @@ class CompletionViewWidget(QWidget):
         else:
             self.logger.debug("Configuring view for FAILURE state.")
             self.status_title.setText("Setup Failed")
-            self.status_title.setStyleSheet("font-size: 24px; font-weight: bold; color: #DD3333;")
-            self.info_text.setText("An error occurred during the installation process.")
-            self.shortcut_checkbox.setVisible(False)
-            self.launch_checkbox.setVisible(False)
+            self.status_title.setStyleSheet("font-size: 26px; font-weight: bold; color: #DD3333; font-family: 'Segoe UI', Arial, sans-serif;")
+            self.info_text.setText("An error occurred during the installation process. We apologize for the inconvenience.")
+            self.options_container.setVisible(False)
             self.complete_button.setText("Close")
-            self.logger.debug("Set options checkboxes hidden, button text to 'Close'.")
+            self.complete_button.setStyleSheet("""
+                QPushButton {
+                    background-color: #DD3333;
+                    color: white;
+                    border: none;
+                    border-radius: 4px;
+                    padding: 8px 16px;
+                    font-size: 14px;
+                    font-weight: bold;
+                    font-family: 'Segoe UI', Arial, sans-serif;
+                    min-width: 120px;
+                }
+                QPushButton:hover {
+                    background-color: #E84C4C;
+                }
+                QPushButton:pressed {
+                    background-color: #C72F2F;
+                }
+            """)
+            self.logger.debug("Set options container hidden, button text to 'Close'.")
             
             # Extract and display the error (use the passed message first, then try extracting)
             display_error = self._error_message if self._error_message else self._extract_error_from_log(log_content)

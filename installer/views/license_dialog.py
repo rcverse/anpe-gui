@@ -1,148 +1,321 @@
 import os
 import sys
 from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QTextEdit, QDialogButtonBox, QLabel, QSizePolicy, 
-    QHBoxLayout, QScrollArea, QWidget
+    QDialog, QVBoxLayout, QTextEdit, QDialogButtonBox, QLabel, QSizePolicy,
+    QHBoxLayout, QScrollArea, QWidget, QPushButton, QFrame
 )
 from PyQt6.QtCore import Qt, QUrl
-from PyQt6.QtGui import QDesktopServices, QPixmap
+from PyQt6.QtGui import QDesktopServices, QPixmap, QFont
 
 # Use relative import for utils
 from ..utils import get_resource_path
+# Assume styles might be defined elsewhere or define basic ones here
+# from ..styles import PRIMARY_BUTTON_STYLE, LINK_LABEL_STYLE, INFO_LABEL_STYLE
+
+# Basic Style Constants (adjust colors/fonts as needed)
+PRIMARY_COLOR = "#005A9C" # Example primary color
+BORDER_COLOR = "#D0D0D0"
+BACKGROUND_COLOR = "#FFFFFF"
+TEXT_COLOR = "#333333"
+SECONDARY_TEXT_COLOR = "#666666"
+LINK_COLOR = PRIMARY_COLOR
+
+# Define button style template with a placeholder
+_BUTTON_STYLE_TEMPLATE = """
+QPushButton {
+    background-color: __PRIMARY_COLOR_PLACEHOLDER__;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    font-size: 14px;
+    border-radius: 4px;
+    min-width: 80px;
+}
+QPushButton:hover {
+    background-color: #00447a; /* Darker shade on hover */
+}
+QPushButton:pressed {
+    background-color: #003158; /* Even darker when pressed */
+}
+"""
+# Replace the placeholder with the actual color
+BUTTON_STYLE = _BUTTON_STYLE_TEMPLATE.replace("__PRIMARY_COLOR_PLACEHOLDER__", PRIMARY_COLOR)
+
+LINK_STYLE = f"color: {LINK_COLOR}; text-decoration: none;"
+INFO_STYLE = f"color: {SECONDARY_TEXT_COLOR}; font-size: 13px;"
+
+# Subclass QLabel for clickable links with proper cursor
+class ClickableLink(QLabel):
+    def __init__(self, text, url=None, callback=None, parent=None):
+        super().__init__(text, parent)
+        self.url = url
+        self.callback = callback
+        self.setStyleSheet(LINK_STYLE)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setToolTip(f"Open link" if url else "Show details")
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            if self.url:
+                QDesktopServices.openUrl(QUrl(self.url))
+            elif self.callback:
+                self.callback()
+        else:
+            super().mousePressEvent(event)
 
 class LicenseDialog(QDialog):
-    """A dialog to display the application license (adapted for installer)."""
+    """A dialog to display the application license with improved styling."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("ANPE License Information")
+        self._full_license_dialog = None # To avoid recreating
         self._setup_ui()
-        self.resize(700, 550)  # Make it reasonably sized
+        # self.resize(650, 550) # REMOVED: Allow auto-sizing
+        # Set minimum width, height will adjust
+        self.setMinimumWidth(650)
+        self.setStyleSheet(f"QDialog {{ background-color: {BACKGROUND_COLOR}; }}")
 
     def _setup_ui(self):
-        layout = QVBoxLayout(self)
-        layout.setSpacing(10)
-        layout.setContentsMargins(20, 20, 20, 20)
+        main_layout = QVBoxLayout(self)
+        main_layout.setSpacing(20)
+        main_layout.setContentsMargins(25, 25, 25, 25)
 
-        # --- Header with Logo ---
+        # --- Header ---
         header_layout = QHBoxLayout()
+        header_layout.setSpacing(15)
+
+        # Logo
         logo_label = QLabel()
-        logo_path = get_resource_path("assets/app_icon_logo.png")
-        
-        # Check if the logo file exists
-        if os.path.exists(logo_path):
-            pixmap = QPixmap(logo_path)
-            logo_label.setPixmap(pixmap.scaled(60, 60, Qt.AspectRatioMode.KeepAspectRatio))
-        else:
-            # Create a text label as fallback
-            logo_label.setText("ANPE")
-            logo_label.setStyleSheet("font-size: 24px; font-weight: bold; color: #0066b2;")
-            
+        try:
+            # Corrected path assumption for assets
+            logo_path = get_resource_path('assets/app_icon_logo.png')
+            if os.path.exists(logo_path):
+                pixmap = QPixmap(logo_path)
+                logo_label.setPixmap(pixmap.scaled(50, 50, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+            else:
+                # Fallback if logo not found
+                logo_label.setText("?") # Simple fallback
+                logo_label.setFixedSize(50, 50)
+                logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                logo_label.setStyleSheet(f"background-color: #f0f0f0; border-radius: 25px; font-size: 24px; color: {SECONDARY_TEXT_COLOR};")
+                print(f"Warning: Logo not found at {logo_path}", file=sys.stderr)
+        except Exception as e:
+             logo_label.setText("Err") # Error fallback
+             logo_label.setFixedSize(50, 50)
+             logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+             logo_label.setStyleSheet(f"background-color: #fee; border-radius: 25px; font-size: 18px; color: red;")
+             print(f"Error loading logo: {e}", file=sys.stderr)
+
         header_layout.addWidget(logo_label)
-        
-        title_layout = QVBoxLayout()
+
+        # Title and Subtitle
+        title_vbox = QVBoxLayout()
+        title_vbox.setSpacing(2)
         title_label = QLabel("ANPE License Information")
-        title_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #0066b2;")
-        title_layout.addWidget(title_label)
-        
-        subtitle_label = QLabel("ANPE is open-source software licensed under GPLv3")
-        subtitle_label.setStyleSheet("font-size: 14px;")
-        title_layout.addWidget(subtitle_label)
-        
-        header_layout.addLayout(title_layout)
+        title_label.setStyleSheet(f"font-size: 20px; font-weight: bold; color: {TEXT_COLOR};")
+        title_vbox.addWidget(title_label)
+
+        subtitle_label = QLabel("Open Source Software under GNU GPL v3")
+        subtitle_label.setStyleSheet(INFO_STYLE)
+        title_vbox.addWidget(subtitle_label)
+        header_layout.addLayout(title_vbox)
+
         header_layout.addStretch()
-        layout.addLayout(header_layout)
-        
-        # --- Description Section ---
+        main_layout.addLayout(header_layout)
+
+        # --- Separator ---
+        separator = QFrame()
+        separator.setFrameShape(QFrame.Shape.HLine)
+        separator.setFrameShadow(QFrame.Shadow.Sunken)
+        separator.setStyleSheet(f"border-color: {BORDER_COLOR};")
+        main_layout.addWidget(separator)
+
+        # --- Description (Added directly to main_layout) ---
         description = QLabel(
-            "ANPE is free software that respects your freedom. It is licensed under the "
-            "GNU General Public License version 3 (GPLv3), which guarantees your right to "
-            "use, study, share, and modify the software."
+            "ANPE is free software built upon the principles of open collaboration. It is licensed "
+            "under the <b>GNU General Public License version 3 (GPLv3)</b> "
         )
         description.setWordWrap(True)
-        description.setStyleSheet("margin-top: 10px; margin-bottom: 10px;")
-        layout.addWidget(description)
-        
-        # --- Link to full license ---
-        link_label = QLabel("<a href='#'>View the full GPLv3 license text</a>")
-        link_label.setOpenExternalLinks(False)
-        link_label.linkActivated.connect(self._show_full_license)
-        layout.addWidget(link_label)
+        description.setStyleSheet(f"color: {TEXT_COLOR}; font-size: 14px; line-height: 1.4;")
+        main_layout.addWidget(description) # Add to main layout
 
-        # --- License Summary Section ---
-        summary_label = QLabel("Key Points of the GPLv3 License:")
-        summary_label.setStyleSheet("font-weight: bold; margin-top: 10px;")
-        layout.addWidget(summary_label)
-        
-        summary_text = QTextEdit()
-        summary_text.setReadOnly(True)
-        summary_text.setStyleSheet("background-color: #f8f8f8; border: 1px solid #e0e0e0;")
-        summary_text.setHtml("""
-            <ul>
-                <li><b>Freedom to Use:</b> You can use ANPE for any purpose.</li>
-                <li><b>Freedom to Study:</b> You can study how ANPE works and modify it.</li>
-                <li><b>Freedom to Share:</b> You can share ANPE with others.</li>
-                <li><b>Freedom to Modify:</b> You can distribute modified versions of ANPE.</li>
-                <li><b>Copyleft:</b> Modified versions must also be free software.</li>
-            </ul>
-            <p>ANPE uses various other open-source components, each with their own licenses:</p>
-            <ul>
-                <li><b>PyQt6:</b> Available under GPL and commercial licenses</li>
-                <li><b>spaCy:</b> MIT License</li>
-                <li><b>Benepar:</b> Apache License 2.0</li>
-                <li><b>NLTK:</b> Apache License 2.0</li>
-            </ul>
-        """)
-        summary_text.setFixedHeight(200)
-        layout.addWidget(summary_text)
-        
-        # --- OK Button ---
-        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
-        button_box.accepted.connect(self.accept)
-        layout.addWidget(button_box)
-        
+        # --- License Summary Section (Using Labels) ---
+        summary_section_layout = QVBoxLayout() # Layout for this section
+        summary_section_layout.setSpacing(8) # Smaller spacing within this section
+
+        summary_title = QLabel("Key License Points:")
+        summary_title.setStyleSheet(f"font-weight: bold; color: {TEXT_COLOR}; font-size: 15px; margin-top: 15px; margin-bottom: 5px;")
+        summary_section_layout.addWidget(summary_title)
+
+        # Freedoms
+        freedoms_title = QLabel("<b> Your Freedoms with ANPE (GPLv3):</b>")
+        freedoms_title.setStyleSheet(f"color: {TEXT_COLOR}; font-size: 14px;")
+        summary_section_layout.addWidget(freedoms_title)
+
+        freedoms_list = [
+            "<b>Use:</b> Run the software for any purpose.",
+            "<b>Study:</b> Examine the source code and change it.",
+            "<b>Share:</b> Redistribute exact copies.",
+            "<b>Modify & Share:</b> Distribute your modified versions. If you distribute modified versions, they must also be licensed under the GPLv3"
+        ]
+        for item in freedoms_list:
+            label = QLabel(f"<ul style='margin-left: 0; padding-left: 20px;'><li style='margin-bottom: 3px;'>{item}</li></ul>")
+            label.setStyleSheet(f"color: {TEXT_COLOR}; font-size: 13px;")
+            summary_section_layout.addWidget(label)
+
+        # Dependencies
+        deps_title = QLabel("<b> Core Dependencies & Licenses:</b>")
+        deps_title.setStyleSheet(f"color: {TEXT_COLOR}; font-size: 14px;")
+        summary_section_layout.addWidget(deps_title)
+
+        deps_list = [
+            "<b>PyQt6:</b> <code>GPL v3</code> / Commercial",
+            "<b>spaCy:</b> <code>MIT License</code>",
+            "<b>Benepar:</b> <code>Apache License 2.0</code>",
+            "<b>NLTK:</b> <code>Apache License 2.0</code>",
+            "<i>(And others - see project documentation)</i>"
+        ]
+        deps_style = """
+            QLabel {
+                color: __TEXT_COLOR__;
+                font-size: 13px;
+            }
+            code {
+                 background-color: #e8eaf6;
+                 padding: 1px 3px;
+                 border-radius: 3px;
+                 font-family: monospace;
+            }
+        """.replace("__TEXT_COLOR__", TEXT_COLOR)
+
+        for item in deps_list:
+            label = QLabel(f"<ul style='margin-left: 0; padding-left: 20px;'><li style='margin-bottom: 3px;'>{item}</li></ul>")
+            label.setStyleSheet(deps_style)
+            summary_section_layout.addWidget(label)
+
+        # Add the whole summary section layout to the main layout
+        main_layout.addLayout(summary_section_layout)
+
+        # Add vertical stretch to push buttons to bottom
+        main_layout.addStretch(1)
+
+        # --- Separator before buttons ---
+        separator2 = QFrame()
+        separator2.setFrameShape(QFrame.Shape.HLine)
+        separator2.setFrameShadow(QFrame.Shadow.Sunken)
+        separator2.setStyleSheet(f"border-color: {BORDER_COLOR};")
+        main_layout.addWidget(separator2)
+
+        # --- Buttons --- 
+        button_layout = QHBoxLayout()
+        button_layout.addStretch() # Push buttons to the right
+
+        # View Full License Button (New)
+        view_license_button = QPushButton("View Full License")
+        # Use a slightly different style for secondary button?
+        # For now, use the same style as OK
+        view_license_button.setStyleSheet(BUTTON_STYLE) 
+        view_license_button.clicked.connect(self._show_full_license)
+        button_layout.addWidget(view_license_button)
+
+        # OK Button
+        ok_button = QPushButton("OK")
+        ok_button.setStyleSheet(BUTTON_STYLE)
+        ok_button.clicked.connect(self.accept)
+        button_layout.addWidget(ok_button)
+        main_layout.addLayout(button_layout)
+
     def _show_full_license(self):
-        """Show the full license text in a separate scrollable area"""
-        # Create and show the full license dialog
-        full_license_dialog = QDialog(self)
-        full_license_dialog.setWindowTitle("GNU General Public License v3")
-        full_license_dialog.resize(750, 600)
-        
-        layout = QVBoxLayout(full_license_dialog)
-        layout.setContentsMargins(15, 15, 15, 15)
-        
-        license_title = QLabel("GNU General Public License v3")
-        license_title.setStyleSheet("font-size: 16px; font-weight: bold;")
-        layout.addWidget(license_title)
-        
-        # Add text area for the license text
-        license_text_edit = QTextEdit()
-        license_text_edit.setReadOnly(True)
-        
-        # Try to load the license text
-        license_text = "Error: Could not resolve license path."
-        try:
-            license_path = get_resource_path('assets/LICENSE.installer.txt')
-            if os.path.exists(license_path):
-                try:
-                    with open(license_path, 'r', encoding='utf-8') as f:
-                        license_text = f.read()
-                except Exception as e:
-                    license_text = f"Error loading license file: {e}"
-                    print(f"Error loading license file {license_path}: {e}", file=sys.stderr)
-            else:
-                license_text = f"License file not found at expected location: {license_path}"
-                print(f"Warning: License file not found at {license_path}", file=sys.stderr)
-        except Exception as e:
-            print(f"Error resolving license path with get_resource_path: {e}", file=sys.stderr)
-            
-        license_text_edit.setText(license_text)
-        license_text_edit.verticalScrollBar().setValue(0)
-        layout.addWidget(license_text_edit)
-        
-        # Add close button
-        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
-        button_box.rejected.connect(full_license_dialog.close)
-        layout.addWidget(button_box)
-        
-        full_license_dialog.exec()
+        """Show the full license text in a separate styled dialog."""
+        if self._full_license_dialog is None:
+            self._full_license_dialog = QDialog(self)
+            self._full_license_dialog.setWindowTitle("GNU General Public License v3")
+            self._full_license_dialog.resize(750, 600)
+            self._full_license_dialog.setStyleSheet(f"QDialog {{ background-color: {BACKGROUND_COLOR}; }}")
+
+            layout = QVBoxLayout(self._full_license_dialog)
+            layout.setContentsMargins(20, 20, 20, 20)
+            layout.setSpacing(15)
+
+            license_title = QLabel("GNU General Public License v3 (Full Text)")
+            license_title.setStyleSheet(f"font-size: 18px; font-weight: bold; color: {TEXT_COLOR};")
+            layout.addWidget(license_title)
+
+            license_text_edit = QTextEdit()
+            license_text_edit.setReadOnly(True)
+            license_text_edit.setStyleSheet(f"""
+                QTextEdit {{
+                    background-color: #fdfdfd;
+                    border: 1px solid {BORDER_COLOR};
+                    border-radius: 4px;
+                    padding: 10px;
+                    color: {TEXT_COLOR};
+                    font-family: monospace; /* Use monospace for license text */
+                    font-size: 12px;
+                    line-height: 1.4;
+                }}
+            """)
+
+            license_text = "Error: Could not load license text."
+            try:
+                # Ensure this path is correct relative to build structure
+                license_path = get_resource_path('assets/LICENSE.installer.txt')
+                if os.path.exists(license_path):
+                    try:
+                        with open(license_path, 'r', encoding='utf-8') as f:
+                            license_text = f.read()
+                    except Exception as e:
+                        license_text = f"Error reading license file: {e}"
+                        print(f"Error reading license file {license_path}: {e}", file=sys.stderr)
+                else:
+                    license_text = f"License file not found at expected path: {license_path}"
+                    print(f"Warning: License file not found at {license_path}", file=sys.stderr)
+            except Exception as e:
+                print(f"Error resolving license path '{'assets/LICENSE.installer.txt'}': {e}", file=sys.stderr)
+
+            license_text_edit.setText(license_text)
+            layout.addWidget(license_text_edit)
+
+            # Add close button
+            button_layout = QHBoxLayout()
+            button_layout.addStretch()
+            close_button = QPushButton("Close")
+            close_button.setStyleSheet(BUTTON_STYLE)
+            close_button.clicked.connect(self._full_license_dialog.accept) # Use accept for dialogs
+            button_layout.addWidget(close_button)
+            layout.addLayout(button_layout)
+
+        # Ensure the dialog is raised and activated
+        self._full_license_dialog.show()
+        self._full_license_dialog.raise_()
+        self._full_license_dialog.activateWindow()
+
+# Example usage (for testing standalone)
+if __name__ == '__main__':
+    from PyQt6.QtWidgets import QApplication
+    app = QApplication(sys.argv)
+    # Need dummy get_resource_path for testing if assets aren't structured
+    def get_resource_path(relative_path):
+        # Create dummy files/paths for testing if needed
+        base_path = os.path.dirname(__file__)
+        path = os.path.join(base_path, '..', relative_path) # Adjust based on actual structure
+        # Example: Create dummy license if it doesn't exist
+        if 'LICENSE.installer.txt' in relative_path and not os.path.exists(path):
+             os.makedirs(os.path.dirname(path), exist_ok=True)
+             with open(path, 'w') as f: f.write("Dummy GPLv3 License Text...")
+        # Example: Create dummy logo if it doesn't exist
+        if 'app_icon_logo.png' in relative_path and not os.path.exists(path):
+             os.makedirs(os.path.dirname(path), exist_ok=True)
+             # Create a tiny dummy png or just return None
+             # For now, just let the file check fail in the dialog
+             pass
+        return path
+
+    # Monkey patch the function for testing
+    import installer.utils
+    installer.utils.get_resource_path = get_resource_path
+
+    dialog = LicenseDialog()
+    dialog.exec()
+    sys.exit()

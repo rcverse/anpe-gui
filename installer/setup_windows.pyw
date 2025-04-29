@@ -52,8 +52,17 @@ class SetupMainWindow(QMainWindow):
         self.setWindowTitle(window_title)
         # Fixed size might conflict slightly with exact border/radius look
         # Consider setting minimum size and letting layout manage?
-        # For now, keep fixed size.
-        self.setFixedSize(650 + (BORDER_THICKNESS * 2), 550 + self._title_bar.height() + (BORDER_THICKNESS * 2) if hasattr(self, '_title_bar') else 500 + 35 + (BORDER_THICKNESS * 2)) 
+        # CHANGED from setFixedSize to setMinimumSize and increased default height
+        # Calculate a reasonable initial/minimum height
+        initial_height = 550 # Reduced base height back closer to original
+        if hasattr(self, '_title_bar'):
+            initial_height += self._title_bar.height()
+        else:
+            initial_height += 35 # Approx title bar height
+        initial_height += (BORDER_THICKNESS * 2)
+        self.setMinimumSize(650 + (BORDER_THICKNESS * 2), initial_height)
+        # Remove the fixed size setting
+        # self.setFixedSize(650 + (BORDER_THICKNESS * 2), 550 + self._title_bar.height() + (BORDER_THICKNESS * 2) if hasattr(self, '_title_bar') else 500 + 35 + (BORDER_THICKNESS * 2))
 
         # --- Custom Window Frame --- 
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint)

@@ -43,7 +43,7 @@ class ProgressViewWidget(QWidget):
         else:
             # Create a text label as fallback
             logo_label.setText("ANPE")
-            logo_label.setStyleSheet("font-size: 24px; font-weight: bold; color: #0066b2;")
+            logo_label.setStyleSheet("font-size: 24px; font-weight: bold; color: #0078D7; font-family: 'Segoe UI', Arial, sans-serif;")
             
         header_layout.addWidget(logo_label)
         
@@ -52,7 +52,7 @@ class ProgressViewWidget(QWidget):
         
         title_layout = QVBoxLayout()
         stage_label = QLabel(self._title)
-        stage_label.setStyleSheet(TITLE_LABEL_STYLE)
+        stage_label.setStyleSheet("font-size: 26px; font-weight: bold; color: #0078D7; font-family: 'Segoe UI', Arial, sans-serif;")
         title_layout.addWidget(stage_label)
         
         # Add explanation text based on the title
@@ -65,59 +65,97 @@ class ProgressViewWidget(QWidget):
         if explanation_text:
             explanation_label = QLabel(explanation_text)
             explanation_label.setWordWrap(True)
-            explanation_label.setStyleSheet("color: #666666;")
+            explanation_label.setStyleSheet("color: #555555; font-family: 'Segoe UI', Arial, sans-serif; font-size: 13px;")
             title_layout.addWidget(explanation_label)
             
         header_layout.addLayout(title_layout)
         header_layout.addStretch()
         main_layout.addLayout(header_layout)
         
-        # Increase spacing after header (was 10)
-        main_layout.addSpacing(5)
+        # Add simple spacing instead of separator
+        main_layout.addSpacing(18)
         
-        # --- Task List ---
+        # --- Task List --- (simplified styling)
         self._task_list = TaskListWidget()
+        self._task_list.setStyleSheet("""
+            QListWidget {
+                border: none;
+                background-color: transparent;
+                font-family: 'Segoe UI', Arial, sans-serif;
+            }
+            QListWidget::item {
+                padding: 4px 0;
+            }
+        """)
         if self._tasks:
             for task_id, task_name in self._tasks.items():
                 self._task_list.add_task(task_id, task_name)
         main_layout.addWidget(self._task_list)
-        
-        main_layout.addSpacing(10)
+        main_layout.addSpacing(15)
         
         # --- Progress Layout (Bar and Status) ---
         progress_container = QWidget()
         progress_layout = QVBoxLayout(progress_container)
         progress_layout.setContentsMargins(0, 0, 0, 0)
+        progress_layout.setSpacing(8)
         
         # Set up progress bar
         self._progress_bar = QProgressBar()
         self._progress_bar.setRange(0, 0)  # Indeterminate initially
-        self._progress_bar.setFixedHeight(4)
+        self._progress_bar.setFixedHeight(6)  # Slightly taller for better visibility
         self._progress_bar.setTextVisible(False)
         
-        # Use centralized progress bar style
-        self._progress_bar.setStyleSheet(PROGRESS_BAR_STYLE)
+        # Custom progress bar style
+        self._progress_bar.setStyleSheet("""
+            QProgressBar {
+                border: none;
+                border-radius: 3px;
+                background-color: #F0F0F0;
+                text-align: center;
+            }
+            QProgressBar::chunk {
+                background-color: #0078D7;
+                border-radius: 3px;
+            }
+        """)
         progress_layout.addWidget(self._progress_bar)
         
         # --- Status Label (moved below progress bar) ---
         self._status_label = QLabel("Preparing...")
-        self._status_label.setStyleSheet(STATUS_LABEL_STYLE)
+        self._status_label.setStyleSheet("color: #444444; font-family: 'Segoe UI', Arial, sans-serif; font-size: 13px; margin-top: 2px;")
         self._status_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
         progress_layout.addWidget(self._status_label)
         
         main_layout.addWidget(progress_container)
+        main_layout.addSpacing(10)
         
         # Create a fixed container for details and logs
         details_container = QWidget()
         details_layout = QVBoxLayout(details_container)
         details_layout.setContentsMargins(0, 0, 0, 0)
+        details_layout.setSpacing(10)
         
         # --- Details Toggle Button ---
         self._details_button = QPushButton("Show Details")
-        # Use compact secondary style for less emphasis
-        self._details_button.setStyleSheet(COMPACT_SECONDARY_BUTTON_STYLE)
-        # Keep max width or adjust if needed for compact style
-        # self._details_button.setMaximumWidth(120) 
+        self._details_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._details_button.setStyleSheet("""
+            QPushButton {
+                background-color: transparent;
+                border: 1px solid #CCCCCC;
+                border-radius: 4px;
+                padding: 6px 12px;
+                font-family: 'Segoe UI', Arial, sans-serif;
+                font-size: 12px;
+                color: #444444;
+            }
+            QPushButton:hover {
+                background-color: #F5F5F5;
+                border: 1px solid #BBBBBB;
+            }
+            QPushButton:pressed {
+                background-color: #E5E5E5;
+            }
+        """)
         self._details_button.clicked.connect(self._toggle_details)
         
         details_button_layout = QHBoxLayout()
@@ -129,12 +167,20 @@ class ProgressViewWidget(QWidget):
         self._log_area = QTextEdit()
         self._log_area.setReadOnly(True)
         self._log_area.setFont(QFont("Consolas", 9))
-        self._log_area.setStyleSheet(LOG_TEXT_AREA_STYLE)
-        self._log_area.setMinimumHeight(120)
+        self._log_area.setStyleSheet("""
+            background-color: #F8F8F8; 
+            border: 1px solid #E0E0E0;
+            border-radius: 5px;
+            padding: 8px;
+            selection-background-color: #0078D7;
+            selection-color: white;
+        """)
+        self._log_area.setMinimumHeight(150)
         self._log_area.setVisible(False)
         details_layout.addWidget(self._log_area)
         
         main_layout.addWidget(details_container)
+        main_layout.addSpacing(5)
 
     def _toggle_details(self, checked=None):
         """Show or hide the log area."""
@@ -149,8 +195,47 @@ class ProgressViewWidget(QWidget):
         self._log_area.setVisible(new_state)
         self._log_area.repaint()  # Force immediate repaint
         
-        # Update button text
-        self._details_button.setText("Hide Details" if new_state else "Show Details")
+        # Update button text and style
+        if new_state:
+            self._details_button.setText("Hide Details")
+            self._details_button.setStyleSheet("""
+                QPushButton {
+                    background-color: #F0F0F0;
+                    border: 1px solid #CCCCCC;
+                    border-radius: 4px;
+                    padding: 6px 12px;
+                    font-family: 'Segoe UI', Arial, sans-serif;
+                    font-size: 12px;
+                    color: #444444;
+                }
+                QPushButton:hover {
+                    background-color: #E5E5E5;
+                    border: 1px solid #BBBBBB;
+                }
+                QPushButton:pressed {
+                    background-color: #D5D5D5;
+                }
+            """)
+        else:
+            self._details_button.setText("Show Details")
+            self._details_button.setStyleSheet("""
+                QPushButton {
+                    background-color: transparent;
+                    border: 1px solid #CCCCCC;
+                    border-radius: 4px;
+                    padding: 6px 12px;
+                    font-family: 'Segoe UI', Arial, sans-serif;
+                    font-size: 12px;
+                    color: #444444;
+                }
+                QPushButton:hover {
+                    background-color: #F5F5F5;
+                    border: 1px solid #BBBBBB;
+                }
+                QPushButton:pressed {
+                    background-color: #E5E5E5;
+                }
+            """)
 
     def setup_tasks(self, tasks: dict):
         """Set up task list with provided tasks."""

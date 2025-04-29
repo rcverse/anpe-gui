@@ -4,7 +4,8 @@ import ctypes
 import logging # Added for debugging
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton, QCheckBox, QHBoxLayout,
-    QSizePolicy, QFileDialog, QSpacerItem, QRadioButton, QButtonGroup
+    QSizePolicy, QFileDialog, QSpacerItem, QRadioButton, QButtonGroup, QFrame,
+    QMessageBox, QToolTip # Added QToolTip
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QPixmap, QMouseEvent
@@ -22,6 +23,11 @@ logger = logging.getLogger()
 class ClickableLabel(QLabel):
     clicked = pyqtSignal()
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setToolTip("Click to view license details")
+
     def mousePressEvent(self, event: QMouseEvent):
         if event.button() == Qt.MouseButton.LeftButton:
             self.clicked.emit()
@@ -37,6 +43,24 @@ class WelcomeViewWidget(QWidget):
         """Initialize the welcome view."""
         super().__init__(parent)
         self._license_dialog = None # Hold reference to dialog
+        # Store notes text for reuse in the popup
+        self._storage_text = (
+            "<b>Storage (~1.8 GB):</b> ANPE uses powerful NLP libraries like spaCy and Benepar. "
+            "These require large pre-trained models (data files) and depend on frameworks like PyTorch, "
+            "which are also substantial in size, leading to the large total footprint."
+        )
+        self._env_text = (
+            "<b>Environment:</b> This installer creates a dedicated, isolated Python environment for ANPE. "
+            "This prevents conflicts with other Python installations you might have. "
+            "Advanced users comfortable with Python can alternatively clone the "
+            "<a href='https://github.com/rcverse/anpe-gui'>GitHub repository</a> and run "
+            "<code>pip install -r requirements.txt</code> in their own environment, potentially saving disk space."
+        )
+        self._internet_text = (
+            "<b>Installation:</b> An active internet connection is needed during setup to download "
+            "these large libraries and models. The download and setup process may take several minutes "
+            "depending on your connection speed."
+        )
         self._setup_ui()
 
     def _setup_ui(self):
@@ -80,17 +104,33 @@ class WelcomeViewWidget(QWidget):
         # --- Welcome Text ---
         title_label = QLabel("Welcome to ANPE Setup")
         title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title_label.setStyleSheet(TITLE_LABEL_STYLE) # Basic styling
+        title_label.setStyleSheet("font-size: 26px; font-weight: bold; color: #0078D7; font-family: 'Segoe UI', Arial, sans-serif;")
         layout.addWidget(title_label)
-
-        layout.addSpacerItem(QSpacerItem(20, 30, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding))
+        
+        # Add spacing instead of separator
+        layout.addSpacing(15)
 
         # --- Installation Path (Windows Specific) ---
         path_label = QLabel("Install ANPE GUI to:")
+        path_label.setStyleSheet("font-size: 14px; font-weight: bold; color: #444444; font-family: 'Segoe UI', Arial, sans-serif;")
         layout.addWidget(path_label)
 
         path_layout = QHBoxLayout()
         self.path_edit = QLineEdit()
+        self.path_edit.setStyleSheet("""
+            QLineEdit {
+                padding: 8px;
+                border: 1px solid #CCCCCC;
+                border-radius: 4px;
+                background-color: #FFFFFF;
+                font-family: 'Segoe UI', Arial, sans-serif;
+                font-size: 13px;
+                selection-background-color: #0078D7;
+            }
+            QLineEdit:focus {
+                border: 1px solid #0078D7;
+            }
+        """)
         
         # Automatically determine appropriate installation path based on admin privileges
         is_admin = self._is_admin()
@@ -104,25 +144,110 @@ class WelcomeViewWidget(QWidget):
         path_layout.addWidget(self.path_edit)
 
         browse_button = QPushButton("Browse...")
-        browse_button.setStyleSheet(BROWSE_BUTTON_STYLE)
+        browse_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        browse_button.setStyleSheet("""
+            QPushButton {
+                background-color: #F0F0F0;
+                border: 1px solid #CCCCCC;
+                border-radius: 4px;
+                padding: 8px 12px;
+                font-family: 'Segoe UI', Arial, sans-serif;
+                font-size: 13px;
+                color: #333333;
+            }
+            QPushButton:hover {
+                background-color: #E5E5E5;
+                border: 1px solid #BBBBBB;
+            }
+            QPushButton:pressed {
+                background-color: #D0D0D0;
+            }
+        """)
         browse_button.clicked.connect(self._browse_directory)
         path_layout.addWidget(browse_button)
         layout.addLayout(path_layout)
         
-        # Add explanation about installation location
-        path_info = QLabel("Please make sure you have enough disk space to install the application")
-        path_info.setStyleSheet(INFO_LABEL_STYLE)
-        layout.addWidget(path_info)
+        # --- Path Info Line (with Help Icon) ---
+        path_info_layout = QHBoxLayout() # Layout for the info text + help icon
+        path_info_layout.setSpacing(5)
+
+        # Modified explanation about installation location
+        path_info_label = QLabel("Requires ~1.8GB disk space and an internet connection during setup.")
+        path_info_label.setStyleSheet("font-size: 13px; color: #555555; font-family: 'Segoe UI', Arial, sans-serif;")
+        path_info_layout.addWidget(path_info_label)
+
+        # Replace emoji with styled QPushButton
+        help_button = QPushButton("?")
+        help_button.setFixedSize(20, 20)  # Smaller size
+        help_button.setStyleSheet("""
+            QPushButton {
+                background-color: #9E9E9E;  /* Medium gray */
+                border-radius: 10px;
+                border: none;
+                color: white;
+                font-weight: bold;
+                font-size: 11px;
+                font-family: 'Segoe UI', Arial, sans-serif;
+            }
+            QPushButton:hover {
+                background-color: #ABABAB;  /* Lighter gray on hover */
+            }
+            QPushButton:pressed {
+                background-color: #808080;  /* Darker gray when pressed */
+            }
+        """)
+        
+        # Create rich tooltip with all the installation information
+        tooltip_text = (
+            "<div style='width: 300px; font-family: Segoe UI;'>"
+            "<p>Storage: Requires ~1.8GB disk space for NLP libraries (spaCy, Benepar) "
+            "and their dependencies like PyTorch needed for neural network processing.</p>"
+            "<p>Internet: Active connection needed during setup to download ~1.5GB of dependencies. "
+            "Installation time varies with connection speed.</p>"
+            "</div>"
+        )
+        
+        help_button.setToolTip(tooltip_text)
+        help_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        help_button.clicked.connect(self._show_tooltip)  # Connect click to show tooltip
+        path_info_layout.addWidget(help_button)
+
+        path_info_layout.addStretch() # Push icon to the right if needed, or keep compact
+        layout.addLayout(path_info_layout) # Add this layout below the path input
+        
+        # --- Environment Information Section --- (simplified styling)
+        layout.addSpacing(8)
+        
+        env_info_layout = QVBoxLayout()
+        env_info_layout.setContentsMargins(0, 0, 0, 0)
+        env_info_layout.setSpacing(6)
+        
+        env_info_label = QLabel("Setup notes:")
+        env_info_label.setStyleSheet("font-size: 14px; font-weight: bold; color: #444444; font-family: 'Segoe UI', Arial, sans-serif;")
+        env_info_layout.addWidget(env_info_label)
+        
+        env_details = QLabel(
+            "• This installer will create a self-contained Python environment and will not interfere with existing Python installations.<br>"
+            "• For those who know Python: You can clone the <a href='https://github.com/rcverse/anpe-gui'>GitHub repository</a> and use it with your own Python installation"
+        )
+        env_details.setStyleSheet("font-size: 13px; color: #555555; font-family: 'Segoe UI', Arial, sans-serif; line-height: 140%;")
+        env_details.setWordWrap(True)
+        env_details.setOpenExternalLinks(True)  # This makes the links clickable and open in browser
+        env_details.setTextFormat(Qt.TextFormat.RichText)  # Enable rich text with HTML
+        env_info_layout.addWidget(env_details)
+        
+        layout.addLayout(env_info_layout)
+        layout.addSpacing(5)
 
         # --- License Agreement ---
         license_layout = QHBoxLayout()
         license_layout.addStretch(1)  # Add stretch at the beginning to center
         license_text = QLabel("ANPE is open-source software licensed under")
-        license_text.setStyleSheet(INFO_LABEL_STYLE)
+        license_text.setStyleSheet("font-size: 13px; color: #555555; font-family: 'Segoe UI', Arial, sans-serif;")
         license_layout.addWidget(license_text)
 
         license_link_label = ClickableLabel("GNU GPL v3")  # Remove the HTML link styling
-        license_link_label.setStyleSheet(LINK_LABEL_STYLE)  # Blue color matching theme
+        license_link_label.setStyleSheet("font-size: 13px; color: #0078D7; font-family: 'Segoe UI', Arial, sans-serif; text-decoration: none;")  # Blue color matching theme
         license_link_label.setOpenExternalLinks(False)
         license_link_label.clicked.connect(self._show_license_dialog)
         license_layout.addWidget(license_link_label)
@@ -130,15 +255,38 @@ class WelcomeViewWidget(QWidget):
         
         layout.addLayout(license_layout)
 
-        layout.addSpacerItem(QSpacerItem(20, 20, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding))
+        layout.addSpacerItem(QSpacerItem(20, 15, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding))
 
         # --- Setup Button ---
         self.setup_button = QPushButton("Setup")
+        self.setup_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setup_button.setObjectName("SetupButton")  # For potential styling
-        # Update button style to use centralized style
-        self.setup_button.setStyleSheet(PRIMARY_BUTTON_STYLE)
+        self.setup_button.setStyleSheet("""
+            QPushButton {
+                background-color: #0078D7;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 8px 20px;
+                font-size: 14px;
+                font-weight: bold;
+                font-family: 'Segoe UI', Arial, sans-serif;
+                min-width: 120px;
+            }
+            QPushButton:hover {
+                background-color: #1A88E1;
+            }
+            QPushButton:pressed {
+                background-color: #006CC1;
+            }
+            QPushButton:disabled {
+                background-color: #CCCCCC;
+                color: #888888;
+            }
+        """)
         self.setup_button.clicked.connect(self._on_setup_clicked)
         layout.addWidget(self.setup_button, alignment=Qt.AlignmentFlag.AlignCenter)
+        layout.addSpacing(10)
 
         # --- Debugging: Log MEIPASS structure if frozen ---
         self._log_meipass_structure()
@@ -259,4 +407,16 @@ class WelcomeViewWidget(QWidget):
             return ctypes.windll.shell32.IsUserAnAdmin() != 0
         except Exception:
             return False
+
+    # --- Add method to show tooltip when button is clicked ---
+    def _show_tooltip(self):
+        """Show the tooltip when the help button is clicked."""
+        # Get the sender (the help button)
+        button = self.sender()
+        # Show tooltip at the position just below the button
+        tooltip_pos = button.mapToGlobal(button.rect().bottomLeft())
+        # Get tooltip text from the button
+        tooltip_text = button.toolTip()
+        # Display the tooltip
+        QToolTip.showText(tooltip_pos, tooltip_text, button)
 

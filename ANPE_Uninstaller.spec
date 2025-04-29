@@ -10,9 +10,9 @@ APP_NAME = 'uninstall'
 SCRIPT_FILE = 'installer/uninstall.pyw' # Or uninstall_tk.py? Verify filename.
 # --- ICON PATH: Update if needed, using app icon for now --- 
 ICON_FILE = 'installer/assets/app_icon_logo.ico'
-# --- ASSETS: Tkinter version likely doesn't need bundled PNG logo ---
-# ASSETS_SOURCE_DIR = 'installer/assets'
-# ASSETS_TARGET_DIR = 'assets'
+# --- ASSETS: Add logo image for Tkinter UI ---
+ASSETS_SOURCE_DIR = 'installer/assets'
+LOGO_FILE = 'app_icon_logo.png'  # Logo file for display in the UI
 
 # Removed PyQt6 data/binary collection
 # pyqt6_datas, pyqt6_binaries = collect_entry_point('PyQt6')
@@ -26,17 +26,20 @@ a = Analysis([
     ],
     pathex=[],
     binaries=[], # No extra binaries needed for Tkinter
-    datas=[], # No data needed unless Tkinter version loads external files
+    datas=[
+        (os.path.join(ASSETS_SOURCE_DIR, LOGO_FILE), '.'),  # Include logo file in root of bundle
+    ],
     hiddenimports=[
-        # Add hidden imports ONLY if the Tkinter script needs them
-        # winreg, os, sys, shutil are usually handled automatically
+        'PIL._tkinter_finder',  # Required for PIL/Pillow with Tkinter
+        'PIL._imaging',         # Core Pillow functionality
+        'PIL.Image',            # Basic image handling
+        'PIL.ImageTk',          # Required for displaying images in Tkinter
     ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
     excludes=[
         # Keep standard excludes, but ensure tkinter is NOT excluded
-        # 'tkinter', <--- REMOVED
         'unittest',
         'email',
         'xml',
@@ -73,7 +76,7 @@ exe = EXE(pyz,
     # --- CONSOLE SETTING --- 
     # Set console=True if Tkinter script uses print for errors/feedback
     # Set console=False if it's purely windowed with message boxes
-    console=True, # Defaulting to True for Tkinter script, adjust if needed
+    console=False, # Defaulting to True for Tkinter script, adjust if needed
     disable_windowed_traceback=False,
     target_arch=None,
     codesign_identity=None,

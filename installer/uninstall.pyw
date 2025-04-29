@@ -11,47 +11,53 @@ import tkinter as tk # Added
 from tkinter import ttk, messagebox, filedialog, scrolledtext, font as tkFont # Added
 from typing import Optional, Tuple, Callable, Any # Added
 
-# Removed PyQt6 imports
-# from PyQt6.QtWidgets import (
-#     QApplication, QMainWindow, QStackedWidget, QWidget, QMessageBox, 
-#     QVBoxLayout, QHBoxLayout, QFrame, QPushButton, QLabel, QSpacerItem, QSizePolicy
-# )
-# from PyQt6.QtCore import Qt, QThread, pyqtSignal, QObject
-# from PyQt6.QtGui import QColor, QPixmap
-
-# --- Remove old shared component imports (assuming Tkinter replacements) ---
-# try:
-#     from .widgets.custom_title_bar import CustomTitleBar
-#     from .views.progress_view import ProgressViewWidget
-#     from .utils import get_resource_path
-#     from .styles import (...)
-# except ImportError as e:
-#     print(f"ERROR: Could not import shared components: {e}", file=sys.stderr)
-#     sys.exit("Uninstaller cannot run without shared components.")
-
+# --- Image Loading --- 
+try:
+    from PIL import Image, ImageTk
+    PIL_AVAILABLE = True
+except ImportError:
+    PIL_AVAILABLE = False
+    print("Warning: PIL (Pillow) library not found. Logo images will not be displayed.", file=sys.stderr)
+# --------------------
 
 # --- Constants ---
 APP_NAME = "ANPE"
 REGISTRY_KEY_PATH = rf"Software\Microsoft\Windows\CurrentVersion\Uninstall\{APP_NAME}"
+# Additional registry locations that might store ANPE-related settings
+REGISTRY_SETTINGS_PATH = rf"Software\rcverse\ANPE_GUI" # Settings path used by QSettings in the app
+REGISTRY_USER_PATHS = [
+    REGISTRY_KEY_PATH,           # Main uninstall key
+    REGISTRY_SETTINGS_PATH,      # App settings
+    rf"Software\rcverse",        # Parent company key (only if empty after removing ANPE_GUI)
+]
 REGISTRY_INSTALL_LOCATION_VALUE = "InstallLocation"
 REGISTRY_SHORTCUT_LOCATION_VALUE = "ShortcutLocation"
 
 # UI Constants
-WINDOW_WIDTH = 550
-WINDOW_HEIGHT = 400
+WINDOW_WIDTH = 500     # Increased width
+WINDOW_HEIGHT = 520    # Reduced height
 PADDING = 15
 PRIMARY_FONT_FAMILY = "Segoe UI"
 FALLBACK_FONT_FAMILY = "Arial" # Use a common fallback
 DEFAULT_FONT_SIZE = 10
-TITLE_FONT_SIZE = 16
+TITLE_FONT_SIZE = 20    # Increased from 16 for more emphasis
+SUBTITLE_FONT_SIZE = 11 # New constant for subtitle text
+SMALL_FONT_SIZE = 9    # Added for smaller text
+LOGO_SIZE = (70, 70)    # Size for the logo display (width, height)
 
 # Colors
 LIGHT_BG_COLOR = "#FFFFFF"
 PRIMARY_COLOR = "#005A9C" # ANPE Blue
 SECONDARY_TEXT_COLOR = "#555555"
 ERROR_COLOR = "#D32F2F"
+WARNING_COLOR = "#F57C00" # Orange for warnings
 SUCCESS_COLOR = "#388E3C"
 BORDER_COLOR = "#CCCCCC"
+INFO_COLOR = "#0277BD" # Blue for information
+INPUT_BG_COLOR = "#F9F9F9" # Light gray for input background
+LOG_BG_COLOR_PROGRESS = "#F5F5F5" # Very light gray for progress view log
+LOG_BG_COLOR_COMPLETION = "#F0F4F8" # Light blue-gray for completion view log
+INPUT_HEIGHT = 26  # Standard height for input elements to match buttons
 
 # Worker Communication Actions
 ACTION_STATUS = "status"
@@ -63,6 +69,25 @@ ACTION_FINISHED = "finished"
 VIEW_WELCOME = "Welcome"
 VIEW_PROGRESS = "Progress"
 VIEW_COMPLETION = "Completion"
+
+# Add to constants section at the top
+UNINSTALL_LOG_DIR = "logs"
+UNINSTALL_LOG_FILE = "uninstall_log.txt"
+
+# Add to constants section at the top
+ANPE_INSTALLED_DIRS = [
+    "anpe_gui",  # Main application code directory
+    "python",    # Python environment directory
+]
+
+ANPE_INSTALLED_FILES = [
+    "ANPE.exe",      # Main executable
+    "uninstall.exe", # Uninstaller executable
+    "LICENSE.txt",   # License file (if present)
+    "README.md",     # Readme file (if present)
+    "requirements.txt", # Requirements file (if present)
+    "config.ini"     # Configuration file (if present)
+]
 
 # --- Helper Functions (New for Tkinter) ---
 def set_widget_state(widget: ttk.Widget, state: str):
@@ -82,18 +107,12 @@ def center_window(win):
     y = (win.winfo_screenheight() // 2) - (height // 2)
     win.geometry(f'{width}x{height}+{x}+{y}')
 
-# --- (Old PyQt6 Views - To be removed/replaced) ---
-# class WelcomeUninstallWidget(QWidget):
-# ... (Keep commented out or remove) ...
-
-# class CompletionUninstallWidget(QWidget):
-# ... (Keep commented out or remove) ...
 
 # --- Uninstall Worker (Adapted for Tkinter Threading) ---
 class UninstallWorker(threading.Thread):
     """Worker thread to handle the actual uninstallation process."""
 
-    def __init__(self, install_path: str, output_queue: queue.Queue):
+    def __init__(self, install_path: str, output_queue: queue.Queue, remove_models: bool):
         super().__init__(daemon=True) # Make it a daemon thread
         if not install_path or not os.path.isdir(install_path):
             raise ValueError("Invalid installation path provided to UninstallWorker.")
@@ -103,6 +122,7 @@ class UninstallWorker(threading.Thread):
         self.uninstaller_script_path = os.path.abspath(__file__)
         self.output_queue = output_queue
         self._full_log = [] # Store the full log content
+        self.remove_models = remove_models
 
     def _send_update(self, action: str, data: Any):
         """Send updates to the main thread via the queue."""
@@ -132,7 +152,7 @@ class UninstallWorker(threading.Thread):
 
     def run(self):
         """Main uninstallation process."""
-        steps = 4
+        steps = 5 if self.remove_models else 4  # Add model cleaning step if requested
         current_step = 0
         final_message = ""
         success = True
@@ -141,6 +161,7 @@ class UninstallWorker(threading.Thread):
             self._log(f"Uninstaller script path: {self.uninstaller_script_path}")
             self._log(f"Target installation directory: {self.install_path}")
             self._log(f"Log file path: {self.log_path}")
+            self._log(f"Model removal requested: {self.remove_models}")
 
             # --- Step 1: Remove Start Menu Shortcut ---
             current_step += 1
@@ -161,8 +182,20 @@ class UninstallWorker(threading.Thread):
             self._log(registry_msg)
             if not registry_removed:
                 self._log("Warning: Failed to remove registry entries. Continuing uninstall.")
+                
+            # --- Step 3: Clean ANPE Models (if requested) ---
+            if self.remove_models:
+                current_step += 1
+                self._send_update(ACTION_PROGRESS, (current_step, steps))
+                self._send_update(ACTION_STATUS, "Cleaning ANPE models (this may take a while)...")
+                self._log("Attempting to clean ANPE-related models...")
+                
+                models_cleaned, models_msg = self._clean_anpe_models()
+                self._log(models_msg)
+                if not models_cleaned:
+                    self._log("Warning: Failed to completely clean ANPE models. Continuing uninstall.")
 
-            # --- Step 3: Remove Installed Files and Directories ---
+            # --- Step 4: Remove Installed Files and Directories ---
             current_step += 1
             self._send_update(ACTION_PROGRESS, (current_step, steps))
             self._send_update(ACTION_STATUS, "Removing installed files...")
@@ -179,7 +212,7 @@ class UninstallWorker(threading.Thread):
                 else:
                      final_message = "Failed to remove some installed files/directories."
 
-            # --- Step 4: Finalization ---
+            # --- Step 5: Finalization ---
             current_step += 1
             self._send_update(ACTION_PROGRESS, (current_step, steps))
             if success:
@@ -208,7 +241,7 @@ class UninstallWorker(threading.Thread):
         finally:
             # Ensure the final signal is always emitted via the queue
             full_log_content = "\n".join(self._full_log)
-            self._send_update(ACTION_FINISHED, (success, final_message, full_log_content))
+            self._send_update(ACTION_FINISHED, (success, final_message, full_log_content, self.log_path))
 
     # --- Core Logic Methods (Unchanged) ---
     def _remove_shortcuts(self) -> tuple[bool, str]:
@@ -242,25 +275,100 @@ class UninstallWorker(threading.Thread):
             return False, f"Unexpected error removing shortcut: {e}"
 
     def _remove_registry_entries(self) -> tuple[bool, str]:
-        """Removes the application's registry key."""
+        """Removes all application's registry keys."""
+        success = True
+        removed_count = 0
+        errors = []
+        results = []
+
+        # We'll delete keys in order - most specific to least specific
+        for reg_path in REGISTRY_USER_PATHS:
+            try:
+                # First check if the key exists
+                try:
+                    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, reg_path, 0, winreg.KEY_READ) as key:
+                        # Key exists, attempt to delete it recursively
+                        self._log(f"Found registry key: {reg_path}, removing...")
+                        
+                        # Delete any subkeys recursively (if any)
+                        self._delete_key_recursive(winreg.HKEY_CURRENT_USER, reg_path)
+                        
+                        removed_count += 1
+                        results.append(f"Registry key '{reg_path}' removed successfully.")
+                except FileNotFoundError:
+                    # This key doesn't exist, which is fine
+                    self._log(f"Registry key '{reg_path}' not found. Skipping.")
+                    results.append(f"Registry key '{reg_path}' not found. Nothing to remove.")
+                    
+            except OSError as e:
+                error_msg = f"Error removing registry key '{reg_path}': {e}"
+                self._log(f"ERROR: {error_msg}")
+                errors.append(error_msg)
+                success = False
+            except Exception as e:
+                error_msg = f"Unexpected error removing registry key '{reg_path}': {e}"
+                self._log(f"ERROR: {error_msg}")
+                errors.append(error_msg)
+                success = False
+                
+        # Generate the summary message
+        if removed_count > 0:
+            summary = f"Successfully removed {removed_count} registry keys."
+        else:
+            summary = "No registry keys were found to remove."
+            
+        if errors:
+            summary += "\nErrors encountered:\n" + "\n".join(errors)
+            
+        return success, summary
+        
+    def _delete_key_recursive(self, root_key, sub_key):
+        """
+        Recursively delete a registry key and all its subkeys.
+        """
         try:
-            winreg.DeleteKey(winreg.HKEY_CURRENT_USER, REGISTRY_KEY_PATH)
-            return True, f"Registry key '{REGISTRY_KEY_PATH}' removed successfully."
+            # Open the key
+            with winreg.OpenKey(root_key, sub_key, 0, winreg.KEY_READ | winreg.KEY_ENUMERATE_SUB_KEYS) as key:
+                # Enumerate subkeys
+                subkey_count = winreg.QueryInfoKey(key)[0]
+                
+                # If no subkeys, we can delete directly
+                if subkey_count == 0:
+                    winreg.DeleteKey(root_key, sub_key)
+                    return
+                    
+                # Otherwise, we need to collect subkey names first
+                # (Can't modify while enumerating)
+                subkey_names = []
+                for i in range(subkey_count):
+                    # Get each subkey name
+                    subkey_name = winreg.EnumKey(key, i)
+                    subkey_names.append(subkey_name)
+                    
+            # Now delete each subkey
+            for subkey_name in subkey_names:
+                # Full path to the subkey
+                full_subkey_path = f"{sub_key}\\{subkey_name}"
+                # Recursively delete this subkey
+                self._delete_key_recursive(root_key, full_subkey_path)
+                
+            # After all subkeys are deleted, delete the main key
+            winreg.DeleteKey(root_key, sub_key)
         except FileNotFoundError:
-            return True, f"Registry key '{REGISTRY_KEY_PATH}' not found. Nothing to remove."
-        except OSError as e:
-            return False, f"Error removing registry key '{REGISTRY_KEY_PATH}': {e}"
+            # Key doesn't exist
+            pass
         except Exception as e:
-            return False, f"Unexpected error removing registry key: {e}"
+            self._log(f"Error during recursive registry key deletion: {e}")
+            raise  # Re-raise to be caught by the caller
 
     def _remove_installed_files(self) -> tuple[bool, str]:
-        """Removes files and directories within the installation path."""
+        """Removes only ANPE-related files and directories within the installation path."""
         removed_count = 0
         skipped_count = 0
         error_count = 0
         errors = []
 
-        norm_script_path = os.path.normcase(self.uninstaller_script_path)
+        # Skip trying to remove log directory during uninstallation
         norm_log_path = os.path.normcase(self.log_path)
         norm_log_dir = os.path.normcase(self.log_dir)
 
@@ -276,55 +384,172 @@ class UninstallWorker(threading.Thread):
             item_path = os.path.join(self.install_path, item_name)
             norm_item_path = os.path.normcase(os.path.abspath(item_path))
 
-            if norm_item_path == norm_script_path or \
-               norm_item_path == norm_log_path or \
-               norm_item_path == norm_log_dir:
-                # Log skipping internally, but don't flood UI queue with this
-                # self._log(f"Skipping: {item_path} (active uninstaller or log)")
+            # Skip logs - they'll be handled by completion page
+            if norm_item_path == norm_log_path or norm_item_path == norm_log_dir:
+                skipped_count += 1
+                continue
+
+            # Only remove known ANPE files and directories
+            is_anpe_dir = item_name in ANPE_INSTALLED_DIRS
+            is_anpe_file = item_name in ANPE_INSTALLED_FILES
+            
+            if not (is_anpe_dir or is_anpe_file):
+                self._log(f"Skipping non-ANPE item: {item_path}")
                 skipped_count += 1
                 continue
 
             try:
                 if os.path.isdir(item_path):
-                    self._log(f"Removing directory: {item_path}")
+                    self._log(f"Removing ANPE directory: {item_path}")
                     shutil.rmtree(item_path, ignore_errors=False)
                     removed_count += 1
                 elif os.path.isfile(item_path):
-                    self._log(f"Removing file: {item_path}")
+                    # Don't remove uninstaller yet - it's still running
+                    if item_name == "uninstall.exe":
+                        skipped_count += 1
+                        continue
+                    self._log(f"Removing ANPE file: {item_path}")
                     os.remove(item_path)
                     removed_count += 1
-                else:
-                    self._log(f"Skipping unknown item type: {item_path}")
-                    skipped_count += 1
             except (OSError, PermissionError) as e:
                 error_msg = f"Failed to remove {item_path}: {e}"
                 self._log(f"ERROR: {error_msg}")
                 errors.append(error_msg)
                 error_count += 1
 
-        if os.path.exists(self.log_dir):
-            try:
-                if os.path.exists(self.log_path):
-                    os.remove(self.log_path)
-                os.rmdir(self.log_dir)
-                self._log(f"Removed log directory: {self.log_dir}")
-            except OSError as e:
-                error_msg = f"Could not remove log directory {self.log_dir}: {e}"
-                self._log(f"WARNING: {error_msg}")
-                errors.append(error_msg)
-
         try:
-            os.rmdir(self.install_path)
-            self._log(f"Removed empty installation directory: {self.install_path}")
-        except OSError:
-            self._log(f"Installation directory {self.install_path} not empty, skipping removal.")
-            pass
+            # Check if only uninstaller and logs remain
+            remaining_items = [item for item in os.listdir(self.install_path) 
+                             if item != "uninstall.exe" and item != "logs"]
+            if not remaining_items:
+                self._log("Only uninstaller and logs remain. Directory will be removed on close.")
+            else:
+                non_anpe_items = [item for item in remaining_items if item not in ANPE_INSTALLED_DIRS + ANPE_INSTALLED_FILES]
+                if non_anpe_items:
+                    self._log(f"Non-ANPE items remain in directory: {', '.join(non_anpe_items)}")
+        except OSError as e:
+            self._log(f"Warning: Could not check installation directory contents: {e}")
 
         summary = f"File removal summary: {removed_count} removed, {skipped_count} skipped, {error_count} errors."
         if errors:
             summary += "\nErrors encountered:\n" + "\n".join(errors)
 
         return error_count == 0, summary
+
+    def _clean_anpe_models(self) -> tuple[bool, str]:
+        """Cleans ANPE-related models (spaCy and benepar) using the ANPE CLI command."""
+        try:
+            # Find the Python executable in the installation directory
+            python_dir = os.path.join(self.install_path, "python")
+            if not os.path.exists(python_dir):
+                return False, "Python directory not found in the installation path."
+                
+            # Look for the ANPE CLI in the Scripts directory
+            scripts_dir = os.path.join(python_dir, "Scripts")
+            anpe_cli = os.path.join(scripts_dir, "anpe.exe") 
+            
+            # If Scripts directory or anpe.exe doesn't exist, try direct module execution
+            if not os.path.exists(scripts_dir) or not os.path.exists(anpe_cli):
+                self._log("ANPE CLI executable not found in Scripts directory. Trying Python module approach...")
+                
+                # Find Python executable
+                python_exe = None
+                for executable_name in ["python.exe", "pythonw.exe"]:
+                    executable_path = os.path.join(python_dir, executable_name)
+                    if os.path.exists(executable_path):
+                        python_exe = executable_path
+                        break
+                        
+                # Also check the Scripts directory for Python
+                if not python_exe and os.path.exists(scripts_dir):
+                    for executable_name in ["python.exe", "pythonw.exe"]:
+                        executable_path = os.path.join(scripts_dir, executable_name)
+                        if os.path.exists(executable_path):
+                            python_exe = executable_path
+                            break
+                
+                if not python_exe:
+                    return False, "Python executable not found in the installation directory."
+                    
+                self._log(f"Found Python executable: {python_exe}")
+                
+                # Use Python to run the module directly
+                self._log("Starting ANPE model cleanup using Python module...")
+                command = [python_exe, "-m", "anpe.utils.clean_models", "--force"]
+            else:
+                # Use the ANPE CLI directly
+                self._log(f"Found ANPE CLI at: {anpe_cli}")
+                self._log("Starting ANPE model cleanup using CLI...")
+                command = [anpe_cli, "setup", "--clean-models"]
+            
+            # Execute the command
+            self._send_update(ACTION_STATUS, "Cleaning ANPE models (this may take a while)...")
+            process = subprocess.Popen(
+                command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                creationflags=subprocess.CREATE_NO_WINDOW,
+                shell=False,
+                encoding='utf-8',
+                errors='replace'
+            )
+            
+            # Process the output
+            output_lines = []
+            found_start = False  # Track whether we've found the command start
+            cleaning_in_progress = False  # Track when actual cleaning is happening
+            
+            while True:
+                line = process.stdout.readline()
+                if not line and process.poll() is not None:
+                    break
+                    
+                if line:
+                    clean_line = line.strip()
+                    if clean_line:  # Skip empty lines
+                        output_lines.append(clean_line)
+                        
+                        # Update status based on key phrases
+                        if "Starting" in clean_line or "Cleanup" in clean_line:
+                            found_start = True
+                            
+                        if "Found" in clean_line and "package" in clean_line:
+                            cleaning_in_progress = True
+                            # Update UI status with what's being cleaned
+                            model_info = clean_line.split("Found")[1].strip() if "Found" in clean_line else "models"
+                            self._send_update(ACTION_STATUS, f"Cleaning ANPE models: {model_info}...")
+                            
+                        if "Removing" in clean_line:
+                            cleaning_in_progress = True
+                            # Extract what's being removed for status update
+                            model_info = clean_line.split("Removing")[1].strip() if "Removing" in clean_line else "models"
+                            self._send_update(ACTION_STATUS, f"Removing model: {model_info}...")
+                            
+                        # Log the output
+                        self._log(f"Model cleanup: {clean_line}")
+            
+            # Wait for the process to complete
+            return_code = process.wait()
+            
+            # If no start messages were found, the command might have failed silently
+            if not found_start and len(output_lines) < 2:
+                return False, "ANPE model cleanup command didn't produce expected output. It may not have executed properly."
+                
+            if return_code == 0:
+                if not cleaning_in_progress and len(output_lines) < 3:
+                    # No models needed cleaning - this is a success case
+                    return True, "ANPE model cleanup completed - no models needed to be removed."
+                else:
+                    return True, "ANPE model cleanup completed successfully."
+            else:
+                return False, f"ANPE model cleanup failed with return code {return_code}. See log for details."
+                
+        except Exception as e:
+            error_details = traceback.format_exc()
+            error_message = f"Error during model cleanup: {e}\n{error_details}"
+            self._log(error_message)
+            return False, f"Failed to clean ANPE models: {e}"
 
 # --- Main Application Window (Tkinter) ---
 class UninstallMainWindow(tk.Tk):
@@ -334,6 +559,8 @@ class UninstallMainWindow(tk.Tk):
         self._worker_thread: Optional[UninstallWorker] = None
         self._output_queue = queue.Queue()
         self._is_running = False
+        self._install_path: Optional[str] = None # Added to store install path
+        self._remove_models: bool = True  # Default value, will be updated
 
         self._setup_window()
         self._setup_styles()
@@ -357,21 +584,31 @@ class UninstallMainWindow(tk.Tk):
         try:
             self.default_font = tkFont.Font(family=PRIMARY_FONT_FAMILY, size=DEFAULT_FONT_SIZE)
             self.title_font = tkFont.Font(family=PRIMARY_FONT_FAMILY, size=TITLE_FONT_SIZE, weight="bold")
+            self.subtitle_font = tkFont.Font(family=PRIMARY_FONT_FAMILY, size=SUBTITLE_FONT_SIZE)
         except tk.TclError:
             print(f"Warning: Font '{PRIMARY_FONT_FAMILY}' not found. Using '{FALLBACK_FONT_FAMILY}'.", file=sys.stderr)
             self.default_font = tkFont.Font(family=FALLBACK_FONT_FAMILY, size=DEFAULT_FONT_SIZE)
             self.title_font = tkFont.Font(family=FALLBACK_FONT_FAMILY, size=TITLE_FONT_SIZE, weight="bold")
+            self.subtitle_font = tkFont.Font(family=FALLBACK_FONT_FAMILY, size=SUBTITLE_FONT_SIZE)
         self.style.configure('.', font=self.default_font, background=LIGHT_BG_COLOR)
         self.style.configure("TFrame", background=LIGHT_BG_COLOR)
-        self.style.configure("TLabel", background=LIGHT_BG_COLOR, foreground="#333333", padding=PADDING // 3)
+        self.style.configure("TLabel", background=LIGHT_BG_COLOR, foreground="#333333", padding=0)
         self.style.configure("Title.TLabel", font=self.title_font, foreground=PRIMARY_COLOR, padding=(0, PADDING // 2))
+        self.style.configure("Subtitle.TLabel", font=self.subtitle_font, foreground=SECONDARY_TEXT_COLOR, padding=(0, PADDING // 4))
         self.style.configure("Secondary.TLabel", foreground=SECONDARY_TEXT_COLOR)
         self.style.configure("Error.TLabel", foreground=ERROR_COLOR)
-        self.style.configure("Success.TLabel", font=self.title_font, foreground=SUCCESS_COLOR)
+        self.style.configure("Warning.TLabel", foreground=WARNING_COLOR)
+        self.style.configure("Success.TLabel", foreground=SUCCESS_COLOR)
+        self.style.configure("Info.TLabel", foreground=INFO_COLOR)
         self.style.configure("TLabelframe", background=LIGHT_BG_COLOR)
         self.style.configure("TLabelframe.Label", background=LIGHT_BG_COLOR, font=self.default_font)
         self.style.configure("TProgressbar", thickness=20, background=BORDER_COLOR, troughcolor=LIGHT_BG_COLOR)
         self.style.configure("TButton", font=self.default_font, padding=(PADDING, PADDING // 2))
+        self.style.configure("PathBrowse.TButton", padding=(10, 4))  # Adjusted padding for height
+        self.style.configure("PathLabel.TLabel", 
+                           font=(PRIMARY_FONT_FAMILY, SMALL_FONT_SIZE, "italic"),
+                           foreground=SECONDARY_TEXT_COLOR,
+                           background=LIGHT_BG_COLOR)
 
     def _create_widgets(self):
         """Create and layout the main container and frames."""
@@ -401,7 +638,7 @@ class UninstallMainWindow(tk.Tk):
         else:
             print(f"Error: View '{view_name}' not found.", file=sys.stderr)
 
-    def _start_uninstall(self, install_path: str):
+    def _start_uninstall(self, install_path: str, remove_models: bool = True):
         """Initiate the uninstallation process in a worker thread."""
         if self._is_running:
             messagebox.showwarning("In Progress", "Uninstallation is already running.")
@@ -413,8 +650,10 @@ class UninstallMainWindow(tk.Tk):
             if not progress_frame:
                 raise RuntimeError("Progress frame not found during uninstall start.")
 
-            self._worker_thread = UninstallWorker(install_path, self._output_queue)
+            self._worker_thread = UninstallWorker(install_path, self._output_queue, remove_models)
             self._is_running = True
+            self._install_path = install_path # Store the install path
+            self._remove_models = remove_models  # Store for potential future use
             progress_frame.reset_progress() # Reset UI before switching
             self._switch_view(VIEW_PROGRESS)
             self._worker_thread.start()
@@ -463,8 +702,8 @@ class UninstallMainWindow(tk.Tk):
                 progress_frame.set_progress(current, total)
             elif action == ACTION_FINISHED:
                 self._is_running = False # Mark process as finished
-                success, message, full_log = data
-                completion_frame.set_state(success, message, full_log)
+                success, message, full_log, log_path = data
+                completion_frame.set_state(success, message, full_log, log_path)
                 self._switch_view(VIEW_COMPLETION)
             else:
                 print(f"Warning: Unknown action from worker: {action}", file=sys.stderr)
@@ -488,6 +727,34 @@ class UninstallMainWindow(tk.Tk):
                 self.destroy()
             # else: User selected No, do nothing
         else:
+            # Not running, attempt self-destruction before closing
+            if self._install_path:
+                try:
+                    uninstaller_exe_path = os.path.join(self._install_path, "uninstall.exe")
+                    install_dir_path = self._install_path
+
+                    if os.path.exists(uninstaller_exe_path):
+                        print(f"Attempting self-destruction for: {uninstaller_exe_path} and {install_dir_path}")
+                        # Use cmd.exe to wait, delete self, then remove directory
+                        # timeout /t 2: Wait 2 seconds
+                        # /nobreak: Ignore key presses during timeout
+                        # > nul: Suppress timeout output
+                        # &&: Run next command only if previous succeeds
+                        # del /f /q "...": Force quiet deletion of the uninstaller
+                        # rmdir /s /q "...": Quietly remove the directory and its contents
+                        cmd = f'cmd.exe /c "timeout /t 2 /nobreak > nul && del /f /q "{uninstaller_exe_path}" && rmdir /s /q "{install_dir_path}""'
+                        
+                        # DETACHED_PROCESS allows the parent (uninstaller) to exit immediately
+                        # CREATE_NO_WINDOW hides the command prompt window
+                        creation_flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NO_WINDOW
+                        subprocess.Popen(cmd, creationflags=creation_flags, shell=False)
+                        print("Self-destruction process launched.")
+                    else:
+                         print("Uninstaller executable not found, skipping self-destruction.")
+                except Exception as e:
+                    print(f"Error launching self-destruction process: {e}")
+                    # Log error, but proceed with closing
+
             # Not running, close immediately
             self.destroy()
 
@@ -495,53 +762,184 @@ class UninstallMainWindow(tk.Tk):
 # --- Tkinter UI Frames (New) ---
 class WelcomeFrame(ttk.Frame):
     """Welcome screen frame."""
-    def __init__(self, parent, start_uninstall_callback: Callable[[str], None], **kwargs):
+    def __init__(self, parent, start_uninstall_callback: Callable[[str, bool], None], **kwargs):
         super().__init__(parent, **kwargs)
         self.start_uninstall_callback = start_uninstall_callback
         self.install_path: Optional[str] = None
         self.manual_path_selected = False
+        self.path_status_text = ""
+        self.path_status_style = "Secondary.TLabel"
+        self.remove_models_var = tk.BooleanVar(value=True)  # Default to True (checked)
 
-        self._setup_ui()
+        self._setup_styles()  # Set up styles FIRST
+        self._setup_ui()      # Then set up UI components
         self.update_install_path() # Initial check
+
+    def _setup_styles(self):
+        self.style = ttk.Style(self)
+        try:
+            self.style.theme_use('vista')
+        except tk.TclError:
+            print("Warning: 'vista' theme not available. Using default.", file=sys.stderr)
+        try:
+            self.default_font = tkFont.Font(family=PRIMARY_FONT_FAMILY, size=DEFAULT_FONT_SIZE)
+            self.title_font = tkFont.Font(family=PRIMARY_FONT_FAMILY, size=TITLE_FONT_SIZE, weight="bold")
+            self.subtitle_font = tkFont.Font(family=PRIMARY_FONT_FAMILY, size=SUBTITLE_FONT_SIZE)
+            self.status_font = tkFont.Font(family=PRIMARY_FONT_FAMILY, size=SUBTITLE_FONT_SIZE-1, slant="italic")
+        except tk.TclError:
+            print(f"Warning: Font '{PRIMARY_FONT_FAMILY}' not found. Using '{FALLBACK_FONT_FAMILY}'.", file=sys.stderr)
+            self.default_font = tkFont.Font(family=FALLBACK_FONT_FAMILY, size=DEFAULT_FONT_SIZE)
+            self.title_font = tkFont.Font(family=FALLBACK_FONT_FAMILY, size=TITLE_FONT_SIZE, weight="bold")
+            self.subtitle_font = tkFont.Font(family=FALLBACK_FONT_FAMILY, size=SUBTITLE_FONT_SIZE)
+            self.status_font = tkFont.Font(family=FALLBACK_FONT_FAMILY, size=SUBTITLE_FONT_SIZE-1, slant="italic")
+
+        self.style.configure('.', font=self.default_font, background=LIGHT_BG_COLOR)
+        self.style.configure("TFrame", background=LIGHT_BG_COLOR)
+        self.style.configure("TLabel", background=LIGHT_BG_COLOR, foreground="#333333", padding=0)
+        self.style.configure("Title.TLabel", font=self.title_font, foreground=PRIMARY_COLOR, padding=(0, PADDING // 2))
+        self.style.configure("Subtitle.TLabel", font=self.subtitle_font, foreground=SECONDARY_TEXT_COLOR, padding=(0, PADDING // 4))
+        self.style.configure("Status.TLabel", font=self.status_font, foreground=SECONDARY_TEXT_COLOR)
+        self.style.configure("Secondary.TLabel", foreground=SECONDARY_TEXT_COLOR)
+        self.style.configure("Error.TLabel", foreground=ERROR_COLOR)
+        self.style.configure("Warning.TLabel", foreground=WARNING_COLOR)
+        self.style.configure("Success.TLabel", foreground=SUCCESS_COLOR)
+        self.style.configure("Info.TLabel", foreground=INFO_COLOR)
+        self.style.configure("TLabelframe", background=LIGHT_BG_COLOR)
+        self.style.configure("TLabelframe.Label", background=LIGHT_BG_COLOR, font=self.default_font)
+        self.style.configure("TProgressbar", thickness=20, background=BORDER_COLOR, troughcolor=LIGHT_BG_COLOR)
+        self.style.configure("TButton", font=self.default_font, padding=(PADDING, PADDING // 2))
 
     def _setup_ui(self):
         self.columnconfigure(0, weight=1)
-        # Row configure allows path label and buttons to be pushed down
-        self.rowconfigure(3, weight=1)
+        
+        # Center container frame
+        center_container = ttk.Frame(self, style="TFrame")
+        center_container.grid(row=0, column=0, sticky="nsew")
+        center_container.columnconfigure(0, weight=1)
+        
+        # Spacer at top (pushes content down slightly)
+        ttk.Frame(center_container, style="TFrame").grid(row=0, column=0, pady=PADDING)
 
-        # Title
-        title_label = ttk.Label(self, text=f"{APP_NAME} Uninstaller", style="Title.TLabel", anchor="center")
-        title_label.grid(row=0, column=0, pady=(PADDING * 2, PADDING // 2), padx=PADDING, sticky="ew")
+        # Logo Frame
+        logo_frame = ttk.Frame(center_container, style="TFrame")
+        logo_frame.grid(row=1, column=0, pady=(0, PADDING//2))
+        
+        # Logo Label (centered)
+        self.logo_label = ttk.Label(logo_frame, style="TLabel")
+        self.logo_image = self._load_logo_image((100, 100))  # Larger logo size
+        if self.logo_image:
+            self.logo_label.config(image=self.logo_image)
+            self.logo_label.image = self.logo_image
+        self.logo_label.pack(anchor="center")
 
-        # Welcome Text
-        welcome_text = ttk.Label(
-            self, text=f"This will uninstall {APP_NAME} and its components from your computer.",
-            style="Secondary.TLabel", wraplength=WINDOW_WIDTH - 4 * PADDING, anchor="center", justify="center"
+        # Title (centered)
+        title_label = ttk.Label(
+            center_container,
+            text=f"{APP_NAME} Uninstaller",
+            style="Title.TLabel",
+            anchor="center"
         )
-        welcome_text.grid(row=1, column=0, pady=PADDING // 2, padx=PADDING, sticky="ew")
+        title_label.grid(row=2, column=0, pady=(0, PADDING))
 
-        # Path Display Area Frame
-        path_frame = ttk.Frame(self, style="TFrame", padding=(PADDING // 2))
-        path_frame.grid(row=2, column=0, pady=PADDING, padx=PADDING, sticky="ew")
-        path_frame.columnconfigure(0, weight=1)
+        # Welcome Text (centered)
+        welcome_text = ttk.Label(
+            center_container,
+            text=(f"This will uninstall {APP_NAME} and its components from your computer. "
+                  f"The uninstaller will remove {APP_NAME} application files and registry entries, "
+                  f"but will not affect other Python installations or your personal files."),
+            style="Subtitle.TLabel",
+            wraplength=WINDOW_WIDTH - 8 * PADDING,  # Adjusted wrapping
+            anchor="center",
+            justify="center"
+        )
+        welcome_text.grid(row=3, column=0, pady=(0, PADDING * 2), padx=PADDING * 2)
+        welcome_text.configure(font=(PRIMARY_FONT_FAMILY, SMALL_FONT_SIZE))  # Made even smaller
 
-        self.path_label = ttk.Label(path_frame, text="Detecting installation path...", style="Secondary.TLabel", anchor="w", justify="left", wraplength=WINDOW_WIDTH - 6*PADDING - 80) # Allow wrapping, reserve space for button
-        self.path_label.grid(row=0, column=0, sticky="ew", padx=5, pady=5)
+        # Path Section Frame - Make it full width
+        path_section = ttk.Frame(center_container, style="TFrame")
+        path_section.grid(row=4, column=0, pady=(0, PADDING), padx=PADDING * 2, sticky="ew")
+        path_section.columnconfigure(0, weight=1)  # Make the frame expand horizontally
 
-        self.browse_button = ttk.Button(path_frame, text="Browse...", command=self._browse_for_path, width=10)
-        # Grid placement for browse_button handled dynamically in update_install_path
+        # Path Label (left aligned, italic, smaller)
+        path_label = ttk.Label(
+            path_section,
+            text="Uninstall ANPE from:",
+            style="PathLabel.TLabel",
+            anchor="w"
+        )
+        path_label.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 5))
 
-        # Spacer Frame (pushes buttons to bottom)
-        ttk.Frame(self, style="TFrame").grid(row=3, column=0, sticky="nsew")
+        # Path Entry and Browse Button Frame
+        path_entry_frame = ttk.Frame(path_section, style="TFrame")
+        path_entry_frame.grid(row=1, column=0, sticky="ew")
+        path_entry_frame.columnconfigure(0, weight=1)  # Make entry expand
+        path_entry_frame.columnconfigure(1, weight=0)  # Don't expand browse button
 
-        # Bottom Buttons Frame
-        button_frame = ttk.Frame(self, style="TFrame")
-        button_frame.grid(row=4, column=0, pady=(0, PADDING), padx=PADDING, sticky="ew")
-        button_frame.columnconfigure(0, weight=1) # Center the button
+        # Configure entry style for consistent height
+        entry_height = 26  # Match button height
+        entry_pady = (entry_height - DEFAULT_FONT_SIZE - 6) // 2  # Calculate padding to center text
 
-        self.uninstall_button = ttk.Button(button_frame, text="Uninstall", command=self._on_uninstall_click)
-        self.uninstall_button.grid(row=0, column=0, padx=PADDING)
-        set_widget_state(self.uninstall_button, "disabled") # Disabled initially
+        # Path Entry with fixed height through padding
+        self.path_entry = ttk.Entry(  # Changed to ttk.Entry for consistent styling
+            path_entry_frame,
+            font=(PRIMARY_FONT_FAMILY, DEFAULT_FONT_SIZE),
+            style="Path.TEntry"  # Use custom style
+        )
+        self.path_entry.grid(row=0, column=0, sticky="ew", padx=(0, 5))
+
+        # Configure style for the entry
+        self.style.configure("Path.TEntry",
+            padding=(5, entry_pady),  # Horizontal and vertical padding
+            selectbackground=PRIMARY_COLOR,
+            fieldbackground=INPUT_BG_COLOR
+        )
+
+        # Browse Button with matching height and fixed width
+        self.browse_button = ttk.Button(
+            path_entry_frame,
+            text="Browse...",
+            command=self._browse_for_path,
+            width=12,  # Fixed width in characters
+            style="PathBrowse.TButton"
+        )
+        self.browse_button.grid(row=0, column=1, sticky="e")  # Changed column to 1
+
+        # Path Status Label (centered, italic)
+        self.path_status_label = ttk.Label(
+            path_section,
+            text="",
+            style="Status.TLabel",
+            anchor="center"
+        )
+        self.path_status_label.grid(row=2, column=0, sticky="ew", pady=(5, 0))
+
+        # Add checkbox for model removal
+        model_cleanup_frame = ttk.Frame(center_container, style="TFrame")
+        model_cleanup_frame.grid(row=5, column=0, pady=(0, PADDING), padx=PADDING * 2, sticky="ew")
+
+        # Model cleanup checkbox
+        self.remove_models_checkbox = ttk.Checkbutton(
+            model_cleanup_frame,
+            text="Remove ANPE-related models (spaCy and benepar models)",
+            variable=self.remove_models_var,
+            style="TCheckbutton"
+        )
+        self.remove_models_checkbox.grid(row=0, column=0, sticky="w")
+
+        # Bottom Button Frame (centered)
+        button_frame = ttk.Frame(center_container, style="TFrame")
+        button_frame.grid(row=6, column=0, pady=PADDING * 2, sticky="ew")
+        button_frame.columnconfigure(0, weight=1)  # Enable centering
+
+        # Uninstall button with fixed width
+        self.uninstall_button = ttk.Button(
+            button_frame,
+            text="Uninstall",
+            command=self._on_uninstall_click,
+            width=15  # Fixed width for better appearance
+        )
+        self.uninstall_button.grid(row=0, column=0)  # Use grid instead of pack
+        set_widget_state(self.uninstall_button, "disabled")  # Disabled initially
 
     def _get_install_path_from_registry(self) -> Optional[str]:
         """Get the installation path from the registry."""
@@ -568,22 +966,52 @@ class WelcomeFrame(ttk.Frame):
         if path_to_use:
             self.install_path = path_to_use
             self.manual_path_selected = bool(manual_path)
-            prefix = "Selected path:" if self.manual_path_selected else "Detected path:"
-            self.path_label.config(text=f"{prefix}\n{self.install_path}", style="Secondary.TLabel")
+            
+            # Update path entry with detected path and make it read-only
+            self.path_entry.delete(0, tk.END)
+            self.path_entry.insert(0, self.install_path)
+            
+            # Make the entry read-only (state=readonly doesn't work well with styling)
+            # Instead, bind events to prevent modification
+            self.path_entry.bind("<Key>", lambda e: "break" if e.keysym not in ("c", "C") or not (e.state & 4) else None)  # Allow Ctrl+C
+            
+            # Update status label based on source and validation
+            if self.manual_path_selected:
+                is_likely_anpe, _ = self._is_likely_anpe_installation(path_to_use)
+                if is_likely_anpe:
+                    self.path_status_text = "✓ Manually selected - Appears to be an ANPE installation"
+                    self.path_status_style = "Success.TLabel"
+                else:
+                    self.path_status_text = "⚠ Manually selected - Unlikely to be an ANPE installation"
+                    self.path_status_style = "Warning.TLabel"
+            else:
+                self.path_status_text = "✓ Automatically detected from registry"
+                self.path_status_style = "Info.TLabel"
+                
+            self.path_status_label.config(text=self.path_status_text, style=self.path_status_style)
             set_widget_state(self.uninstall_button, "normal")
-            self.browse_button.grid_forget() # Hide browse button if path is set
         else:
             self.install_path = None
             self.manual_path_selected = False
-            self.path_label.config(text="Installation path not found. Use 'Browse...' to select it manually.", style="Error.TLabel")
+            
+            # Clear entry and make it writable
+            self.path_entry.delete(0, tk.END)
+            self.path_entry.unbind("<Key>")  # Allow typing for manual path entry
+            
+            # Update status label
+            self.path_status_text = "Installation path not found. Use 'Browse...' to select it manually."
+            self.path_status_style = "Error.TLabel"
+            self.path_status_label.config(text=self.path_status_text, style=self.path_status_style)
             set_widget_state(self.uninstall_button, "disabled")
-            # Place browse button if not already visible
-            if not self.browse_button.winfo_ismapped():
-                 self.browse_button.grid(row=0, column=1, sticky="e", padx=5, pady=5)
 
     def _browse_for_path(self):
         """Open directory dialog for manual path selection."""
-        selected_path = filedialog.askdirectory(title=f"Select {APP_NAME} Installation Directory")
+        try:
+            initial_dir = self.path_entry.get().strip() or os.path.expanduser("~")
+        except:
+            initial_dir = os.path.expanduser("~")
+            
+        selected_path = filedialog.askdirectory(title=f"Select {APP_NAME} Installation Directory", initialdir=initial_dir)
         if selected_path and os.path.isdir(selected_path):
             # Update the UI with the manually selected path
             self.update_install_path(manual_path=os.path.normpath(selected_path))
@@ -593,48 +1021,206 @@ class WelcomeFrame(ttk.Frame):
             self.update_install_path()
         # If dialog cancelled, do nothing, keep previous state.
 
+    def _is_likely_anpe_installation(self, path: str) -> tuple[bool, list]:
+        """
+        Check if the given path appears to be an ANPE installation.
+        Returns a tuple of (is_likely_anpe, file_list)
+        """
+        if not os.path.isdir(path):
+            return (False, [])
+            
+        expected_anpe_files = [
+            "ANPE.exe", 
+            "uninstall.exe"
+        ]
+        expected_anpe_dirs = [
+            "anpe_gui",
+            "python"
+        ]
+        
+        items = []
+        try:
+            items = os.listdir(path)
+        except (PermissionError, OSError):
+            # If we can't access the directory, we can't tell
+            return (False, [])
+            
+        # Check for key ANPE files/directories
+        anpe_indicators_found = 0
+        for item in expected_anpe_files:
+            if item in items and os.path.isfile(os.path.join(path, item)):
+                anpe_indicators_found += 1
+                
+        for item in expected_anpe_dirs:
+            if item in items and os.path.isdir(os.path.join(path, item)):
+                anpe_indicators_found += 1
+                
+        # If we found at least 2 indicators, it's likely an ANPE installation
+        # Return both the result and the file list for showing the user
+        return (anpe_indicators_found >= 2, items)
+
     def _on_uninstall_click(self):
         """Handle uninstall button click, confirming if path was manual."""
         if not self.install_path:
-            messagebox.showerror("Error", "No installation path specified.")
-            return
+            # Try to get path from entry if install_path is not set
+            entered_path = self.path_entry.get().strip()
+            if entered_path and os.path.isdir(entered_path):
+                self.install_path = entered_path
+                self.manual_path_selected = True
+            else:
+                messagebox.showerror("Error", "No valid installation path specified.")
+                return
 
-        confirm_msg = f"Are you sure you want to uninstall {APP_NAME} from:\n{self.install_path}?\n\nThis action cannot be undone."
-        confirm_title = "Confirm Uninstall"
-
+        # First level check - is it manually selected?
         if self.manual_path_selected:
+            # Additional safety check for manually selected paths
+            is_anpe, file_list = self._is_likely_anpe_installation(self.install_path)
+            
+            if not is_anpe:
+                # Format file list for display, limit to reasonable length
+                formatted_files = "\n".join(file_list[:15])
+                if len(file_list) > 15:
+                    formatted_files += f"\n... and {len(file_list) - 15} more files/folders"
+                
+                unsafe_message = (
+                    f"⚠️ WARNING: The directory you selected does NOT appear to be an ANPE installation!\n\n"
+                    f"Path: {self.install_path}\n\n"
+                    f"Directory contents:\n{formatted_files}\n\n"
+                    f"Continuing with uninstallation may DELETE DATA UNRELATED TO ANPE.\n\n"
+                    f"Are you ABSOLUTELY SURE you want to delete these files?"
+                )
+                
+                proceed = messagebox.askyesno(
+                    "⚠️ DANGEROUS OPERATION", 
+                    unsafe_message,
+                    default=messagebox.NO, 
+                    icon=messagebox.WARNING
+                )
+                
+                if not proceed:
+                    return
+                    
+            # Normal manual path warning (shown even if it looks like ANPE)
             confirm_msg = f"WARNING: You manually selected the installation path:\n{self.install_path}\n\nUninstalling from the wrong directory can damage other applications or your system.\n\nARE YOU ABSOLUTELY SURE you want to proceed?"
             confirm_title = "Confirm Manual Path Uninstall"
+            
+            proceed = messagebox.askyesno(confirm_title, confirm_msg, default=messagebox.NO, icon=messagebox.WARNING)
+            
+            if not proceed:
+                return
+        else:
+            # Standard confirmation for registry-detected paths
+            confirm_msg = f"Are you sure you want to uninstall {APP_NAME} from:\n{self.install_path}?\n\nThis action cannot be undone."
+            confirm_title = "Confirm Uninstall"
+            
+            proceed = messagebox.askyesno(confirm_title, confirm_msg, default=messagebox.NO, icon=messagebox.QUESTION)
+            
+            if not proceed:
+                return
 
-        proceed = messagebox.askyesno(confirm_title, confirm_msg, default=messagebox.NO, icon=messagebox.WARNING if self.manual_path_selected else messagebox.QUESTION)
+        self.start_uninstall_callback(self.install_path, self.remove_models_var.get())
 
-        if proceed:
-            self.start_uninstall_callback(self.install_path)
+    def _load_logo_image(self, size: Tuple[int, int]) -> Optional[ImageTk.PhotoImage]:
+        """Load the logo image using PIL, with fallback handling."""
+        if not PIL_AVAILABLE:
+            print("Warning: PIL not available for logo loading.", file=sys.stderr)
+            return None
+            
+        try:
+            # Try to find the logo in various locations
+            possible_paths = [
+                "app_icon_logo.png",  # Current directory or PyInstaller root
+                os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "app_icon_logo.png"),  # Same dir as script
+                os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "installer", "assets", "app_icon_logo.png"),  # Parent dir
+            ]
+            
+            # Try sys._MEIPASS for PyInstaller frozen environment
+            if hasattr(sys, "_MEIPASS"):
+                possible_paths.insert(0, os.path.join(sys._MEIPASS, "app_icon_logo.png"))
+            
+            img_path = None
+            for path in possible_paths:
+                if os.path.exists(path):
+                    img_path = path
+                    break
+                    
+            if not img_path:
+                print(f"Logo image not found in any of: {possible_paths}", file=sys.stderr)
+                return None
+                
+            # Open and resize the image
+            img = Image.open(img_path)
+            img = img.resize(size, Image.LANCZOS)  # Use LANCZOS resampling for better quality
+            photo_img = ImageTk.PhotoImage(img)
+            return photo_img
+        except Exception as e:
+            print(f"Error loading logo image: {e}", file=sys.stderr)
+            return None
 
 
 class ProgressFrame(ttk.Frame):
     """Progress display frame."""
     def __init__(self, parent, **kwargs):
         super().__init__(parent, **kwargs)
+        self._setup_styles()  # Set up styles before UI
         self._setup_ui()
+        
+    def _setup_styles(self):
+        try:
+            self.title_font = tkFont.Font(family=PRIMARY_FONT_FAMILY, size=TITLE_FONT_SIZE, weight="bold")
+            self.subtitle_font = tkFont.Font(family=PRIMARY_FONT_FAMILY, size=SUBTITLE_FONT_SIZE)
+        except tk.TclError:
+            self.title_font = tkFont.Font(family=FALLBACK_FONT_FAMILY, size=TITLE_FONT_SIZE, weight="bold")
+            self.subtitle_font = tkFont.Font(family=FALLBACK_FONT_FAMILY, size=SUBTITLE_FONT_SIZE)
+        
+        style = ttk.Style(self)
+        style.configure("Title.TLabel", font=self.title_font, foreground=PRIMARY_COLOR, padding=(0, PADDING // 2))
+        style.configure("Subtitle.TLabel", font=self.subtitle_font, foreground=SECONDARY_TEXT_COLOR, padding=(0, PADDING // 4))
 
     def _setup_ui(self):
         self.columnconfigure(0, weight=1)
 
-        # Title
-        self.title_label = ttk.Label(self, text=f"Uninstalling {APP_NAME}...", style="Title.TLabel", anchor="w", justify="left")
-        self.title_label.grid(row=0, column=0, pady=(PADDING, PADDING // 2), padx=PADDING, sticky="ew")
+        # --- Header with Logo and Title (mimicking PyQt views) ---
+        header_frame = ttk.Frame(self, style="TFrame")
+        header_frame.grid(row=0, column=0, pady=(PADDING, PADDING // 2), padx=PADDING, sticky="ew")
+        header_frame.columnconfigure(1, weight=1)  # Title column expands
+        
+        # Logo display (left side of header)
+        self.logo_label = ttk.Label(header_frame, style="TLabel")
+        self.logo_image = self._load_logo_image(LOGO_SIZE)
+        if self.logo_image:
+            self.logo_label.config(image=self.logo_image)
+            self.logo_label.image = self.logo_image  # Keep reference
+        self.logo_label.grid(row=0, column=0, padx=(0, PADDING), sticky="w")
+        
+        # Title in header (right side of logo)
+        self.title_label = ttk.Label(
+            header_frame, 
+            text=f"Uninstalling {APP_NAME}...", 
+            style="Title.TLabel", 
+            anchor="w"
+        )
+        self.title_label.grid(row=0, column=1, sticky="w")
 
-        # Status Label
-        self.status_label = ttk.Label(self, text="Initializing...", style="Secondary.TLabel", anchor="w", justify="left")
-        self.status_label.grid(row=1, column=0, pady=PADDING // 2, padx=PADDING, sticky="ew")
+        # Status Label (as subtitle)
+        self.status_label = ttk.Label(self, text="Initializing...", style="Subtitle.TLabel", anchor="w", justify="left")
+        self.status_label.grid(row=1, column=0, pady=(0, PADDING // 2), padx=PADDING, sticky="w")
 
         # Progress Bar
         self.progress_bar = ttk.Progressbar(self, orient="horizontal", mode="determinate", length=WINDOW_WIDTH - 2 * PADDING)
         self.progress_bar.grid(row=2, column=0, pady=PADDING // 2, padx=PADDING, sticky="ew")
 
         # Log Area (ScrolledText)
-        self.log_text = scrolledtext.ScrolledText(self, height=10, wrap=tk.WORD, state="disabled", relief="solid", bd=1, font=(PRIMARY_FONT_FAMILY, DEFAULT_FONT_SIZE -1)) # Slightly smaller font for logs
+        self.log_text = scrolledtext.ScrolledText(
+            self, 
+            height=10, 
+            wrap=tk.WORD, 
+            state="disabled", 
+            relief="solid", 
+            bd=1, 
+            bg=LOG_BG_COLOR_PROGRESS,
+            font=(PRIMARY_FONT_FAMILY, DEFAULT_FONT_SIZE -1)
+        ) # Slightly smaller font for logs
         self.log_text.grid(row=3, column=0, pady=(PADDING // 2, PADDING), padx=PADDING, sticky="nsew")
         self.rowconfigure(3, weight=1) # Allow log area to expand vertically
 
@@ -684,6 +1270,43 @@ class ProgressFrame(ttk.Frame):
         self.log_text.see(tk.END) # Auto-scroll
         set_widget_state(self.log_text, "disabled")
 
+    def _load_logo_image(self, size: Tuple[int, int]) -> Optional[ImageTk.PhotoImage]:
+        """Load the logo image using PIL, with fallback handling."""
+        if not PIL_AVAILABLE:
+            print("Warning: PIL not available for logo loading.", file=sys.stderr)
+            return None
+            
+        try:
+            # Try to find the logo in various locations
+            possible_paths = [
+                "app_icon_logo.png",  # Current directory or PyInstaller root
+                os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "app_icon_logo.png"),  # Same dir as script
+                os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "installer", "assets", "app_icon_logo.png"),  # Parent dir
+            ]
+            
+            # Try sys._MEIPASS for PyInstaller frozen environment
+            if hasattr(sys, "_MEIPASS"):
+                possible_paths.insert(0, os.path.join(sys._MEIPASS, "app_icon_logo.png"))
+            
+            img_path = None
+            for path in possible_paths:
+                if os.path.exists(path):
+                    img_path = path
+                    break
+                    
+            if not img_path:
+                print(f"Logo image not found in any of: {possible_paths}", file=sys.stderr)
+                return None
+                
+            # Open and resize the image
+            img = Image.open(img_path)
+            img = img.resize(size, Image.LANCZOS)  # Use LANCZOS resampling for better quality
+            photo_img = ImageTk.PhotoImage(img)
+            return photo_img
+        except Exception as e:
+            print(f"Error loading logo image: {e}", file=sys.stderr)
+            return None
+
 
 class CompletionFrame(ttk.Frame):
     """Completion screen frame."""
@@ -691,53 +1314,176 @@ class CompletionFrame(ttk.Frame):
         super().__init__(parent, **kwargs)
         self.close_callback = close_callback
         self._full_log_content: Optional[str] = None
+        self._log_path: Optional[str] = None  # Add this to store log path
+        self._setup_styles()
         self._setup_ui()
 
-    def _setup_ui(self):
-        self.columnconfigure(0, weight=1)
-        # Row 3 is the log area, allow it to expand/contract
-        self.rowconfigure(3, weight=0) # Start with no weight
+    def _setup_styles(self):
+        try:
+            self.title_font = tkFont.Font(family=PRIMARY_FONT_FAMILY, size=TITLE_FONT_SIZE, weight="bold")
+            self.subtitle_font = tkFont.Font(family=PRIMARY_FONT_FAMILY, size=SUBTITLE_FONT_SIZE)
+        except tk.TclError:
+            self.title_font = tkFont.Font(family=FALLBACK_FONT_FAMILY, size=TITLE_FONT_SIZE, weight="bold")
+            self.subtitle_font = tkFont.Font(family=FALLBACK_FONT_FAMILY, size=SUBTITLE_FONT_SIZE)
+        
+        style = ttk.Style(self)
+        style.configure("Title.TLabel", font=self.title_font, foreground=PRIMARY_COLOR, padding=(0, PADDING // 2))
+        style.configure("Success.Title.TLabel", font=self.title_font, foreground=SUCCESS_COLOR, padding=(0, PADDING // 2))
+        style.configure("Error.Title.TLabel", font=self.title_font, foreground=ERROR_COLOR, padding=(0, PADDING // 2))
+        style.configure("Subtitle.TLabel", font=self.subtitle_font, foreground=SECONDARY_TEXT_COLOR, padding=(0, PADDING // 4))
 
-        # Title Label
-        self.title_label = ttk.Label(self, text="Uninstallation Complete", style="Title.TLabel", anchor="center")
-        self.title_label.grid(row=0, column=0, pady=(PADDING * 2, PADDING // 2), padx=PADDING, sticky="ew")
+    def _setup_ui(self):
+        # Configure grid weights to make content expand but keep bottom fixed
+        self.columnconfigure(0, weight=1)
+        
+        # Create main content frame that will expand
+        main_content = ttk.Frame(self, style="TFrame")
+        main_content.grid(row=0, column=0, sticky="nsew")
+        main_content.columnconfigure(0, weight=1)
+        self.rowconfigure(0, weight=1)  # Allow main content to expand
+
+        # --- Header with Logo and Title ---
+        header_frame = ttk.Frame(main_content, style="TFrame")
+        header_frame.grid(row=0, column=0, pady=(PADDING, PADDING // 2), padx=PADDING, sticky="ew")
+        header_frame.columnconfigure(1, weight=1)
+        
+        # Logo display
+        self.logo_label = ttk.Label(header_frame, style="TLabel")
+        self.logo_image = self._load_logo_image(LOGO_SIZE)
+        if self.logo_image:
+            self.logo_label.config(image=self.logo_image)
+            self.logo_label.image = self.logo_image
+        self.logo_label.grid(row=0, column=0, padx=(0, PADDING), sticky="w")
+        
+        # Title
+        self.title_label = ttk.Label(header_frame, text="Uninstallation Complete", style="Title.TLabel", anchor="w")
+        self.title_label.grid(row=0, column=1, sticky="w")
 
         # Message Label
-        self.message_label = ttk.Label(self, text="", style="Secondary.TLabel", wraplength=WINDOW_WIDTH - 4 * PADDING, anchor="center", justify="center")
-        self.message_label.grid(row=1, column=0, pady=PADDING // 2, padx=PADDING, sticky="ew")
+        self.message_label = ttk.Label(main_content, text="", style="Subtitle.TLabel", 
+                                     wraplength=WINDOW_WIDTH - 4 * PADDING, anchor="w", justify="left")
+        self.message_label.grid(row=1, column=0, pady=(0, PADDING // 2), padx=PADDING, sticky="w")
 
-        # Frame for Details button (to center it)
-        details_button_frame = ttk.Frame(self, style="TFrame")
-        details_button_frame.grid(row=2, column=0, pady=(PADDING, PADDING // 2))
-        details_button_frame.columnconfigure(0, weight=1)
+        # Details button frame
+        details_button_frame = ttk.Frame(main_content, style="TFrame")
+        details_button_frame.grid(row=2, column=0, pady=(0, PADDING // 2), padx=PADDING, sticky="w")
 
         self.details_button = ttk.Button(details_button_frame, text="Show Details", command=self._toggle_details)
         self.details_button.grid(row=0, column=0)
-        set_widget_state(self.details_button, "disabled") # Disabled initially
+        set_widget_state(self.details_button, "disabled")
 
         # Log Area (ScrolledText, initially not gridded)
-        self.log_text = scrolledtext.ScrolledText(self, height=8, wrap=tk.WORD, state="disabled", relief="solid", bd=1, font=(PRIMARY_FONT_FAMILY, DEFAULT_FONT_SIZE -1))
+        self.log_text = scrolledtext.ScrolledText(
+            main_content, 
+            height=12,
+            wrap=tk.WORD, 
+            state="disabled",
+            relief="solid",
+            bd=1,
+            bg=LOG_BG_COLOR_COMPLETION,
+            font=(PRIMARY_FONT_FAMILY, DEFAULT_FONT_SIZE - 1)
+        )
 
-        # Bottom Button Frame (always visible)
-        button_frame = ttk.Frame(self, style="TFrame")
-        button_frame.grid(row=4, column=0, pady=(PADDING // 2, PADDING), sticky="sew") # Stick to bottom-east-west
-        button_frame.columnconfigure(0, weight=1)
-        self.rowconfigure(4, weight=1) # Push button to bottom
+        # Bottom section frame - no separator, just padding
+        bottom_frame = ttk.Frame(self, style="TFrame")
+        bottom_frame.grid(row=1, column=0, sticky="sew", pady=(PADDING, 0))
+        bottom_frame.columnconfigure(0, weight=1)
+        self.rowconfigure(1, weight=0)  # Don't allow bottom frame to expand
 
-        # Close Button (centered in bottom frame)
-        self.close_button = ttk.Button(button_frame, text="Close", command=self.close_callback)
-        self.close_button.grid(row=0, column=0, padx=PADDING)
+        # Controls container with padding
+        controls_frame = ttk.Frame(bottom_frame, style="TFrame")
+        controls_frame.grid(row=0, column=0, padx=PADDING, pady=(0, PADDING), sticky="sw")
+        
+        # Checkbox
+        self.keep_logs_var = tk.BooleanVar(value=True)
+        self.keep_logs_checkbox = ttk.Checkbutton(
+            controls_frame,
+            text="Keep uninstallation log file",
+            variable=self.keep_logs_var,
+            style="TCheckbutton"
+        )
+        self.keep_logs_checkbox.grid(row=0, column=0, sticky="w", pady=(0, PADDING//2))
+        
+        # Close Button
+        self.close_button = ttk.Button(controls_frame, text="Close", command=self._on_close)
+        self.close_button.grid(row=1, column=0, sticky="w")
 
-    def set_state(self, success: bool, final_message: str, full_log: str):
+    def _toggle_details(self):
+        """Show or hide the detailed log."""
+        if self.log_text.winfo_ismapped(): # Check if gridded (visible)
+            self._hide_details()
+        else:
+            self._show_details()
+
+    def _show_details(self):
+        """Show the detailed log."""
+        if not self._full_log_content or not self.winfo_exists():
+            return
+        # Place the log text widget above the bottom frame
+        self.log_text.grid(row=3, column=0, pady=(0, PADDING//2), padx=PADDING, sticky="nsew")
+        self.rowconfigure(3, weight=1)
+        set_widget_state(self.log_text, "normal")
+        self.log_text.delete("1.0", tk.END)
+        self.log_text.insert(tk.END, self._full_log_content)
+        set_widget_state(self.log_text, "disabled")
+        self.details_button.config(text="Hide Details")
+        self.update_idletasks()
+
+    def _hide_details(self):
+        """Hide the detailed log."""
+        if not self.winfo_exists():
+            return
+        self.log_text.grid_forget()
+        self.rowconfigure(3, weight=0)
+        self.details_button.config(text="Show Details")
+        self.update_idletasks()
+
+    def _on_close(self):
+        """Handle close button click with log retention logic."""
+        if not self.keep_logs_var.get() and self._log_path:
+            try:
+                # Get log directory path before closing streams
+                log_dir = os.path.dirname(self._log_path)
+                log_path = self._log_path
+
+                # Only close streams if we're running with pythonw.exe
+                if "pythonw.exe" in sys.executable.lower():
+                    # Safely close streams if they're file objects
+                    if hasattr(sys, 'stdout') and hasattr(sys.stdout, 'close') and not sys.stdout.closed:
+                        try:
+                            sys.stdout.close()
+                        except:
+                            pass
+                    if hasattr(sys, 'stderr') and hasattr(sys.stderr, 'close') and not sys.stderr.closed:
+                        try:
+                            sys.stderr.close()
+                        except:
+                            pass
+
+                # Use delayed deletion command for logs
+                cmd = f'cmd.exe /c "timeout /t 1 /nobreak > nul && del /f /q "{log_path}" && rmdir /q "{log_dir}""'
+                creation_flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NO_WINDOW
+                subprocess.Popen(cmd, creationflags=creation_flags, shell=False)
+            except Exception as e:
+                # Don't try to print here as streams might be closed
+                pass
+
+        # Call the original close callback
+        self.close_callback()
+
+    def set_state(self, success: bool, final_message: str, full_log: str, log_path: Optional[str] = None):
         """Set the final state of the completion screen."""
-        if not self.winfo_exists(): return
+        if not self.winfo_exists():
+            return
 
         self._full_log_content = full_log
+        self._log_path = log_path  # Store the log path
+
         if success:
-            self.title_label.config(text="Uninstallation Complete", style="Success.TLabel")
+            self.title_label.config(text="Uninstallation Complete", style="Success.Title.TLabel")
             self.message_label.config(text=f"{APP_NAME} has been successfully uninstalled.")
         else:
-            self.title_label.config(text="Uninstallation Failed", style="Error.TLabel")
+            self.title_label.config(text="Uninstallation Failed", style="Error.Title.TLabel")
             error_text = f"An error occurred during uninstallation."
             # Use the final_message from worker if available and specific
             if final_message and "unexpected error occurred" not in final_message.lower():
@@ -757,61 +1503,85 @@ class CompletionFrame(ttk.Frame):
         # Ensure log is hidden initially
         self._hide_details()
 
-    def _toggle_details(self):
-        """Show or hide the detailed log."""
-        if self.log_text.winfo_ismapped(): # Check if gridded (visible)
-            self._hide_details()
-        else:
-            self._show_details()
-
-    def _show_details(self):
-        if not self._full_log_content or not self.winfo_exists():
-            return
-        # Place the log text widget
-        self.log_text.grid(row=3, column=0, pady=0, padx=PADDING, sticky="nsew")
-        self.rowconfigure(3, weight=1) # Allow log area to take space
-        self.rowconfigure(4, weight=0) # Button frame no longer expands
-        set_widget_state(self.log_text, "normal")
-        self.log_text.delete("1.0", tk.END)
-        self.log_text.insert(tk.END, self._full_log_content)
-        set_widget_state(self.log_text, "disabled")
-        self.details_button.config(text="Hide Details")
-        self.update_idletasks() # Ensure layout updates
-
-    def _hide_details(self):
-        if not self.winfo_exists(): return
-        self.log_text.grid_forget()
-        self.rowconfigure(3, weight=0) # Log area takes no space
-        self.rowconfigure(4, weight=1) # Button frame expands again
-        self.details_button.config(text="Show Details")
-        self.update_idletasks()
+    def _load_logo_image(self, size: Tuple[int, int]) -> Optional[ImageTk.PhotoImage]:
+        """Load the logo image using PIL, with fallback handling."""
+        if not PIL_AVAILABLE:
+            print("Warning: PIL not available for logo loading.", file=sys.stderr)
+            return None
+            
+        try:
+            # Try to find the logo in various locations
+            possible_paths = [
+                "app_icon_logo.png",  # Current directory or PyInstaller root
+                os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "app_icon_logo.png"),  # Same dir as script
+                os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "installer", "assets", "app_icon_logo.png"),  # Parent dir
+            ]
+            
+            # Try sys._MEIPASS for PyInstaller frozen environment
+            if hasattr(sys, "_MEIPASS"):
+                possible_paths.insert(0, os.path.join(sys._MEIPASS, "app_icon_logo.png"))
+            
+            img_path = None
+            for path in possible_paths:
+                if os.path.exists(path):
+                    img_path = path
+                    break
+                    
+            if not img_path:
+                print(f"Logo image not found in any of: {possible_paths}", file=sys.stderr)
+                return None
+                
+            # Open and resize the image
+            img = Image.open(img_path)
+            img = img.resize(size, Image.LANCZOS)  # Use LANCZOS resampling for better quality
+            photo_img = ImageTk.PhotoImage(img)
+            return photo_img
+        except Exception as e:
+            print(f"Error loading logo image: {e}", file=sys.stderr)
+            return None
 
 
 # --- Tkinter main ---
 def main():
-    # Redirect stdout/stderr if running with pythonw.exe
-    if "pythonw.exe" in sys.executable.lower():
-        log_dir_fallback = os.path.join(os.path.expanduser("~"), "AppData", "Local", APP_NAME, "Logs")
-        os.makedirs(log_dir_fallback, exist_ok=True)
-        log_file = os.path.join(log_dir_fallback, "uninstaller_gui_errors.log")
-        try:
-            sys.stdout = open(log_file, "a", encoding='utf-8')
-            sys.stderr = sys.stdout
-            print(f"--- {APP_NAME} Uninstaller GUI Started ({time.strftime('%Y-%m-%d %H:%M:%S')}) ---")
-        except Exception as e:
-            print(f"Critical: Failed to redirect stdout/stderr: {e}")
+    """Main entry point for the uninstaller GUI."""
+    # Only redirect stdout/stderr if running with pythonw.exe
+    original_stdout = sys.stdout
+    original_stderr = sys.stderr
+    log_file = None
 
     try:
-        app = UninstallMainWindow()
-        app.mainloop()
-    except Exception as e:
-        print("--- Uninstaller GUI FATAL ERROR ---")
-        traceback.print_exc()
+        if "pythonw.exe" in sys.executable.lower():
+            log_dir_fallback = os.path.join(os.path.expanduser("~"), "AppData", "Local", APP_NAME, "Logs")
+            os.makedirs(log_dir_fallback, exist_ok=True)
+            log_file = open(os.path.join(log_dir_fallback, "uninstaller_gui_errors.log"), "a", encoding='utf-8')
+            sys.stdout = log_file
+            sys.stderr = log_file
+            print(f"--- {APP_NAME} Uninstaller GUI Started ({time.strftime('%Y-%m-%d %H:%M:%S')}) ---")
+
         try:
-            import ctypes
-            ctypes.windll.user32.MessageBoxW(0, f"A critical error occurred in the uninstaller GUI: {e}\nSee logs for details.", f"{APP_NAME} Uninstaller Error", 0x10 | 0x0)
-        except Exception:
-            pass
+            app = UninstallMainWindow()
+            app.mainloop()
+        except Exception as e:
+            print("--- Uninstaller GUI FATAL ERROR ---")
+            traceback.print_exc()
+            try:
+                import ctypes
+                ctypes.windll.user32.MessageBoxW(0, 
+                    f"A critical error occurred in the uninstaller GUI: {e}\nSee logs for details.", 
+                    f"{APP_NAME} Uninstaller Error", 
+                    0x10 | 0x0)
+            except Exception:
+                pass
+    finally:
+        # Restore original streams before exiting
+        if "pythonw.exe" in sys.executable.lower():
+            sys.stdout = original_stdout
+            sys.stderr = original_stderr
+            if log_file:
+                try:
+                    log_file.close()
+                except:
+                    pass
 
 if __name__ == "__main__":
     main() 

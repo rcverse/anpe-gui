@@ -891,13 +891,38 @@ class MainWindow(QMainWindow):
             settings = QSettings("rcverse", "ANPE_GUI") # Use the same org/app name as in ModelsPage
             spacy_pref = settings.value("modelUsage/spacyModel", "(Auto-detect)")
             benepar_pref = settings.value("modelUsage/beneparModel", "(Auto-detect)")
-            
-            # Add preferences to config, handle "(Auto-detect)" by passing None (or the string itself if core handles it)
-            # Assuming core ANPEExtractor interprets None as auto-detect for model selection
-            config["spacy_model_preference"] = None if spacy_pref == "(Auto-detect)" else spacy_pref
-            config["benepar_model_preference"] = None if benepar_pref == "(Auto-detect)" else benepar_pref
-            logging.debug(f"Read model usage preferences: spaCy='{spacy_pref}', Benepar='{benepar_pref}'")
-            # -----------------------------------------------------
+            logging.debug(f"Read raw model usage preferences: spaCy='{spacy_pref}', Benepar='{benepar_pref}'") # Changed log message slightly
+
+            # --- Validate Preferences Against Installed Models ---
+            installed_spacy_models = []
+            installed_benepar_models = []
+            if hasattr(self, '_model_status') and self._model_status and 'spacy_models' in self._model_status:
+                installed_spacy_models = self._model_status['spacy_models']
+            if hasattr(self, '_model_status') and self._model_status and 'benepar_models' in self._model_status:
+                installed_benepar_models = self._model_status['benepar_models']
+
+            validated_spacy_pref = None # Default to None (auto-detect)
+            if spacy_pref != "(Auto-detect)" and spacy_pref in installed_spacy_models:
+                validated_spacy_pref = spacy_pref
+                logging.debug(f"Using valid saved spaCy preference: {spacy_pref}")
+            elif spacy_pref != "(Auto-detect)":
+                 logging.warning(f"Saved spaCy preference '{spacy_pref}' not found in installed models {installed_spacy_models}. Falling back to auto-detect.")
+            else:
+                 logging.debug("SpaCy preference set to (Auto-detect).")
+
+
+            validated_benepar_pref = None # Default to None (auto-detect)
+            if benepar_pref != "(Auto-detect)" and benepar_pref in installed_benepar_models:
+                validated_benepar_pref = benepar_pref
+                logging.debug(f"Using valid saved Benepar preference: {benepar_pref}")
+            elif benepar_pref != "(Auto-detect)":
+                 logging.warning(f"Saved Benepar preference '{benepar_pref}' not found in installed models {installed_benepar_models}. Falling back to auto-detect.")
+            else:
+                 logging.debug("Benepar preference set to (Auto-detect).")
+
+            config["spacy_model_preference"] = validated_spacy_pref
+            config["benepar_model_preference"] = validated_benepar_pref
+            # ----------------------------------------------------
 
             # Config gathering is important, keep INFO level for success
             logging.info(f"Configuration gathered successfully: {config}")
