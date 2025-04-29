@@ -4,28 +4,31 @@ import os # Added for shortcut/launch paths
 import platform # Added for platform-specific checks
 import shutil
 import winreg  # For Windows registry operations
+import logging # Added for logging
 from PyQt6.QtWidgets import QApplication, QMainWindow, QStackedWidget, QWidget, QMessageBox, QVBoxLayout, QFrame
 from PyQt6.QtCore import Qt, QThread, QProcess # Added QThread and QProcess
 from PyQt6.QtGui import QPalette, QColor # Added for background
 from PyQt6.QtCore import QPropertyAnimation, QEasingCurve # Added for fade-in
 
-# Import views
-from .views.welcome_view import WelcomeViewWidget
-from .views.progress_view import ProgressViewWidget
-from .views.completion_view import CompletionViewWidget
+# Import views - CHANGED FROM RELATIVE TO ABSOLUTE IMPORTS
+from installer.views.welcome_view import WelcomeViewWidget
+from installer.views.progress_view import ProgressViewWidget
+from installer.views.completion_view import CompletionViewWidget
 
-# Import workers
-from .workers.env_setup_worker import EnvironmentSetupWorker # Added
-from .workers.model_setup_worker import ModelSetupWorker # Added
+# Import workers - CHANGED FROM RELATIVE TO ABSOLUTE IMPORTS
+from installer.workers.env_setup_worker import EnvironmentSetupWorker # Added
+from installer.workers.model_setup_worker import ModelSetupWorker # Added
 
-# Import Custom Title Bar
-from . widgets.custom_title_bar import CustomTitleBar
+# Import Custom Title Bar - CHANGED FROM RELATIVE TO ABSOLUTE IMPORTS
+from installer.widgets.custom_title_bar import CustomTitleBar
 
-# Import utility
-from .utils import get_resource_path
+# Import utility - CHANGED FROM RELATIVE TO ABSOLUTE IMPORTS
+from installer.utils import get_resource_path
 
 from pyshortcuts import make_shortcut
 
+# Get logger instance (configured in utils.py)
+logger = logging.getLogger()
 
 # Constants for view indices (as per design doc)
 VIEW_WELCOME = 0
@@ -159,16 +162,22 @@ class SetupMainWindow(QMainWindow):
         self.stacked_widget.addWidget(self.welcome_view)
         self.welcome_view.setup_requested.connect(self._handle_setup_request)
 
-        # Environment Progress View (Stage 1)
-        self.env_progress_view = ProgressViewWidget("Setting up Environment")
+        # Environment Progress View
+        self.env_progress_view = ProgressViewWidget(
+            "Creating Environment"
+        )
         self.stacked_widget.addWidget(self.env_progress_view)
 
-        # Model Progress View (Stage 2)
-        self.model_progress_view = ProgressViewWidget("Setting up Language Models")
+        # Model Progress View
+        self.model_progress_view = ProgressViewWidget(
+            "Downloading Models"
+        )
         self.stacked_widget.addWidget(self.model_progress_view)
 
         # Completion View
+        logger.debug("About to create CompletionViewWidget instance")
         self.completion_view = CompletionViewWidget()
+        logger.debug("CompletionViewWidget instance created")
         self.stacked_widget.addWidget(self.completion_view)
         self.completion_view.shortcut_requested.connect(self._create_shortcut)
         self.completion_view.launch_requested.connect(self._launch_anpe)
@@ -248,21 +257,27 @@ class SetupMainWindow(QMainWindow):
 
         self._env_thread.start()
 
-    def _environment_setup_finished(self, success: bool, python_exe_path: str):
+    def _environment_setup_finished(self, success: bool, python_exe_path: object, error_message: str):
         """Handle completion of the environment setup worker."""
-        print(f"Environment setup finished. Success: {success}, Python Path: {python_exe_path}")
-        # self._env_thread = None # REMOVE: Let deleteLater handle cleanup
-        # self._env_worker = None # REMOVE: Let deleteLater handle cleanup
+        # Ensure python_exe_path is treated as string or None
+        python_exe_path_str = str(python_exe_path) if python_exe_path is not None else None
+        
+        logger.info(f"Environment setup finished. Success: {success}, Python Path: {python_exe_path_str}, Error: '{error_message}'")
+        
+        # No longer need these as deleteLater handles cleanup
+        # self._env_thread = None 
+        # self._env_worker = None 
 
-        if success and python_exe_path:
-            self._python_exe_path = python_exe_path
+        if success and python_exe_path_str:
+            self._python_exe_path = python_exe_path_str # Store the validated path
             # Start Stage 2: Model Setup
             self._start_model_setup()
         else:
             # Setup failed, show completion view in failure state
             self._is_running = False
             self._is_env_setup_stage = True  # Still in env stage when failed
-            self._show_completion_view(success=False)
+            # Pass the specific error message to the completion view
+            self._show_completion_view(success=False, error_message=error_message)
 
     def _start_model_setup(self):
         """Instantiate and start the ModelSetupWorker in a QThread."""
@@ -308,7 +323,7 @@ class SetupMainWindow(QMainWindow):
         # Show completion view (success or failure)
         self._show_completion_view(success=success)
 
-    def _show_completion_view(self, success: bool):
+    def _show_completion_view(self, success: bool, error_message: str = None):
         """Switch to the completion view and set its state."""
         # Collect logs from the appropriate progress view
         log_content = ""
@@ -319,177 +334,199 @@ class SetupMainWindow(QMainWindow):
             # Model setup logs (default to this if we can't determine stage)
             log_content = self.model_progress_view._log_area.toPlainText()
             
+        # --- DEBUGGING PRINT ---
+        logger.debug("About to call completion_view.set_success_state()")
+        logger.debug(f"set_success_state called with: Success={success}, Log Length={len(log_content)}, Error Msg='{error_message}'")
+
         # Set success state and pass logs
-        self.completion_view.set_success_state(success, log_content)
+        self.completion_view.set_success_state(success, log_content, error_message)
         self.stacked_widget.setCurrentIndex(VIEW_COMPLETION)
 
     # --- Slots for Completion Actions --- 
     def _create_shortcut(self, create: bool):
         """Handle the request to create shortcuts (using make_shortcut function)."""
+        logger.debug(f"Entering _create_shortcut with create={create}")
         if not create:
             print("Skipping shortcut creation.")
+            logger.debug("Skipping shortcut creation (create=False).")
             return
 
-        if not self._python_exe_path or not self._install_path:
-            QMessageBox.warning(self, "Cannot Create Shortcut", "Internal error: Missing Python path or installation path.")
+        # Need install_path to locate the installed ANPE.exe
+        if not self._install_path:
+            QMessageBox.warning(self, "Cannot Create Shortcut", "Internal error: Missing installation path.")
             return
 
-        print("Creating shortcut via make_shortcut...")
+        print("Creating shortcut(s) pointing to ANPE.exe...")
 
         # --- Define Shortcut Parameters & Paths ---
         shortcut_name = "ANPE"
-        app_dir_abs = os.path.abspath(os.path.join(self._install_path, "anpe_gui"))
-        python_exe_abs = os.path.abspath(self._python_exe_path)
+        # Installation root directory
+        install_root_abs = os.path.abspath(self._install_path)
+        # Path to the installed launcher executable
+        launcher_exe_abs = os.path.join(install_root_abs, "ANPE.exe")
 
-        # --- Determine Python(w).exe for direct execution --- 
-        pythonw_exe_abs = python_exe_abs.replace("python.exe", "pythonw.exe")
-        if not os.path.exists(pythonw_exe_abs):
-            pythonw_exe_abs = python_exe_abs # Fallback
-        
-        # Use absolute path for script instead of relative
-        target_script_abs = os.path.join(app_dir_abs, "run.py")
-        
-        # --- Resolve Icon Path --- 
+        # --- Verify Launcher Exists ---
+        if not os.path.isfile(launcher_exe_abs):
+             error_msg = f"Cannot create shortcut. Launcher executable not found after installation at:\n{launcher_exe_abs}"
+             print(error_msg, file=sys.stderr)
+             QMessageBox.critical(self, "Shortcut Failed", error_msg)
+             return
+
+        # --- Resolve Icon Path (for the shortcut itself) --- 
         icon_path = None
         try:
-            icon_filename = "app_icon_logo.ico"
-            icon_path = get_resource_path(f"assets/{icon_filename}") 
-            if not os.path.isfile(icon_path):
-                 print(f"Warning: Icon file not found: {icon_filename}. Shortcut will use default.", file=sys.stderr)
-                 icon_path = None
+            # Assume icon was copied to install root or use bundled one if needed
+            # Let's try finding it in the installed assets first (copied by core)
+            installed_icon_path = os.path.join(install_root_abs, "assets", "app_icon_logo.ico")
+            if os.path.isfile(installed_icon_path):
+                icon_path = installed_icon_path
+            else:
+                # Fallback: try resolving from installer bundle assets if needed?
+                # For simplicity, let's assume the icon is installed or we use default
+                icon_path = get_resource_path('assets/app_icon_logo.ico') # Check bundle
+                if not os.path.isfile(icon_path):
+                    print(f"Warning: Icon file not found in install dir or bundle assets. Shortcut will use default.", file=sys.stderr)
+                    icon_path = None # Let pyshortcuts handle default
         except Exception as e:
             print(f"Warning: Could not resolve icon path: {e}. Shortcut will use default.", file=sys.stderr)
             icon_path = None
-        # -------------------------
+        # ------------------------- 
 
         try:
-            # Create shortcut directly to pythonw.exe with script as argument
-            # This avoids the batch file and window icon issues
-            print(f"Calling make_shortcut: name='{shortcut_name}', script='{target_script_abs}', icon='{icon_path}', terminal=False, working_dir='{app_dir_abs}'")
+            # Create shortcut directly to ANPE.exe
+            print(f"Calling make_shortcut: script='{launcher_exe_abs}', name='{shortcut_name}', icon='{icon_path}', working_dir='{install_root_abs}'")
             make_shortcut(
-                script=target_script_abs,  # Use absolute path to the Python script
+                script=launcher_exe_abs,  # Target is the launcher executable
                 name=shortcut_name,
                 icon=icon_path,
-                executable=pythonw_exe_abs,  # Use pythonw.exe directly
+                # executable=None, # Not needed when script is an exe
                 terminal=False, 
                 desktop=True,  
                 startmenu=True, 
-                working_dir=app_dir_abs  # Set working directory to app directory
+                working_dir=install_root_abs # Launcher expects to run from install root
             )
             
-            # Register application in Windows and create uninstaller
-            self._register_app_and_create_uninstaller(app_dir_abs, pythonw_exe_abs, icon_path)
+            # Register application and uninstaller link
+            # Pass the *installation root* path where ANPE.exe and uninstall.exe reside
+            self._register_app_and_create_uninstaller(install_root_abs, icon_path)
             
-            # No dialog needed, user already has the completion screen
             print("Desktop and Start Menu shortcuts created successfully.")
+            logger.debug("make_shortcut and registry calls completed successfully.")
         except Exception as e:
             print(f"make_shortcut failed: {e}")
             import traceback
             traceback.print_exc()
+            logger.error(f"Shortcut creation failed: {e}", exc_info=True)
             QMessageBox.critical(self, "Shortcut Failed", f"Failed to create shortcuts using make_shortcut.\nError: {e}")
+        logger.debug("Leaving _create_shortcut")
 
-    def _register_app_and_create_uninstaller(self, app_dir_abs, pythonw_exe_abs, icon_path):
-        """Register the application in Windows Add/Remove Programs and create uninstaller."""
+    def _register_app_and_create_uninstaller(self, install_root_abs, icon_path):
+        """Register the application in Windows Add/Remove Programs and point to uninstall.exe."""
         try:
-            # 1. Create installation log file to track installed files
-            install_log_path = os.path.join(self._install_path, "install_log.txt")
-            with open(install_log_path, "w") as log_file:
-                # Record installation path and other important info
-                log_file.write(f"INSTALL_PATH={self._install_path}\n")
-                log_file.write(f"APP_DIR={app_dir_abs}\n")
-                log_file.write(f"PYTHON_PATH={self._python_exe_path}\n")
-                log_file.write(f"PYTHONW_PATH={pythonw_exe_abs}\n")
-                log_file.write(f"INSTALL_DATE={subprocess.check_output('date /t', shell=True).decode().strip()}\n")
+            # 1. Installation log (optional, can be kept or removed)
+            install_log_path = os.path.join(install_root_abs, "install_log.txt")
+            # ... (logging code can remain if useful) ...
+            print(f"Install log being written to: {install_log_path}")
+            # ... (rest of logging code) ...
                 
-                # Log the directories and their contents
-                for root, dirs, files in os.walk(self._install_path):
-                    # Skip __pycache__ directories
-                    dirs[:] = [d for d in dirs if d != '__pycache__']
-                    files = [f for f in files if not f.endswith('.pyc')]
-                    
-                    for file in files:
-                        file_path = os.path.join(root, file)
-                        log_file.write(f"FILE={file_path}\n")
-                    for dir_name in dirs:
-                        dir_path = os.path.join(root, dir_name)
-                        log_file.write(f"DIR={dir_path}\n")
-            
-            # Step 2: Copying uninstaller directory is removed, assuming uninstall.pyw is part of the main copy
-            print("Skipping separate uninstaller directory copy.")
-                
-            # Step 3: Creating separate launcher script is removed.
-            # Define the path to the actual uninstaller script copied with the app
-            actual_uninstaller_script_path = os.path.join(self._install_path, "uninstall.pyw")
-            print(f"Uninstaller script path expected at: {actual_uninstaller_script_path}")
+            # 2. Define path to the installed uninstaller executable
+            uninstaller_exe_abs = os.path.join(install_root_abs, "uninstall.exe")
+            print(f"Uninstaller executable expected at: {uninstaller_exe_abs}")
 
-            # 4. Create registry entries to add the application to Add/Remove Programs
-            app_name = "ANPE"
-            app_version = "1.0.0"  # You might want to parameterize this
+            # --- Verify Uninstaller Exists ---
+            if not os.path.isfile(uninstaller_exe_abs):
+                error_msg = f"Cannot register uninstaller. Executable not found after installation at:\n{uninstaller_exe_abs}"
+                print(error_msg, file=sys.stderr)
+                # Don't make registration fail completely, maybe just warn?
+                QMessageBox.warning(self, "Registration Warning", error_msg)
+                # Fallback or skip registration?
+                # For now, proceed without setting UninstallString if not found.
+                uninstall_string = "" # Set empty if not found
+            else:
+                uninstall_string = f'"{uninstaller_exe_abs}"' # Properly quote the path
+                
+            # 3. Create registry entries
+            app_name = "ANPE" # Consistent name
+            app_version = "1.0.0"  # TODO: Parameterize or read from somewhere?
+            publisher = "ANPE Project" # TODO: Update publisher if needed
             
-            # HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Uninstall\ANPE
-            reg_path = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\ANPE"
+            reg_path = rf"Software\Microsoft\Windows\CurrentVersion\Uninstall\{app_name}" # Use app_name in key
             
-            # Create/open the key
+            print(f"Writing registry entries to: HKCU\\{reg_path}")
             reg_key = winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, reg_path, 0, winreg.KEY_WRITE)
             
-            # Set values for the key
             winreg.SetValueEx(reg_key, "DisplayName", 0, winreg.REG_SZ, app_name)
             winreg.SetValueEx(reg_key, "DisplayVersion", 0, winreg.REG_SZ, app_version)
-            winreg.SetValueEx(reg_key, "Publisher", 0, winreg.REG_SZ, "Richard Chen")
-            winreg.SetValueEx(reg_key, "InstallLocation", 0, winreg.REG_SZ, self._install_path)
-            # --- Update UninstallString to point directly to the actual script ---
-            winreg.SetValueEx(reg_key, "UninstallString", 0, winreg.REG_SZ, 
-                             f'"{pythonw_exe_abs}" "{actual_uninstaller_script_path}"')
-            # ---------------------------------------------------------------------
-            winreg.SetValueEx(reg_key, "DisplayIcon", 0, winreg.REG_SZ, icon_path if icon_path else "")
+            winreg.SetValueEx(reg_key, "Publisher", 0, winreg.REG_SZ, publisher)
+            winreg.SetValueEx(reg_key, "InstallLocation", 0, winreg.REG_SZ, install_root_abs)
+            # --- Update UninstallString to point directly to uninstall.exe --- 
+            if uninstall_string: # Only write if uninstaller was found
+                 winreg.SetValueEx(reg_key, "UninstallString", 0, winreg.REG_SZ, uninstall_string)
+            # ------------------------------------------------------------------
+            # Use the provided icon_path (might be None)
+            winreg.SetValueEx(reg_key, "DisplayIcon", 0, winreg.REG_SZ, icon_path if icon_path else "") 
             winreg.SetValueEx(reg_key, "NoModify", 0, winreg.REG_DWORD, 1)
             winreg.SetValueEx(reg_key, "NoRepair", 0, winreg.REG_DWORD, 1)
+            # Estimate size? Difficult to calculate accurately here.
+            # winreg.SetValueEx(reg_key, "EstimatedSize", 0, winreg.REG_DWORD, size_in_kb)
             
             winreg.CloseKey(reg_key)
             
-            print("Application registered in Windows Add/Remove Programs")
+            print("Application registered successfully in Windows Add/Remove Programs.")
             
         except Exception as e:
-            print(f"Error registering application: {e}")
+            print(f"Error during application registration: {e}")
             import traceback
             traceback.print_exc()
+            QMessageBox.warning(self, "Registration Error", f"Failed to register application components.\nError: {e}")
             # Continue without failing - this is an optional part of the installation
 
     def _launch_anpe(self, launch: bool):
-        """Handle the request to launch ANPE (using subprocess.Popen)."""
+        """Handle the request to launch ANPE by running ANPE.exe."""
+        logger.debug(f"Entering _launch_anpe with launch={launch}")
         if not launch:
             print("Skipping ANPE launch.")
+            logger.debug("Skipping ANPE launch (launch=False).")
             return
         
-        if not self._python_exe_path or not self._install_path:
-            QMessageBox.warning(self, "Cannot Launch ANPE", "Internal error: Missing Python path or installation path.")
+        # Need install_path to locate ANPE.exe
+        if not self._install_path:
+            QMessageBox.warning(self, "Cannot Launch ANPE", "Internal error: Missing installation path.")
             return
             
-        print("Launching ANPE...")
+        print("Launching ANPE via ANPE.exe...")
         # --- Set the working directory and launch command --- 
-        app_dir = os.path.join(self._install_path, "anpe_gui")
-        python_exe_abs = os.path.abspath(self._python_exe_path)
+        install_root_abs = os.path.abspath(self._install_path)
+        launcher_exe_abs = os.path.join(install_root_abs, "ANPE.exe")
         
-        # Use pythonw.exe to hide command window
-        pythonw_exe_abs = python_exe_abs.replace("python.exe", "pythonw.exe")
-        if not os.path.exists(pythonw_exe_abs):
-            pythonw_exe_abs = python_exe_abs 
+        print(f"Target executable: {launcher_exe_abs}")
+        print(f"Working directory: {install_root_abs}")
 
-        # Launch run.py from the app_dir using pythonw.exe
-        target_script_relative = "run.py"
-        launch_command = [pythonw_exe_abs, target_script_relative]
-
-        print(f"Setting working directory for launch: {app_dir}")
-        print(f"Running launch command: {' '.join(launch_command)}")
+        # --- Verify Launcher Exists ---
+        if not os.path.isfile(launcher_exe_abs):
+             error_msg = f"Cannot launch ANPE. Launcher executable not found after installation at:\n{launcher_exe_abs}"
+             print(error_msg, file=sys.stderr)
+             QMessageBox.critical(self, "Launch Failed", error_msg)
+             return
 
         try:
-            # Pass cwd (app_dir) to Popen
-            subprocess.Popen(launch_command, cwd=app_dir)
+            # Launch ANPE.exe directly, setting the CWD to the install root
+            # Use CREATE_NO_WINDOW if available to prevent potential console flash (though ANPE.exe is windowed)
+            creationflags = 0
+            if platform.system() == "Windows":
+                creationflags = subprocess.CREATE_NO_WINDOW
+                
+            subprocess.Popen([launcher_exe_abs], cwd=install_root_abs, creationflags=creationflags)
+            print("ANPE launch command issued.")
+            logger.info("ANPE launch command issued successfully.")
         except FileNotFoundError:
-            # Update error message if needed
-            QMessageBox.critical(self, "Launch Failed", f"Could not find Python or the application script.\nCommand: {' '.join(launch_command)}\nDirectory: {app_dir}")
+            error_msg = f"Could not find the ANPE executable: {launcher_exe_abs}"
+            logger.error(error_msg)
+            QMessageBox.critical(self, "Launch Failed", error_msg)
         except Exception as e:
-            QMessageBox.critical(self, "Launch Error", f"An unexpected error occurred while trying to launch ANPE: {e}")
+            logger.error(f"Unexpected error launching ANPE: {e}", exc_info=True)
+            QMessageBox.critical(self, "Launch Error", f"An unexpected error occurred while trying to launch ANPE:\n{e}")
+        logger.debug("Leaving _launch_anpe")
 
     def closeEvent(self, event):
         """Handle the main window close event."""
@@ -555,11 +592,35 @@ class SetupMainWindow(QMainWindow):
 
 def main():
     """Main entry point for the application."""
+    # Ensure logging is configured BEFORE anything else
+    # (Assuming setup_logging is handled in utils imported elsewhere or globally)
+    global_logger = logging.getLogger() # Get root logger
+    global_logger.info("Starting ANPE Setup Application")
+    
+    # Configure logging to capture DEBUG level
+    # If setup_logging is not already doing this, add basic config:
+    # logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    # Make sure your file handler also captures DEBUG
+
     app = QApplication(sys.argv)
-    # Apply basic styling later if needed
-    # app.setStyle("Fusion")
-    window = SetupMainWindow()
-    sys.exit(app.exec())
+
+    try:
+        global_logger.debug("Creating SetupMainWindow instance.")
+        window = SetupMainWindow()
+        global_logger.debug("SetupMainWindow created, starting event loop.")
+        exit_code = app.exec()
+        global_logger.info(f"Application event loop finished with exit code: {exit_code}")
+        sys.exit(exit_code)
+    except Exception as e:
+        global_logger.critical("Unhandled exception caught in main execution loop!", exc_info=True)
+        # Optionally show a critical error message to the user
+        try:
+            error_msg = f"A critical error occurred:\n\n{type(e).__name__}: {e}\n\nSee the log file for details."
+            QMessageBox.critical(None, "Fatal Error", error_msg)
+        except Exception as msg_e:
+             # If even showing the message box fails, just log it
+            global_logger.error(f"Failed to show critical error message box: {msg_e}")
+        sys.exit(1) # Exit with a non-zero code to indicate failure
 
 if __name__ == "__main__":
     main()

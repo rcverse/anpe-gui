@@ -1,6 +1,7 @@
 import sys
 import os
 import ctypes
+import logging # Added for debugging
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton, QCheckBox, QHBoxLayout,
     QSizePolicy, QFileDialog, QSpacerItem, QRadioButton, QButtonGroup
@@ -13,6 +14,9 @@ from .license_dialog import LicenseDialog # Relative import for view
 # Use relative import for utils
 from ..utils import get_resource_path
 from ..styles import PRIMARY_BUTTON_STYLE, BROWSE_BUTTON_STYLE, TITLE_LABEL_STYLE, INFO_LABEL_STYLE, LINK_LABEL_STYLE
+
+# Get logger instance (configured in utils.py)
+logger = logging.getLogger()
 
 # Subclass QLabel to make it clickable for the license link
 class ClickableLabel(QLabel):
@@ -46,20 +50,26 @@ class WelcomeViewWidget(QWidget):
         # Use the imported get_resource_path directly
         try:
             logo_path = get_resource_path('assets/app_icon_logo.png')
+            logger.debug(f"Checking for logo at path: {logo_path}") # Log the path being checked
             if os.path.exists(logo_path):
+                logger.debug(f"Logo path exists.")
                 pixmap = QPixmap(logo_path)
                 if not pixmap.isNull():
+                    logger.debug(f"Logo pixmap loaded successfully.")
                     logo_label.setPixmap(pixmap.scaled(96, 96, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
                     logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 else:
+                    logger.warning(f"Failed to load logo pixmap from {logo_path}. pixmap.isNull() is True.")
                     logo_label.setText("[Logo Load Error]")
                     logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
                     print(f"Warning: Failed to load logo pixmap from {logo_path}", file=sys.stderr)
             else:
+                logger.warning(f"Logo file not found at resolved path: {logo_path}")
                 logo_label.setText("[Logo Not Found]")
                 logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 print(f"Warning: Logo file not found at {logo_path}", file=sys.stderr)
         except Exception as e:
+             logger.error(f"Error loading logo: {e}", exc_info=True) # Log exception details
              logo_label.setText("[Logo Error]")
              logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
              print(f"Error resolving logo path: {e}", file=sys.stderr)
@@ -129,6 +139,31 @@ class WelcomeViewWidget(QWidget):
         self.setup_button.setStyleSheet(PRIMARY_BUTTON_STYLE)
         self.setup_button.clicked.connect(self._on_setup_clicked)
         layout.addWidget(self.setup_button, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        # --- Debugging: Log MEIPASS structure if frozen ---
+        self._log_meipass_structure()
+        # --- End Debugging ---
+
+    # --- Debugging Function ---
+    def _log_meipass_structure(self):
+        """Logs the MEIPASS directory structure if running frozen."""
+        if hasattr(sys, '_MEIPASS'):
+            meipass_path = sys._MEIPASS
+            logger.info(f"--- MEIPASS Directory Structure ({meipass_path}) ---")
+            try:
+                for root, dirs, files in os.walk(meipass_path):
+                    level = root.replace(meipass_path, '').count(os.sep)
+                    indent = ' ' * 4 * (level)
+                    logger.info(f'{indent}{os.path.basename(root)}/')
+                    subindent = ' ' * 4 * (level + 1)
+                    for f in files:
+                        logger.info(f'{subindent}{f}')
+                logger.info("--- End MEIPASS Structure ---")
+            except Exception as e:
+                logger.error(f"Error walking MEIPASS directory: {e}")
+        else:
+            logger.info("Not running frozen, skipping MEIPASS structure log.")
+    # --- End Debugging Function ---
 
     def _browse_directory(self):
         """Open a directory selection dialog."""

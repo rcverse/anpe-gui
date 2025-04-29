@@ -4,7 +4,6 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QPixmap, QIcon
-from PyQt6.QtSvgWidgets import QSvgWidget
 import os
 
 from ..utils import get_resource_path
@@ -46,62 +45,50 @@ class TaskItem(QFrame):
         
     def update_status(self, status: int):
         """Update the task's status and visual appearance."""
-        previous_status = self._status
         self._status = status
         
-        # If previous status was completed or failed, we need to replace the SVG widget
-        # with a regular QLabel before updating
-        if previous_status in [TaskStatus.COMPLETED, TaskStatus.FAILED] and status in [TaskStatus.PENDING, TaskStatus.PROCESSING]:
-            # Replace the SVG widget with a QLabel
-            layout = self.layout()
-            layout.removeWidget(self.status_icon)
-            self.status_icon.deleteLater()
-            self.status_icon = QLabel()
-            self.status_icon.setFixedSize(16, 16)
-            layout.insertWidget(0, self.status_icon)
-        
+        # Clear previous icon/text
+        self.status_icon.clear()
+        self.status_icon.setStyleSheet("") # Clear any fallback styles
+
         # Update label style based on status
         if status == TaskStatus.PENDING:
-            self.task_label.setStyleSheet("color: #000000; font-weight: normal; font-size: 14px;")
-            if hasattr(self.status_icon, 'clear'):
-                self.status_icon.clear()
+            self.task_label.setStyleSheet("color: #888888; font-weight: normal; font-size: 14px;") # Grey out pending
         elif status == TaskStatus.PROCESSING:
             self.task_label.setStyleSheet("color: #005A9C; font-weight: bold; font-size: 14px;")
-            if hasattr(self.status_icon, 'clear'):
-                self.status_icon.clear()
+            # Maybe add a spinner/busy indicator later?
         elif status == TaskStatus.COMPLETED:
-            self.task_label.setStyleSheet("color: #666666; font-weight: normal; font-size: 14px;")
-            # Load success icon
-            success_icon_path = get_resource_path("assets/success.svg")
+            self.task_label.setStyleSheet("color: #3B7D23; font-weight: normal; font-size: 14px;") # Green text for success
+            # Load success icon using QPixmap
+            success_icon_path = get_resource_path("assets/success.png") # Use PNG
             if os.path.exists(success_icon_path):
-                # Replace QLabel with SVG widget
-                layout = self.layout()
-                layout.removeWidget(self.status_icon)
-                self.status_icon.deleteLater()
-                self.status_icon = QSvgWidget(success_icon_path)
-                self.status_icon.setFixedSize(16, 16)
-                layout.insertWidget(0, self.status_icon)
-            else:
-                # Fallback: create a checkmark with a label and colored text
-                if hasattr(self.status_icon, 'setText'):
+                pixmap = QPixmap(success_icon_path)
+                if not pixmap.isNull():
+                     self.status_icon.setPixmap(pixmap.scaled(16, 16, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+                else:
+                    # Fallback if PNG load fails
                     self.status_icon.setText("✓")
                     self.status_icon.setStyleSheet("color: #3B7D23; font-weight: bold;")
-        elif status == TaskStatus.FAILED:
-            self.task_label.setStyleSheet("color: #666666; font-weight: normal; font-size: 14px;")
-            # Load error icon
-            error_icon_path = get_resource_path("assets/error.svg")
-            if os.path.exists(error_icon_path):
-                # Replace QLabel with SVG widget
-                layout = self.layout()
-                layout.removeWidget(self.status_icon)
-                self.status_icon.deleteLater()
-                self.status_icon = QSvgWidget(error_icon_path)
-                self.status_icon.setFixedSize(16, 16)
-                layout.insertWidget(0, self.status_icon)
             else:
                 # Fallback if icon not found
-                if hasattr(self.status_icon, 'setStyleSheet'):
-                    self.status_icon.setStyleSheet("background-color: #DD3333; border-radius: 8px;")
+                self.status_icon.setText("✓")
+                self.status_icon.setStyleSheet("color: #3B7D23; font-weight: bold;")
+        elif status == TaskStatus.FAILED:
+            self.task_label.setStyleSheet("color: #DD3333; font-weight: normal; font-size: 14px;") # Red text for fail
+            # Load error icon using QPixmap
+            error_icon_path = get_resource_path("assets/error.png") # Use PNG
+            if os.path.exists(error_icon_path):
+                pixmap = QPixmap(error_icon_path)
+                if not pixmap.isNull():
+                    self.status_icon.setPixmap(pixmap.scaled(16, 16, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+                else:
+                     # Fallback if PNG load fails
+                    self.status_icon.setText("✗")
+                    self.status_icon.setStyleSheet("color: #DD3333; font-weight: bold;")
+            else:
+                # Fallback if icon not found
+                self.status_icon.setText("✗")
+                self.status_icon.setStyleSheet("color: #DD3333; font-weight: bold;")
         
         # Update the task text based on status
         if status == TaskStatus.PENDING:

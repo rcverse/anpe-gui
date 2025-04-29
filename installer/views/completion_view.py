@@ -7,6 +7,7 @@ from PyQt6.QtGui import QPixmap, QFont, QColor, QTextCursor
 import os
 import re
 import datetime
+import logging
 
 from ..utils import get_resource_path
 from ..styles import PRIMARY_BUTTON_STYLE, TITLE_LABEL_STYLE, INFO_LABEL_STYLE, SECONDARY_BUTTON_STYLE, LOG_TEXT_AREA_STYLE
@@ -20,12 +21,16 @@ class CompletionViewWidget(QWidget):
 
     def __init__(self, parent=None):
         """Initialize the completion view."""
+        # --- DEBUGGING PRINT ---
+        self.logger = logging.getLogger(__name__)
+        self.logger.debug("Entering CompletionViewWidget.__init__")
         super().__init__(parent)
         self._setup_ui()
         self._log_content = ""  # Store log content for export
         self._error_message = ""  # Store extracted error message
         # Set initial state (e.g., assuming success until told otherwise)
         # self.set_success_state(True)
+        self.logger.debug("Leaving CompletionViewWidget.__init__")
 
     def _setup_ui(self):
         """Set up the user interface elements."""
@@ -225,11 +230,15 @@ class CompletionViewWidget(QWidget):
         self.shortcut_checkbox.setVisible(False)
         self.launch_checkbox.setVisible(False)
 
-    def set_success_state(self, success: bool, log_content: str = ""):
+    def set_success_state(self, success: bool, log_content: str = "", error_message: str = None):
         """Configure the view based on the setup outcome."""
+        self.logger.debug(f"Entering set_success_state(success={success}, log_len={len(log_content)}, error='{error_message}')")
         self._log_content = log_content
-        
+        # Store the error message passed from the main window
+        self._error_message = error_message if error_message else "" 
+
         if success:
+            self.logger.debug("Configuring view for SUCCESS state.")
             self.status_title.setText("Setup Complete!")
             self.status_title.setStyleSheet(TITLE_LABEL_STYLE)
             self.info_text.setText(
@@ -239,27 +248,36 @@ class CompletionViewWidget(QWidget):
             self.shortcut_checkbox.setVisible(True)
             self.launch_checkbox.setVisible(True)
             self.complete_button.setText("Complete")
+            self.logger.debug("Set options checkboxes visible, button text to 'Complete'.")
             
             # Hide error components
             self.log_container.setVisible(False)
             self.report_container.setVisible(False)
             self.error_highlight.setVisible(False)
+            self.logger.debug("Hid log container, report container, and error highlight.")
         else:
+            self.logger.debug("Configuring view for FAILURE state.")
             self.status_title.setText("Setup Failed")
             self.status_title.setStyleSheet("font-size: 24px; font-weight: bold; color: #DD3333;")
             self.info_text.setText("An error occurred during the installation process.")
             self.shortcut_checkbox.setVisible(False)
             self.launch_checkbox.setVisible(False)
             self.complete_button.setText("Close")
+            self.logger.debug("Set options checkboxes hidden, button text to 'Close'.")
             
-            # Extract and display the error
-            self._error_message = self._extract_error_from_log(log_content)
-            if self._error_message:
-                self.error_highlight.setText(f"Error details: {self._error_message}")
+            # Extract and display the error (use the passed message first, then try extracting)
+            display_error = self._error_message if self._error_message else self._extract_error_from_log(log_content)
+            if display_error:
+                self.logger.debug(f"Displaying error message: '{display_error}'")
+                self.error_highlight.setText(f"Error details: {display_error}")
                 self.error_highlight.setVisible(True)
+            else:
+                 self.logger.debug("No specific error message to display in highlight.")
+                 self.error_highlight.setVisible(False)
             
             # Show log components with size constraints
             if log_content:
+                self.logger.debug("Setting log content in log viewer.")
                 # Trim log content if too long
                 if len(log_content) > 5000:
                     shortened_log = log_content[:2000] + "\n...[log trimmed]...\n" + log_content[-2000:]
@@ -268,13 +286,21 @@ class CompletionViewWidget(QWidget):
                     self.log_viewer.setText(log_content)
                 self.log_viewer.moveCursor(QTextCursor.MoveOperation.Start)
                 self.log_container.setVisible(True)
+                self.logger.debug("Log container set visible.")
+            else:
+                self.logger.debug("No log content provided, hiding log container.")
+                self.log_container.setVisible(False)
             
             # Show reporting instructions
             self.report_container.setVisible(True)
+            self.logger.debug("Report container set visible.")
+        self.logger.debug("Leaving set_success_state.")
 
     def _extract_error_from_log(self, log_content: str) -> str:
         """Extract the most relevant error message from log content."""
+        self.logger.debug("Attempting to extract error from log content.")
         if not log_content:
+            self.logger.debug("No log content to extract error from.")
             return ""
             
         # Look for common error patterns
