@@ -199,23 +199,11 @@ class CompletionViewWidget(QWidget):
         self.shortcut_checkbox.setStyleSheet("""
             QCheckBox {
                 font-size: 14px;
-                spacing: 10px;
+                spacing: 10px; /* Space between indicator and text */
                 font-family: 'Segoe UI', Arial, sans-serif;
                 padding: 3px;
             }
-            QCheckBox::indicator {
-                width: 18px;
-                height: 18px;
-            }
-            QCheckBox::indicator:checked {
-                background-color: #0078D7;
-                border: 2px solid #0078D7;
-                border-radius: 3px;
-            }
-            QCheckBox::indicator:unchecked {
-                border: 2px solid #999999;
-                border-radius: 3px;
-            }
+            /* Removed ::indicator styling to allow default checkmark */
         """)
         options_layout.addWidget(self.shortcut_checkbox)
 
@@ -224,23 +212,11 @@ class CompletionViewWidget(QWidget):
         self.launch_checkbox.setStyleSheet("""
             QCheckBox {
                 font-size: 14px;
-                spacing: 10px;
+                spacing: 10px; /* Space between indicator and text */
                 font-family: 'Segoe UI', Arial, sans-serif;
                 padding: 3px;
             }
-            QCheckBox::indicator {
-                width: 18px;
-                height: 18px;
-            }
-            QCheckBox::indicator:checked {
-                background-color: #0078D7;
-                border: 2px solid #0078D7;
-                border-radius: 3px;
-            }
-            QCheckBox::indicator:unchecked {
-                border: 2px solid #999999;
-                border-radius: 3px;
-            }
+            /* Removed ::indicator styling to allow default checkmark */
         """)
         options_layout.addWidget(self.launch_checkbox)
         

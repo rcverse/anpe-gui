@@ -10,7 +10,7 @@ If any essential model are missing, the status bar will display a warning (e.g.,
 Model installation and management are handled through the <button>Settings</button> dialog, accessible via the gear icon (<q>⚙️</q>) in the top-right corner. This dialog requires an internet connection for downloading models.
 
 ## Usage
-The application is organized into two main tabs: <option>Input</option> and <option>Output</option>. A toggleable log panel is also available at the bottom, showing detailed processing messages.
+The application is organized into two main tabs: <option>Input</option> and <option>Output</option>. A toggleable log panel is also available at the bottom (click on colored status label to toggle), showing detailed processing messages.
 
 ### Input Tab
 This is where you prepare your text and configure the extraction process.
@@ -108,8 +108,20 @@ Where:
 *   `format` is the selected format extension (txt, csv, json).
 
 ### Status Bar & Log Panel
-*   **Status Bar**: Located at the very bottom of the window. It displays the current state of the application (e.g., "ANPE Ready", "Processing...", "Export Complete", error messages). Click on the status message to toggle the Log Panel.
-*   **Log Panel**: A log panel can be toggled by clicking on the status bar. It shows more detailed logs about processing steps, model loading, potential warnings, and errors. Useful for troubleshooting.
+*   **Status Bar**: Located at the very bottom of the window. It provides real-time feedback on the application's status. Click on the status message area (left side) to toggle the Log Panel visibility. The status bar consists of two main parts:
+    *   **Status Message Area**: On the left, displays text messages indicating the current state (e.g., <option>ANPE Ready</option>, <option>Processing...</option>, <option>Export Complete</option>, <option>Missing required models...</option>). The text color changes based on the message type (e.g., red for errors, orange for warnings).
+    *   **Activity & Progress Indicators**: On the right side, visual indicators show background activity:
+        *   **Activity Indicator (Pulsing Circle)**: This animated circle provides a quick visual cue:
+            *   <option>Idle</option>: A static, green circle (or hidden when idle).
+            *   <option>Busy/Processing</option>: A pulsing blue circle indicates an active operation (like file processing or model loading).
+            *   <option>Checking</option>: A pulsing yellow circle indicates a background check (e.g., checking model status).
+            *   <option>Warning</option>: A pulsing orange circle highlights a potential issue or warning message displayed in the status message area.
+            *   <option>Error/Failed</option>: A pulsing red circle indicates an error has occurred, typically accompanied by an error message.
+        *   **Progress Bar**: Shows the progress of longer tasks:
+            *   <option>Idle</option>: Displays the text <option>Waiting for tasks</option>.
+            *   <option>Determinate Progress</option>: Shows a percentage (e.g., <option>75%</option>) for tasks with measurable progress, like processing multiple files. The activity indicator will pulse blue during this state.
+            *   <option>Completion</option>: Briefly shows <option>Completing...</option> at 100%, then changes text to <option>Complete</option> when a task finishes successfully. The activity indicator stops pulsing.
+*   **Log Panel**: A panel that can be toggled by clicking on the status bar's message area. It shows more detailed logs about processing steps, model loading, potential warnings, and errors. Useful for troubleshooting.
 
 ### Settings Dialog
 Click the gear icon (<q>⚙️</q>) in the top-right corner to open the Settings dialog. This allows you to manage models, update the core library, and view application information.

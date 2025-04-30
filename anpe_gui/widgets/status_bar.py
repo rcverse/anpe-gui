@@ -168,39 +168,6 @@ class StatusBar(QWidget):
             # Set status message with 'busy' type while progress is active
             self.showMessage(message, status_type='busy') # showMessage doesn't set busy state for indicator
 
-    def start_progress(self, message="Processing..."):
-        """Start an indeterminate progress operation using the activity indicator."""
-        self.progress_bar.show() # Show progress bar even in indeterminate
-        self.activity_indicator.show()
-        # Start activity indicator animation
-        self.activity_indicator.start()
-        
-        # Hide the progress bar's value and set text
-        self.progress_bar.setRange(0, 0)  # Indeterminate mode
-        self.progress_bar.setFormat("Processing...")
-        self.progress_bar.setValue(0) # Reset value visually for indeterminate
-        
-        # Apply active processing style
-        self.progress_bar.setStyleSheet(f"""
-            QProgressBar {{
-                border: 1px solid {BORDER_COLOR};
-                border-radius: 4px;
-                text-align: center;
-                color: #333333;
-                font-weight: bold;
-                background-color: #f5f5f5;
-                height: 22px;
-            }}
-            QProgressBar::chunk {{
-                background-color: #8EACC0; /* Light Morandi blue */
-                border-radius: 2px;
-                margin: 0px;
-            }}
-        """)
-        
-        # Update status message
-        self.showMessage(message, status_type='busy')
-
     def stop_progress(self, message="Complete", status_type='success'):
         """Stop the progress/activity indicator and update status, showing Completing->Complete."""
         # Ensure progress bar is visible for the final animation

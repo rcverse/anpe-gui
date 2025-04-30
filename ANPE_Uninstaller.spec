@@ -12,7 +12,8 @@ SCRIPT_FILE = 'installer/uninstall.pyw' # Or uninstall_tk.py? Verify filename.
 ICON_FILE = 'installer/assets/app_icon_logo.ico'
 # --- ASSETS: Add logo image for Tkinter UI ---
 ASSETS_SOURCE_DIR = 'installer/assets'
-LOGO_FILE = 'app_icon_logo.png'  # Logo file for display in the UI
+# Removed logo file inclusion - it's now base64 embedded
+# LOGO_FILE = 'app_icon_logo.png'  # Logo file for display in the UI
 
 # Removed PyQt6 data/binary collection
 # pyqt6_datas, pyqt6_binaries = collect_entry_point('PyQt6')
@@ -26,14 +27,9 @@ a = Analysis([
     ],
     pathex=[],
     binaries=[], # No extra binaries needed for Tkinter
-    datas=[
-        (os.path.join(ASSETS_SOURCE_DIR, LOGO_FILE), '.'),  # Include logo file in root of bundle
-    ],
+    datas=[], # No external data files needed anymore
     hiddenimports=[
-        'PIL._tkinter_finder',  # Required for PIL/Pillow with Tkinter
-        'PIL._imaging',         # Core Pillow functionality
-        'PIL.Image',            # Basic image handling
-        'PIL.ImageTk',          # Required for displaying images in Tkinter
+        # Removed PIL imports as they are no longer used
     ],
     hookspath=[],
     hooksconfig={},
@@ -49,6 +45,16 @@ a = Analysis([
         'PyQt5',
         'PySide6',
         'PySide2',
+        # --- Added more aggressive exclusions ---
+        'multiprocessing',
+        'xmlrpc',
+        'distutils',
+        'curses',
+        'asyncio',
+        'bz2',
+        'lzma',
+        'tkinter.test',
+        'idlelib',
         # Add other specific exclusions if needed
     ],
     win_no_prefer_redirects=False,
@@ -57,7 +63,10 @@ a = Analysis([
     noarchive=False
 )
 
-pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+pyz = PYZ(a.pure, a.zipped_data, 
+          cipher=block_cipher,
+          optimize=2 # Add Python optimization level 2 (-OO)
+          )
 
 exe = EXE(pyz, 
     a.scripts,
@@ -69,7 +78,7 @@ exe = EXE(pyz,
     name=APP_NAME,
     debug=False,
     bootloader_ignore_signals=False,
-    strip=False,
+    strip=True, # --- Enabled stripping ---
     upx=True,
     upx_exclude=[],
     runtime_tmpdir=None,

@@ -107,10 +107,7 @@ ANPE_INSTALLED_DIRS = [
 ANPE_INSTALLED_FILES = [
     "ANPE.exe",      # Main executable
     "uninstall.exe", # Uninstaller executable
-    "LICENSE.txt",   # License file (if present)
-    "README.md",     # Readme file (if present)
-    "requirements.txt", # Requirements file (if present)
-    "config.ini"     # Configuration file (if present)
+    "app_icon_logo.ico",
 ]
 
 # --- Helper Functions (New for Tkinter) ---

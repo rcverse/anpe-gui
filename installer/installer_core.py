@@ -332,6 +332,30 @@ def copy_bundled_executables(target_install_path: str):
             logger.error(f"Unexpected error copying {exe_name}: {e}", exc_info=True)
             print_failure(f"An unexpected error occurred while copying {exe_name}: {e}")
 
+def copy_icon_file(target_install_path: str):
+    """Copies the application icon file to the installation root."""
+    icon_filename = "app_icon_logo.ico"
+    # Path relative to _MEIPASS root, needs .. from installer dir base
+    source_rel_path = f"../assets/{icon_filename}"
+    print_step(f"Deploying {icon_filename}...")
+    try:
+        # find_and_get_resource_path expects path relative to installer dir base
+        source_abs_path = find_and_get_resource_path(source_rel_path)
+        # Copy directly to the install root
+        destination_path = Path(target_install_path) / icon_filename
+
+        logger.info(f"Copying {icon_filename} from '{source_abs_path}' to '{destination_path}'...")
+        shutil.copy2(source_abs_path, destination_path) # copy2 preserves metadata
+        logger.info(f"Successfully copied {icon_filename}.")
+        print_step(f"{icon_filename} deployed successfully.")
+
+    except FileNotFoundError as fnf_error:
+        logger.error(f"Error copying {icon_filename}: {fnf_error}", exc_info=True)
+        print_failure(f"Could not find the bundled icon file '{icon_filename}' at expected path '{source_rel_path}'.")
+    except Exception as e:
+        logger.error(f"Unexpected error copying {icon_filename}: {e}", exc_info=True)
+        print_failure(f"An unexpected error occurred while copying {icon_filename}: {e}")
+
 # --- Main Execution --- 
 
 def main(install_path: str):
@@ -389,6 +413,9 @@ def main(install_path: str):
 
     # 8. Copy bundled executables (ANPE.exe, uninstall.exe)
     copy_bundled_executables(str(install_path_abs))
+
+    # 9. Copy the application icon file
+    copy_icon_file(str(install_path_abs))
 
     print_success("Environment setup complete.")
 

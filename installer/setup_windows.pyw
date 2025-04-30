@@ -373,6 +373,8 @@ class SetupMainWindow(QMainWindow):
         install_root_abs = os.path.abspath(self._install_path)
         # Path to the installed launcher executable
         launcher_exe_abs = os.path.join(install_root_abs, "ANPE.exe")
+        # Path to the copied icon file in the install root
+        icon_path_abs = os.path.join(install_root_abs, "app_icon_logo.ico")
 
         # --- Verify Launcher Exists ---
         if not os.path.isfile(launcher_exe_abs):
@@ -381,44 +383,30 @@ class SetupMainWindow(QMainWindow):
              QMessageBox.critical(self, "Shortcut Failed", error_msg)
              return
 
-        # --- Resolve Icon Path (for the shortcut itself) --- 
-        icon_path = None
-        try:
-            # Assume icon was copied to install root or use bundled one if needed
-            # Let's try finding it in the installed assets first (copied by core)
-            installed_icon_path = os.path.join(install_root_abs, "assets", "app_icon_logo.ico")
-            if os.path.isfile(installed_icon_path):
-                icon_path = installed_icon_path
-            else:
-                # Fallback: try resolving from installer bundle assets if needed?
-                # For simplicity, let's assume the icon is installed or we use default
-                icon_path = get_resource_path('assets/app_icon_logo.ico') # Check bundle
-                if not os.path.isfile(icon_path):
-                    print(f"Warning: Icon file not found in install dir or bundle assets. Shortcut will use default.", file=sys.stderr)
-                    icon_path = None # Let pyshortcuts handle default
-        except Exception as e:
-            print(f"Warning: Could not resolve icon path: {e}. Shortcut will use default.", file=sys.stderr)
-            icon_path = None
-        # ------------------------- 
+        # --- Verify Icon File Exists ---
+        if not os.path.isfile(icon_path_abs):
+            print(f"Warning: Icon file '{icon_path_abs}' not found after copy. Shortcut will use default icon.", file=sys.stderr)
+            logger.warning(f"Icon file '{icon_path_abs}' not found. Shortcut will use default icon.")
+            icon_path_abs = None # Fallback to default
 
         try:
-            # Create shortcut directly to ANPE.exe
-            print(f"Calling make_shortcut: script='{launcher_exe_abs}', name='{shortcut_name}', icon='{icon_path}', working_dir='{install_root_abs}'")
+            # Create shortcut explicitly using the copied icon file
+            print(f"Calling make_shortcut: script='{launcher_exe_abs}', name='{shortcut_name}', icon='{icon_path_abs}', working_dir='{install_root_abs}'")
             make_shortcut(
                 script=launcher_exe_abs,  # Target is the launcher executable
                 name=shortcut_name,
-                icon=icon_path,
+                icon=icon_path_abs,       # Use the explicit icon path
                 # executable=None, # Not needed when script is an exe
-                terminal=False, 
-                desktop=True,  
-                startmenu=True, 
+                terminal=False,
+                desktop=True,
+                startmenu=True,
                 working_dir=install_root_abs # Launcher expects to run from install root
             )
-            
+
             # Register application and uninstaller link
-            # Pass the *installation root* path where ANPE.exe and uninstall.exe reside
-            self._register_app_and_create_uninstaller(install_root_abs, icon_path)
-            
+            # Pass the explicit icon path for DisplayIcon
+            self._register_app_and_create_uninstaller(install_root_abs, icon_path_abs)
+
             print("Desktop and Start Menu shortcuts created successfully.")
             logger.debug("make_shortcut and registry calls completed successfully.")
         except Exception as e:
@@ -437,7 +425,7 @@ class SetupMainWindow(QMainWindow):
             # ... (logging code can remain if useful) ...
             print(f"Install log being written to: {install_log_path}")
             # ... (rest of logging code) ...
-                
+
             # 2. Define path to the installed uninstaller executable
             uninstaller_exe_abs = os.path.join(install_root_abs, "uninstall.exe")
             print(f"Uninstaller executable expected at: {uninstaller_exe_abs}")
@@ -453,17 +441,17 @@ class SetupMainWindow(QMainWindow):
                 uninstall_string = "" # Set empty if not found
             else:
                 uninstall_string = f'"{uninstaller_exe_abs}"' # Properly quote the path
-                
+
             # 3. Create registry entries
             app_name = "ANPE" # Consistent name
             app_version = "1.0.0"  # TODO: Parameterize or read from somewhere?
             publisher = "ANPE Project" # TODO: Update publisher if needed
-            
+
             reg_path = rf"Software\Microsoft\Windows\CurrentVersion\Uninstall\{app_name}" # Use app_name in key
-            
-            print(f"Writing registry entries to: HKCU\\{reg_path}")
+
+            print(f"Writing registry entries to: HKCU {reg_path}")
             reg_key = winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, reg_path, 0, winreg.KEY_WRITE)
-            
+
             winreg.SetValueEx(reg_key, "DisplayName", 0, winreg.REG_SZ, app_name)
             winreg.SetValueEx(reg_key, "DisplayVersion", 0, winreg.REG_SZ, app_version)
             winreg.SetValueEx(reg_key, "Publisher", 0, winreg.REG_SZ, publisher)
@@ -472,17 +460,17 @@ class SetupMainWindow(QMainWindow):
             if uninstall_string: # Only write if uninstaller was found
                  winreg.SetValueEx(reg_key, "UninstallString", 0, winreg.REG_SZ, uninstall_string)
             # ------------------------------------------------------------------
-            # Use the provided icon_path (might be None)
+            # Use the provided explicit icon_path for DisplayIcon
             winreg.SetValueEx(reg_key, "DisplayIcon", 0, winreg.REG_SZ, icon_path if icon_path else "") 
             winreg.SetValueEx(reg_key, "NoModify", 0, winreg.REG_DWORD, 1)
             winreg.SetValueEx(reg_key, "NoRepair", 0, winreg.REG_DWORD, 1)
             # Estimate size? Difficult to calculate accurately here.
             # winreg.SetValueEx(reg_key, "EstimatedSize", 0, winreg.REG_DWORD, size_in_kb)
-            
+
             winreg.CloseKey(reg_key)
-            
+
             print("Application registered successfully in Windows Add/Remove Programs.")
-            
+
         except Exception as e:
             print(f"Error during application registration: {e}")
             import traceback

@@ -50,7 +50,7 @@ class EnvironmentSetupWorker(QObject):
             from installer.installer_core import (
                 unpack_python, find_python_executable, enable_site_packages,
                 bootstrap_pip, run_pip_install, copy_app_code, 
-                copy_bundled_executables # Changed function names from analysis
+                copy_bundled_executables, copy_icon_file # Added copy_icon_file
             )
 
             # Set all tasks to pending initially
@@ -138,6 +138,11 @@ class EnvironmentSetupWorker(QObject):
             self.status_update.emit("Copying executables...")
             copy_bundled_executables(self._install_path) # Use the function from installer_core
             self.log_update.emit("Bundled executables copied.")
+
+            # 4.3 Copy the application icon file
+            self.status_update.emit("Copying application icon...")
+            copy_icon_file(self._install_path) # <<< ADDED THIS CALL
+            self.log_update.emit("Application icon copied.")
 
             self.task_status_update.emit(self._current_task, TaskStatus.COMPLETED)
             self._completed_tasks.add(self._current_task)

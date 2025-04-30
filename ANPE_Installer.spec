@@ -70,30 +70,49 @@ installer_dir = 'installer'
 bundled_data.append((installer_dir, 'installer'))
 
 # 6. Installer Assets (icons, etc. needed by setup_windows.pyw GUI itself)
-# Remove destdir, manually construct target path
-installer_assets_raw = collect_data_files(INSTALLER_ASSETS_SOURCE, 
-                                          include_py_files=False)
-installer_assets_filtered = []
+# Explicitly copy allowed files from the source assets folder to the target assets folder root.
+installer_assets_to_bundle = []
 allowed_files = [
     'app_icon_logo.png', 'success.png', 'error.png', 'LICENSE.installer.txt',
     'app_icon_logo.ico' # Ensure icon is included if needed by GUI directly
     # Add other needed assets here
 ]
-for src, _ in installer_assets_raw: # Original destination path is ignored
-    filename = os.path.basename(src)
-    if filename in allowed_files:
-        # Construct target path: place file directly under INSTALLER_ASSETS_TARGET directory
-        target_path = os.path.join(INSTALLER_ASSETS_TARGET, filename).replace('\\', '/') # Use forward slashes
-        installer_assets_filtered.append((src, target_path))
-bundled_data.extend(installer_assets_filtered)
-# Old way using collect_data_files with destdir removed:
-# installer_assets = collect_data_files(INSTALLER_ASSETS_SOURCE, 
-#                                       destdir=INSTALLER_ASSETS_TARGET,
-#                                       include_py_files=False) 
-# installer_assets = [(s, d) for s, d in installer_assets if os.path.basename(s) in [
-#     'app_icon_logo.png', 'success.svg', 'error.svg', 'LICENSE.installer.txt' 
-# ]]
-# bundled_data.extend(installer_assets)
+for filename in allowed_files:
+    source_path = os.path.join(INSTALLER_ASSETS_SOURCE, filename) # e.g., 'installer/assets/app_icon_logo.ico'
+    target_path_in_bundle = INSTALLER_ASSETS_TARGET # Just 'assets' directory (root level)
+    # Check if the source file actually exists before adding
+    if os.path.exists(source_path):
+         installer_assets_to_bundle.append((source_path, target_path_in_bundle))
+    else:
+         # Add a warning during spec processing if a source asset is missing
+         print(f"WARNING: Installer asset source file not found during spec processing: {source_path}")
+
+bundled_data.extend(installer_assets_to_bundle)
+
+# Old way using collect_data_files removed as it might conflict with section 5 bundling.
+# installer_assets_raw = collect_data_files(INSTALLER_ASSETS_SOURCE, 
+#                                           include_py_files=False)
+# installer_assets_filtered = []
+# allowed_files = [
+#     'app_icon_logo.png', 'success.png', 'error.png', 'LICENSE.installer.txt',
+#     'app_icon_logo.ico' # Ensure icon is included if needed by GUI directly
+#     # Add other needed assets here
+# ]
+# for src, _ in installer_assets_raw: # Original destination path is ignored
+#     filename = os.path.basename(src)
+#     if filename in allowed_files:
+#         # Construct target path: place file directly under INSTALLER_ASSETS_TARGET directory
+#         target_path = os.path.join(INSTALLER_ASSETS_TARGET, filename).replace('\\', '/') # Use forward slashes
+#         installer_assets_filtered.append((src, target_path))
+# bundled_data.extend(installer_assets_filtered)
+# # Old way using collect_data_files with destdir removed:
+# # installer_assets = collect_data_files(INSTALLER_ASSETS_SOURCE, 
+# #                                       destdir=INSTALLER_ASSETS_TARGET,
+# #                                       include_py_files=False) 
+# # installer_assets = [(s, d) for s, d in installer_assets if os.path.basename(s) in [
+# #     'app_icon_logo.png', 'success.svg', 'error.svg', 'LICENSE.installer.txt' 
+# # ]]
+# # bundled_data.extend(installer_assets)
 
 
 # 7. Pre-built Launcher (ANPE.exe)
@@ -103,13 +122,24 @@ bundled_data.append((PREBUILT_LAUNCHER_SOURCE, PREBUILT_LAUNCHER_TARGET))
 bundled_data.append((PREBUILT_UNINSTALLER_SOURCE, PREBUILT_UNINSTALLER_TARGET))
 
 # --- Collect PyQt6 ---
-pyqt6_datas, pyqt6_binaries = collect_entry_point('PyQt6')
+pyqt6_datas_raw, pyqt6_binaries = collect_entry_point('PyQt6')
+
+# --- Filter out translation files ---
+pyqt6_datas_filtered = []
+for source_path, destination_path in pyqt6_datas_raw:
+    # Check if the destination path includes the translations directory and ends with .qm
+    # Use os.path.normpath to handle different path separators
+    normalized_dest = os.path.normpath(destination_path)
+    # Exclude if 'translations' is a directory component and the file ends with '.qm'
+    if not ('translations' in normalized_dest.split(os.sep) and normalized_dest.endswith('.qm')):
+        pyqt6_datas_filtered.append((source_path, destination_path))
+
 
 # --- Analysis ---
 a = Analysis([SCRIPT_FILE],
              pathex=[],
              binaries=pyqt6_binaries,
-             datas=bundled_data + pyqt6_datas, # Combine all bundled data
+             datas=bundled_data + pyqt6_datas_filtered, # Combine all bundled data, using the filtered list
              hiddenimports=[
                  # Imports needed by setup_windows.pyw and its dependencies
                  'PyQt6.sip', 
@@ -150,7 +180,37 @@ a = Analysis([SCRIPT_FILE],
                  'PyQt6.QtSql',
                  'PyQt6.QtNetwork', # Keep? Often needed indirectly.
                  'PyQt6.QtTest',
+                 # --- Additional PyQt6 Exclusions ---
+                 'PyQt6.QtBluetooth',
+                 'PyQt6.QtNfc',
+                 'PyQt6.QtPositioning',
+                 'PyQt6.QtOpenGL',
+                 'PyQt6.QtOpenGLWidgets',
+                 'PyQt6.QtPrintSupport',
+                 'PyQt6.QtQuick',
+                 'PyQt6.QtQuickWidgets',
+                 'PyQt6.QtRemoteObjects',
+                 'PyQt6.QtScxml',
+                 'PyQt6.QtSensors',
+                 'PyQt6.QtSerialPort',
+                 'PyQt6.QtSvg',
+                 'PyQt6.QtSvgWidgets',
+                 # -------------------------------------
                  # Add other specific exclusions if needed
+                 'PyQt6.QtXml',
+                 'PyQt6.QtDBus',
+                 # --- Further Exclusions ---
+                 'PyQt6.QtStateMachine',
+                 'PyQt6.QtHelp',
+                 'PyQt6.QtUiTools',
+                 'PyQt6.QtXmlPatterns',
+                 'PyQt6.Qsci',
+                 'PyQt6.QtCharts',
+                 'PyQt6.QtDataVisualization',
+                 'PyQt6.QtPdf',
+                 'PyQt6.QtPdfWidgets',
+                 'PyQt6.QtLocation',
+                 # --------------------------
              ],
              win_no_prefer_redirects=False,
              win_private_assemblies=False,

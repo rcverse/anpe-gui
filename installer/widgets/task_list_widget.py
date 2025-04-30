@@ -74,7 +74,21 @@ class TaskItem(QFrame):
                 self.status_icon.setText("✓")
                 self.status_icon.setStyleSheet("color: #3B7D23; font-weight: bold;")
         elif status == TaskStatus.FAILED:
+            # Special case: Model check 'failure' is expected if not installed
+            original_text = self.task_label.text()
+            if "checking model presence" in original_text.lower():
+                self.task_label.setText("Models need installation")
+                self.task_label.setStyleSheet("color: #888888; font-weight: normal; font-size: 14px;") # Neutral (like PENDING)
+                self.status_icon.clear() # No icon for this state
+                return # Skip the rest of the FAILED styling
+
+            # Apply standard FAILED styling for other failures
             self.task_label.setStyleSheet("color: #DD3333; font-weight: normal; font-size: 14px;") # Red text for fail
+            
+            # Prefix with "Failed: " if not already done
+            if not original_text.startswith("Failed: "):
+                 self.task_label.setText(f"Failed: {original_text}")
+
             # Load error icon using QPixmap
             error_icon_path = get_resource_path("assets/error.png") # Use PNG
             if os.path.exists(error_icon_path):

@@ -980,7 +980,6 @@ class MainWindow(QMainWindow):
             self.log("Starting single text processing...")
             status_type = 'busy'
             status_message = "Processing text..."
-            # Pass message directly to run_single_processing which will call status_bar.start_progress
             # Get preferences from the config dict
             spacy_pref = config.pop('spacy_model_preference', None)
             benepar_pref = config.pop('benepar_model_preference', None)
