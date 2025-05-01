@@ -1,0 +1,10 @@
+# Requirements installed during macOS first-run setup
+# Pin versions for reproducibility
+
+# UI Framework (Needed by the main application running in the target env)
+PyQt6==6.9.0
+
+# Core NLP / ANPE packages
+anpe==0.4.0       # Replace x.y.z with the required version
+spacy==3.8.5
+benepar==0.2.0
