@@ -5,6 +5,7 @@ import logging
 import time
 from pathlib import Path
 from PyQt6.QtWidgets import QApplication, QMessageBox
+from PyQt6.QtCore import QProcess
 
 # --- Add project root to sys.path for dev/debug --- 
 # This helps find the installer package when run directly
