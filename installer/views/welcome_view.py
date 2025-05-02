@@ -242,15 +242,20 @@ class WelcomeViewWidget(QWidget):
         # --- License Agreement ---
         license_layout = QHBoxLayout()
         license_layout.addStretch(1)  # Add stretch at the beginning to center
-        license_text = QLabel("ANPE is open-source software licensed under")
-        license_text.setStyleSheet("font-size: 13px; color: #555555; font-family: 'Segoe UI', Arial, sans-serif;")
-        license_layout.addWidget(license_text)
-
-        license_link_label = ClickableLabel("GNU GPL v3")  # Remove the HTML link styling
-        license_link_label.setStyleSheet("font-size: 13px; color: #0078D7; font-family: 'Segoe UI', Arial, sans-serif; text-decoration: none;")  # Blue color matching theme
-        license_link_label.setOpenExternalLinks(False)
-        license_link_label.clicked.connect(self._show_license_dialog)
-        license_layout.addWidget(license_link_label)
+        
+        # Create a single QLabel with rich text and link
+        self.license_label = QLabel(
+            "By continuing, you agree to the <a href='show_license'>software license agreement</a>."
+        )
+        self.license_label.setTextFormat(Qt.TextFormat.RichText)
+        self.license_label.setOpenExternalLinks(False) # Important: Don't open external links
+        self.license_label.linkActivated.connect(self._handle_license_link) # Connect signal
+        self.license_label.setStyleSheet("font-size: 13px; color: #555555; font-family: 'Segoe UI', Arial, sans-serif;") # Basic style
+        
+        # Optionally style the link part (Qt's default link color is often blue)
+        # You might need more complex styling if you want specific link colors
+        
+        license_layout.addWidget(self.license_label)
         license_layout.addStretch(1)  # Add stretch at the end to center
         
         layout.addLayout(license_layout)
@@ -400,6 +405,12 @@ class WelcomeViewWidget(QWidget):
         if self._license_dialog is None:
             self._license_dialog = LicenseDialog(self) # Pass self as parent
         self._license_dialog.exec()
+
+    def _handle_license_link(self, link):
+        """Handle clicks on the license link."""
+        # Check if the link clicked is the one we defined
+        if link == 'show_license':
+            self._show_license_dialog()
 
     def _is_admin(self):
         """Check if the current user has administrator privileges on Windows."""

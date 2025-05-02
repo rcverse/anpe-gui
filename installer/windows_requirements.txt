@@ -1,0 +1,14 @@
+# Requirements installed by the Windows installer into the bundled environment
+
+# UI Framework (Needed by the main ANPE.exe runtime)
+PyQt6==6.9.0
+
+# Core NLP / ANPE packages (Match macOS versions for consistency)
+spacy==3.8.5
+benepar==0.2.0
+anpe==0.4.0 
+nltk==3.9.1
+
+# Utilities
+pyshortcuts==1.8.0 # Needed post-install by setup_windows.pyw for shortcut creation
+pywin32==306     # Common Windows dependency, often needed by packages like pyshortcuts 

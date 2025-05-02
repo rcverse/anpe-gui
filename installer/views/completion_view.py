@@ -17,6 +17,7 @@ class CompletionViewWidget(QWidget):
     # Signals emitted when the final button is clicked
     shortcut_requested = pyqtSignal(bool)
     launch_requested = pyqtSignal(bool)
+    preserve_log_requested = pyqtSignal(bool)
     close_requested = pyqtSignal()
 
     def __init__(self, parent=None):
@@ -219,6 +220,19 @@ class CompletionViewWidget(QWidget):
             /* Removed ::indicator styling to allow default checkmark */
         """)
         options_layout.addWidget(self.launch_checkbox)
+
+        # Added checkbox for preserving the log
+        self.preserve_log_checkbox = QCheckBox("Preserve installation log file")
+        self.preserve_log_checkbox.setChecked(False) # Default to unchecked
+        self.preserve_log_checkbox.setStyleSheet("""
+            QCheckBox {
+                font-size: 14px;
+                spacing: 10px; /* Space between indicator and text */
+                font-family: 'Segoe UI', Arial, sans-serif;
+                padding: 3px;
+            }
+        """)
+        options_layout.addWidget(self.preserve_log_checkbox)
         
         # Add options with spacing
         layout.addWidget(self.options_container)
@@ -271,7 +285,7 @@ class CompletionViewWidget(QWidget):
         if success:
             self.logger.debug("Configuring view for SUCCESS state.")
             self.status_title.setText("Setup Complete!")
-            self.status_title.setStyleSheet("font-size: 26px; font-weight: bold; color: #00A86B; font-family: 'Segoe UI', Arial, sans-serif;")
+            self.status_title.setStyleSheet("font-size: 26px; font-weight: bold; color: #0078D7; font-family: 'Segoe UI', Arial, sans-serif;")
             self.info_text.setText(
                 "ANPE has been successfully installed and is ready to use.\n\n"
                 "Feedbacks are welcome! Please report any issues or suggestions to rcverse6@gmail.com."
@@ -280,7 +294,7 @@ class CompletionViewWidget(QWidget):
             self.complete_button.setText("Complete")
             self.complete_button.setStyleSheet("""
                 QPushButton {
-                    background-color: #00A86B;
+                    background-color: #0078D7;
                     color: white;
                     border: none;
                     border-radius: 4px;
@@ -291,10 +305,10 @@ class CompletionViewWidget(QWidget):
                     min-width: 120px;
                 }
                 QPushButton:hover {
-                    background-color: #00BF78;
+                    background-color: #1A88E1;
                 }
                 QPushButton:pressed {
-                    background-color: #009960;
+                    background-color: #005A9E;
                 }
             """)
             self.logger.debug("Set options container visible, button text to 'Complete'.")
@@ -435,6 +449,9 @@ class CompletionViewWidget(QWidget):
             self.shortcut_requested.emit(self.shortcut_checkbox.isChecked())
         if self.launch_checkbox.isVisible():
             self.launch_requested.emit(self.launch_checkbox.isChecked())
+        # Emit log preservation request if successful
+        if self.preserve_log_checkbox.isVisible():
+            self.preserve_log_requested.emit(self.preserve_log_checkbox.isChecked())
 
         # Always emit close request
         self.close_requested.emit()
@@ -475,6 +492,7 @@ if __name__ == '__main__':
     # Connect signals to print output
     completion_view.shortcut_requested.connect(lambda checked: print(f"Shortcut requested: {checked}"))
     completion_view.launch_requested.connect(lambda checked: print(f"Launch requested: {checked}"))
+    completion_view.preserve_log_requested.connect(lambda checked: print(f"Preserve log requested: {checked}"))
     completion_view.close_requested.connect(lambda: print("Close requested"))
 
     container.resize(500, 300)

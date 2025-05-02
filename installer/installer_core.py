@@ -95,7 +95,6 @@ def unpack_python(target_install_path: str):
         # Path relative to the installer directory (need to go up one level)
         python_archive_relative_path = f'../{python_archive_relative_path_in_bundle}'
         archive_type = "zip"
-    # TODO: Add elif for macOS
     else:
         print_failure(f"Unsupported operating system: {system}")
 
@@ -122,7 +121,6 @@ def unpack_python(target_install_path: str):
                 logger.debug("Zip file opened. Starting extraction...")
                 zip_ref.extractall(python_extract_path)
                 logger.debug("Extraction completed.")
-        # TODO: Add tarfile extraction
     except zipfile.BadZipFile:
         print_failure(f"Failed to unpack Python: The file '{python_archive_path}' is not a valid zip file or is corrupted.")
     except Exception as e:
@@ -138,7 +136,6 @@ def find_python_executable(python_extract_path: str) -> str:
     expected_path = ""
     if system == "Windows":
         expected_path = Path(python_extract_path) / "python.exe"
-    # TODO: Add elif for macOS
     else:
          print_failure(f"Cannot determine Python executable path for OS: {system}")
 
@@ -393,18 +390,31 @@ def main(install_path: str):
     # 5. Upgrade pip
     run_pip_install(python_exe, "--upgrade pip")
 
-    # 6. Install packages
-    # TODO: Read from bundled requirements.txt instead of hardcoding?
-    # For now, keep hardcoded list consistent with worker
-    required_packages = [
-        "PyQt6", # Needed by ANPE.exe runtime
-        "spacy",
-        "benepar",
-        "anpe", # Assuming this is the core package
-        "pyshortcuts", # Needed post-install by setup_windows.pyw
-        "pywin32", # Added - common Windows dependency
-        # Add others if ANPE.exe needs them
-    ]
+    # 6. Install packages from requirements file
+    requirements_filename = "windows_requirements.txt"
+    required_packages = []
+    try:
+        # Use find_and_get_resource_path, assuming the req file is bundled
+        # relative to the installer module's location.
+        requirements_path_str = find_and_get_resource_path(requirements_filename)
+        requirements_path = Path(requirements_path_str)
+        
+        print_step(f"Reading requirements from {requirements_filename}...")
+        lines = requirements_path.read_text(encoding='utf-8').splitlines()
+        for line in lines:
+            stripped_line = line.strip()
+            if stripped_line and not stripped_line.startswith('#'):
+                required_packages.append(stripped_line)
+        logger.info(f"Found {len(required_packages)} packages to install: {required_packages}")
+        if not required_packages:
+             print_failure(f"No packages found in {requirements_filename}. Installation cannot proceed.")
+
+    except FileNotFoundError:
+        print_failure(f"Could not find the requirements file: {requirements_filename}. Make sure it is bundled correctly.")
+    except Exception as e:
+        print_failure(f"Failed to read or parse {requirements_filename}: {e}")
+
+    # Install the packages read from the file
     for package in required_packages:
         run_pip_install(python_exe, package)
 

@@ -16,13 +16,14 @@ try:
 
     # Define the log filename (place it directly in the exe directory)
     timestamp = time.strftime("%Y%m%d-%H%M%S")
-    log_filename = os.path.join(exe_dir, f"installer_debug_{timestamp}.log")
+    # Rename log file to be the formal installation log
+    log_filename = os.path.join(exe_dir, f"anpe_install_{timestamp}.log")
 
     # Basic logging configuration
     logging.basicConfig(filename=log_filename,
                         level=logging.DEBUG,
                         format='%(asctime)s - %(levelname)s - %(message)s')
-    logging.info(f"Debug logging initialized. Log file: {log_filename}")
+    logging.info(f"ANPE Installer logging initialized. Log file: {log_filename}")
 except Exception as e:
     # Fallback: print to stderr if logging setup fails
     print(f"Error setting up logging to file '{log_filename if log_filename else 'UNKNOWN'}': {e}", file=sys.stderr)

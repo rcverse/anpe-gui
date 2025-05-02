@@ -108,7 +108,7 @@ class WelcomeViewWidget(QWidget):
         # --- ANPE Introduction Text ---
         intro_text = QLabel(
             "ANPE GUI provides a user-friendly interface for extracting noun phrases from text "
-            "using the powerful <a href='https://github.com/rcverse/another-noun-phrase-extractor'>ANPE library</a>, "
+            "using the <a href='https://github.com/rcverse/another-noun-phrase-extractor'>ANPE library</a>, "
             "without needing to write any code."
         )
         intro_text.setWordWrap(True)

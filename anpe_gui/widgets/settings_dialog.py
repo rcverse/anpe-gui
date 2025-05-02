@@ -1533,8 +1533,7 @@ class CorePage(QWidget):
         status_group_layout.addWidget(explanation_label1)
 
         explanation_label2 = QLabel(
-            "Keeping the core library updated ensures you have the latest features, "
-            "performance improvements, and bug fixes."
+            "You can update the core library manually using the button below."
         )
         explanation_label2.setWordWrap(True)
         explanation_label2.setStyleSheet(explanation_style)
@@ -2262,12 +2261,6 @@ class SettingsDialog(QDialog):
         main_layout = QVBoxLayout(self)
         main_layout.setSpacing(0)
         main_layout.setContentsMargins(0, 0, 0, 0)
-
-        # --- Main Content Splitter ---
-        # content_splitter = QSplitter(Qt.Orientation.Horizontal)
-        # content_splitter.setChildrenCollapsible(False)
-        # content_splitter.setHandleWidth(1) # Minimal handle
-        # content_splitter.setStyleSheet("QSplitter::handle { background-color: #cccccc; }")
         
         # --- Use QHBoxLayout instead of QSplitter --- 
         content_layout = QHBoxLayout()

@@ -5,9 +5,10 @@ import platform # Added for platform-specific checks
 import shutil
 import winreg  # For Windows registry operations
 import logging # Added for logging
+import re # ADDED: For regex parsing of version file
 from PyQt6.QtWidgets import QApplication, QMainWindow, QStackedWidget, QWidget, QMessageBox, QVBoxLayout, QFrame
 from PyQt6.QtCore import Qt, QThread, QProcess # Added QThread and QProcess
-from PyQt6.QtGui import QPalette, QColor # Added for background
+from PyQt6.QtGui import QPalette, QColor, QIcon # Added QIcon for window icon
 from PyQt6.QtCore import QPropertyAnimation, QEasingCurve # Added for fade-in
 
 # Import views - CHANGED FROM RELATIVE TO ABSOLUTE IMPORTS
@@ -23,7 +24,7 @@ from installer.workers.model_setup_worker import ModelSetupWorker # Added
 from installer.widgets.custom_title_bar import CustomTitleBar
 
 # Import utility - CHANGED FROM RELATIVE TO ABSOLUTE IMPORTS
-from installer.utils import get_resource_path
+from installer.utils import get_resource_path, log_filename # Import log_filename
 
 from pyshortcuts import make_shortcut
 
@@ -41,12 +42,52 @@ PRIMARY_COLOR = "#005A9C"
 BORDER_RADIUS = 10 # Adjust for desired roundness
 BORDER_THICKNESS = 2 # Adjust for desired thickness
 
+# --- Helper function to read bundled version ---
+def get_bundled_app_version() -> str | None:
+    """Reads the __version__ from the bundled anpe_gui/version.py file."""
+    try:
+        # Path relative to the installer script location or _MEIPASS root
+        # utils.py's get_resource_path handles the _MEIPASS resolution.
+        # This path assumes version.py is at _MEIPASS/assets/anpe_gui/version.py
+        # and the script is at _MEIPASS/installer/setup_windows.pyw
+        version_file_rel_path = "../assets/anpe_gui/version.py"
+        version_file_abs_path = get_resource_path(version_file_rel_path)
+
+        if not os.path.exists(version_file_abs_path):
+            logger.error(f"Bundled version file not found at expected path: {version_file_abs_path}")
+            return None
+
+        with open(version_file_abs_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        # Use regex to find the __version__ assignment
+        match = re.search(r"^__version__\s*=\s*['\"]([^'\"]*)['\"]", content, re.MULTILINE)
+        if match:
+            version = match.group(1)
+            logger.info(f"Found bundled app version: {version}")
+            return version
+        else:
+            logger.error(f"Could not find __version__ assignment in {version_file_abs_path}")
+            return None
+    except Exception as e:
+        logger.error(f"Error reading bundled version file: {e}", exc_info=True)
+        return None
+# --- End helper function ---
+
 class SetupMainWindow(QMainWindow):
     """Main window for the ANPE setup application with custom title bar."""
 
     def __init__(self):
         """Initialize the main window."""
         super().__init__()
+
+        # --- Set Window Icon --- 
+        icon_path = get_resource_path("assets/app_icon_logo.ico")
+        if os.path.exists(icon_path):
+            self.setWindowIcon(QIcon(icon_path))
+        else:
+            logger.warning(f"Window icon not found at expected path: {icon_path}")
+        # --- End Set Window Icon ---
 
         window_title = "ANPE Setup Wizard"
         self.setWindowTitle(window_title)
@@ -190,6 +231,7 @@ class SetupMainWindow(QMainWindow):
         self.stacked_widget.addWidget(self.completion_view)
         self.completion_view.shortcut_requested.connect(self._create_shortcut)
         self.completion_view.launch_requested.connect(self._launch_anpe)
+        self.completion_view.preserve_log_requested.connect(self._handle_preserve_log_request)
         self.completion_view.close_requested.connect(self.close)
 
     def _handle_setup_request(self, install_path: str):
@@ -420,13 +462,7 @@ class SetupMainWindow(QMainWindow):
     def _register_app_and_create_uninstaller(self, install_root_abs, icon_path):
         """Register the application in Windows Add/Remove Programs and point to uninstall.exe."""
         try:
-            # 1. Installation log (optional, can be kept or removed)
-            install_log_path = os.path.join(install_root_abs, "install_log.txt")
-            # ... (logging code can remain if useful) ...
-            print(f"Install log being written to: {install_log_path}")
-            # ... (rest of logging code) ...
-
-            # 2. Define path to the installed uninstaller executable
+            # 1. Define path to the installed uninstaller executable
             uninstaller_exe_abs = os.path.join(install_root_abs, "uninstall.exe")
             print(f"Uninstaller executable expected at: {uninstaller_exe_abs}")
 
@@ -442,12 +478,17 @@ class SetupMainWindow(QMainWindow):
             else:
                 uninstall_string = f'"{uninstaller_exe_abs}"' # Properly quote the path
 
-            # 3. Create registry entries
+            # 2. Create registry entries
             app_name = "ANPE" # Consistent name
-            app_version = "1.0.0"  # TODO: Parameterize or read from somewhere?
-            publisher = "ANPE Project" # TODO: Update publisher if needed
+            # --- Get version dynamically ---
+            app_version = get_bundled_app_version()
+            if not app_version:
+                app_version = "UNKNOWN" # Fallback if reading fails
+                logger.warning("Using fallback version 'UNKNOWN' for registry.")
+            # -----------------------------
+            publisher = "Richard Chen" 
 
-            reg_path = rf"Software\Microsoft\Windows\CurrentVersion\Uninstall\{app_name}" # Use app_name in key
+            reg_path = rf"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{app_name}" # Use app_name in key
 
             print(f"Writing registry entries to: HKCU {reg_path}")
             reg_key = winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, reg_path, 0, winreg.KEY_WRITE)
@@ -524,6 +565,29 @@ class SetupMainWindow(QMainWindow):
             logger.error(f"Unexpected error launching ANPE: {e}", exc_info=True)
             QMessageBox.critical(self, "Launch Error", f"An unexpected error occurred while trying to launch ANPE:\n{e}")
         logger.debug("Leaving _launch_anpe")
+
+    def _handle_preserve_log_request(self, preserve: bool):
+        """Handle the request to preserve or delete the actual installation log file."""
+        logger.debug(f"Entering _handle_preserve_log_request with preserve={preserve}")
+        if not preserve:
+            # Target the log file created by utils.py
+            actual_log_file = log_filename 
+            if actual_log_file and os.path.exists(actual_log_file):
+                try:
+                    os.remove(actual_log_file)
+                    print(f"Removed installation log file: {actual_log_file}")
+                    logger.info(f"Removed installation log file: {actual_log_file}")
+                except Exception as e:
+                    # Log error but don't necessarily bother the user with a popup
+                    print(f"Error removing installation log file: {e}", file=sys.stderr)
+                    logger.error(f"Error removing installation log file '{actual_log_file}': {e}")
+            elif actual_log_file:
+                logger.debug(f"Installation log file not found, skipping removal: {actual_log_file}")
+            else:
+                 logger.warning("Could not determine installation log file path from utils.")
+        else:
+            logger.info(f"Preserving installation log file ({log_filename}) as requested.")
+        logger.debug("Leaving _handle_preserve_log_request")
 
     def closeEvent(self, event):
         """Handle the main window close event."""

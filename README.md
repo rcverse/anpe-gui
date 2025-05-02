@@ -1,109 +1,126 @@
 # ANPE GUI
 
-[![ANPE GUI Banner Placeholder](pics/placeholder_banner.png)](https://github.com/rcverse/anpe-gui) <!-- Replace with actual banner -->
+[![ANPE GUI Banner Placeholder](pics/placeholder_banner.png)](https://github.com/rcverse/anpe-gui) <!-- TODO: Replace with actual banner -->
 
 **The user-friendly way to extract noun phrases!**
 
-ANPE GUI provides an intuitive graphical interface for the powerful [ANPE (Another Noun Phrase Extractor)](https://github.com/rcverse/another-noun-phrase-extractor) Python library. It's designed specifically for researchers, students, analysts, and anyone who needs to extract noun phrases from text *without* writing any code.
+ANPE GUI provides an intuitive graphical interface for the powerful [ANPE (Another Noun Phrase Extractor)](https://github.com/rcverse/another-noun-phrase-extractor) Python library. It's designed to empower researchers, students, analysts, and anyone needing to extract noun phrases from text—**no coding required**.
 
-This application bundles all necessary dependencies and guides you through model setup, offering a standalone experience for **Windows**. macOS support is planned for a future release.
+This application bundles all necessary components and guides you through model setup, offering a standalone experience primarily for **Windows**. macOS support is planned for a future release.
 
 ---
 
 ## ✨ Features
 
-*   **🖥️ Intuitive Interface:** Clean, tabbed layout (Input/Output) for a smooth workflow.
-*   **✍️ Flexible Input:** Paste text directly or process single/multiple `.txt` files using file dialogs.
-*   **⚙️ Granular Control:** Easily configure extraction options like including nested phrases, adding metadata, and handling sentence boundaries.
-*   **🔍 Powerful Filtering:** Refine your results by filtering noun phrases based on word count (min/max length) or specific structural patterns (e.g., *Determiner*, *Compound*, *Possessive*).
-*   **📊 Clear Results View:** Display extracted phrases in a structured, hierarchical tree view, showing relationships between nested phrases.
-*   **✨ Detached Viewer:** Pop out the results into a separate, resizable window for detailed analysis.
-*   **💾 Versatile Export:** Save extracted noun phrases to user-friendly formats: `.txt`, `.csv`, or `.json`.
-*   **📚 Easy Model Management:** Install, uninstall, and manage required spaCy and Benepar language models directly within the app via the Settings dialog (internet required).
-*   **🔄 Core Library Updates:** Check for and install updates to the underlying ANPE library with a single click.
-*   **📜 Detailed Logging:** A toggleable log panel provides detailed information about the extraction process and helps troubleshoot issues.
+ANPE GUI packs a range of features to streamline your noun phrase extraction workflow:
+
+*   **🖥️ Intuitive Interface:** A clean, tabbed layout (Input/Output) guides you effortlessly.
+*   **✍️ Flexible Input:** Paste text directly or process single/multiple `.txt` files via familiar file dialogs.
+*   **⚙️ Granular Control:** Configure extraction options like including nested phrases, adding metadata (source filename), and handling sentence boundaries.
+*   **🔍 Powerful Filtering:** Refine results by filtering phrases based on word count (min/max length) or specific grammatical structures (e.g., *Determiner*, *Compound*, *Possessive*).
+*   **📊 Clear Results View:** Displays extracted phrases in a structured, hierarchical tree, revealing relationships between nested phrases.
+*   **✨ Detached Viewer:** Pop out the results into a separate, resizable window for focused analysis or comparison.
+*   **💾 Versatile Export:** Save your extracted noun phrases to user-friendly formats: plain text (`.txt`), comma-separated values (`.csv`), or structured data (`.json`).
+*   **📚 Easy Model Management:** Install, uninstall, and manage required spaCy and Benepar language models directly within the app via Settings (internet connection needed).
+*   **🔄 Core Library Updates:** Check for and install updates to the underlying ANPE extraction engine with a single click in Settings.
+*   **📜 Detailed Logging:** A toggleable log panel (accessible from the status bar) provides insights into the extraction process and aids in troubleshooting.
 
 ---
 
 ## 📸 Screenshots
 
-*Add screenshots here to showcase the interface:*
+***(PLACEHOLDER: Add Screenshots Here!)***
+
+*We need screenshots to visually demonstrate the application. Please add images showcasing:*
 
 *   `[Screenshot: Main Window - Input Tab]`
-*   `[Screenshot: Main Window - Output Tab]`
+*   `[Screenshot: Main Window - Output Tab with Results Tree]`
 *   `[Screenshot: Settings - Models Page]`
-*   `[Screenshot: Detached Results Viewer]`
+*   `[Screenshot: Detached Results Viewer Window]`
+*   `[Screenshot: Export Dialog]`
 
 ---
 
 ## 🚀 Getting Started
 
-1.  **Download:** Grab the latest installer for your operating system from the **[Releases Page](https://github.com/rcverse/anpe-gui/releases)**. <!-- Update link if needed -->
+Getting ANPE GUI running is simple:
+
+1.  **Download:** Visit the **[Releases Page](https://github.com/rcverse/anpe-gui/releases)** and download the latest installer for your operating system. <!-- Confirm link points to Releases -->
 2.  **Install (Windows):**
-    *   Run the downloaded `.exe` installer.
-    *   Follow the on-screen prompts. The installer handles setting up an isolated environment and downloading the necessary base models.
+    *   Run the downloaded `.exe` setup file.
+    *   Follow the on-screen prompts. The installer creates a self-contained folder for ANPE GUI (preventing conflicts with other Python tools you might have) and downloads the necessary base language models.
 3.  **Install (macOS):**
-    *   *macOS support is currently under development and not yet available in releases.*
-4.  **Launch:** Start ANPE GUI from your Start Menu (Windows) or Applications folder (macOS, when available).
-5.  **First Run:** On first launch, the app might take a moment to verify/download language models (requires internet).
+    *   *macOS support is currently under development. Installation instructions will be provided when available.*
+4.  **Launch:** Find and start ANPE GUI from your Windows Start Menu or Applications folder (macOS, when available).
+5.  **First Run:** The application might take a few moments on its first launch to verify language models (requires an internet connection).
 
 ---
 
-## 💡 Basic Usage
+## 💡 Basic Usage Guide
 
-1.  Navigate to the **Input** tab.
-2.  Choose your input method:
-    *   **Text Input:** Paste your text directly into the large text box.
-    *   **File Input:** Click "Add Files" or "Add Directory" to select `.txt` files.
-3.  Adjust **Configuration** settings on the right panel (e.g., enable "Include nested phrases", set length filters, select structure filters).
-4.  Click the **Process** button. Watch the status bar for progress.
-5.  Switch to the **Output** tab to view the extracted noun phrases. If you processed multiple files, use the dropdown menu to select a file's results.
-6.  Click the **Export** button to save the results to your computer (choose format and location).
+1.  Open ANPE GUI and go to the **Input** tab.
+2.  Choose how to add your text:
+    *   **Paste Text:** Copy your text and paste it into the large text area.
+    *   **Add Files:** Click "Add Files..." or "Add Directory..." to select one or more `.txt` files.
+3.  Adjust **Configuration** options in the right-hand panel as needed (e.g., check "Include nested phrases", set length filters).
+4.  Click the **Process** button. You can monitor progress in the status bar at the bottom.
+5.  Navigate to the **Output** tab. The extracted noun phrases will appear in the tree view. If you processed multiple files, use the dropdown menu at the top to switch between file results.
+6.  Click the **Export** button to save the currently viewed results. Choose your desired format (`.txt`, `.csv`, `.json`) and save location.
 
-For a detailed walkthrough of all features and options, please consult the built-in **Help Guide** accessible from the application menu (`Help > Show Help` or press `F1`).
+For a more detailed exploration of all features, please refer to the built-in **Help Guide**. You can access it via the menu (`Help > Show Help`) or by pressing the `F1` key.
 
 ---
 
-## 🛠️ Dependencies
+## 🛠️ Core Runtime Libraries
 
-ANPE GUI bundles its core dependencies for a smooth user experience. It relies on these outstanding open-source libraries:
+ANPE GUI integrates several powerful open-source libraries to provide its functionality. The application installer bundles these so you don't have to manage them separately:
 
-*   [ANPE Core](https://github.com/rcverse/another-noun-phrase-extractor): The underlying extraction engine.
-*   [PyQt6](https://riverbankcomputing.com/software/pyqt/): For the graphical user interface.
-*   [spaCy](https://spacy.io/): For natural language processing foundations.
-*   [Benepar](https://github.com/nikitakit/self-attentive-parser): For constituency parsing.
-*   [NLTK](https://www.nltk.org/): Used by Benepar for model management.
+*   [ANPE Core](https://github.com/rcverse/another-noun-phrase-extractor): The fundamental noun phrase extraction engine.
+*   [PyQt6](https://riverbankcomputing.com/software/pyqt/): The framework used to build the graphical user interface.
+*   [spaCy](https://spacy.io/): Provides core natural language processing capabilities.
+*   [Benepar](https://github.com/nikitakit/self-attentive-parser): Enables advanced constituency parsing needed for detailed phrase structure.
+*   [NLTK](https://www.nltk.org/): Used by Benepar for managing its language models.
 
 ---
 
 ## ❓ Troubleshooting
 
-*   Ensure you have a stable **internet connection** when installing models via the Settings dialog or during the initial setup.
-*   If you encounter errors related to models, try the **Settings > Models > Clean Models** tool.
-*   Check the **Log Panel** (click the Status Bar at the bottom to toggle) for detailed error messages.
-*   Consult the built-in **Help Guide** (`F1`).
-*   If problems persist, please [report an issue](https://github.com/rcverse/anpe-gui/issues). <!-- Update link if needed -->
+Encountering issues? Here are a few common solutions:
+
+*   **Model Downloads:** Ensure you have a stable **internet connection** when installing/updating models (during setup or via Settings). Firewalls might sometimes block downloads.
+*   **Model Errors:** If extraction fails with model-related errors, try the **Settings > Models > Clean Models** tool to reset them, then try installing again.
+*   **Check Logs:** Click the Status Bar at the bottom of the main window to toggle the **Log Panel**. It often contains detailed error messages.
+*   **Consult Help:** Press `F1` or go to `Help > Show Help` for the built-in guide.
+*   **Report Bugs:** If problems persist, please check existing [issues](https://github.com/rcverse/anpe-gui/issues) or [report a new one](https://github.com/rcverse/anpe-gui/issues/new). Include details from the Log Panel if possible! <!-- Confirm issue tracker link -->
 
 ---
 
 ## 💻 Development
 
-Interested in contributing or building from source? Please see the [Developer README](docs/DEV_README.md) for instructions.
+Interested in contributing, building from source, or understanding the build process?
+
+*   This project uses **PyInstaller** to package the Python application and its dependencies into a standalone executable for easier distribution on Windows.
+*   Please see the [**Developer README (docs/DEV_README.md)**](docs/DEV_README.md) for detailed setup and build instructions.
 
 ---
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details. <!-- Assuming MIT License. Verify LICENSE file exists -->
+This project is distributed under the MIT License. See the [LICENSE](LICENSE) file for full details. <!-- Confirm LICENSE file exists and is MIT -->
 
 ---
 
 ## 🙏 Acknowledgements
 
-ANPE GUI is built upon the fantastic work of the developers behind PyQt6, spaCy, Benepar, and NLTK.
+ANPE GUI is made possible by the excellent work of the developers and communities behind:
+
+*   **PyQt6, spaCy, Benepar, and NLTK:** The core libraries providing the application's functionality.
+*   **PyInstaller:** The tool used to create the distributable package for Windows users.
+
+We are grateful for their contributions to the open-source ecosystem.
 
 ---
 
 ## 🎓 Citation
 
-If you use ANPE GUI in your research or projects, we kindly ask that you cite the core **[ANPE library](https://github.com/rcverse/another-noun-phrase-extractor#citation)** upon which it is built. 
+If ANPE GUI aids your research or project work, we kindly request that you cite the core **[ANPE library](https://github.com/rcverse/another-noun-phrase-extractor#citation)** that performs the extraction. Citation details can be found on the ANPE library's repository page. 
