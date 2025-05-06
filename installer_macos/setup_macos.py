@@ -23,16 +23,16 @@ project_root = script_dir.parent
 sys.path.insert(0, str(project_root))
 
 # Import macOS-specific views
-from installer.views.welcome_view_macos import WelcomeViewWidget
-from installer.views.progress_view_macos import ProgressViewWidget
-from installer.views.completion_view_macos import CompletionViewWidget
+from installer_macos.views.welcome_view_macos import WelcomeViewWidget
+from installer_macos.views.progress_view_macos import ProgressViewWidget
+from installer_macos.views.completion_view_macos import CompletionViewWidget
 
 # Import workers with their correct class names
-from installer.workers.env_setup_worker_macos import EnvironmentSetupWorkerMacOS as SetupEnvironmentWorker
-from installer.workers.model_setup_worker_macos import ModelSetupWorkerMacOS as DownloadModelsWorker
+from installer_macos.workers.env_setup_worker_macos import EnvironmentSetupWorkerMacOS as SetupEnvironmentWorker
+from installer_macos.workers.model_setup_worker_macos import ModelSetupWorkerMacOS as DownloadModelsWorker
 
 # Import the macOS-specific resource finder
-from installer.installer_core_macos import _get_bundled_resource_path_macos, find_standalone_python_executable_macos
+from installer_macos.installer_core_macos import _get_bundled_resource_path_macos, find_standalone_python_executable_macos
 
 # Helper to find the main script within the bundle
 # from main_macos import _get_main_script_path_macos
@@ -84,13 +84,13 @@ class SetupWizard:
         self.debug_mode = debug_mode
         self.target_install_dir = target_install_dir
         
-        # Set the application icon using the macOS-specific resource finder
-        icon_path_obj = _get_bundled_resource_path_macos("anpe_gui/resources/app_icon_mac.icns")
+        # Set the application icon using the installer's own icon file
+        icon_path_obj = _get_bundled_resource_path_macos("app_icon_mac.icns") # Use installer asset icon
         if icon_path_obj and icon_path_obj.is_file():
             self.app.setWindowIcon(QIcon(str(icon_path_obj)))
             logger.info(f"Loaded application icon from: {icon_path_obj}")
         else:
-            logger.warning(f"Application icon 'anpe_gui/resources/app_icon_mac.icns' not found.")
+            logger.warning(f"Application icon 'app_icon_mac.icns' not found.")
             
         if not self.target_install_dir:
             logger.critical("SetupWizard initialized without a target installation directory!")
@@ -421,22 +421,36 @@ class SetupWizard:
         return self.app.exec()
 
 
-def main():
-    """Main entry point for the setup application."""
-    # Parse command line arguments
-    parser = argparse.ArgumentParser(description="ANPE GUI Setup for macOS")
-    parser.add_argument('--debug', action='store_true', help='Run in debug mode')
-    parser.add_argument('--target-install-dir', type=str, required=True,
-                        help='The target base directory for installation (e.g., App Support or debug path)')
-    args = parser.parse_args()
+def main(target_install_dir: str | None = None, debug: bool | None = None):
+    """Main entry point for the setup application.
     
+    Can be called directly with arguments or run standalone using argparse.
+    """
+    # Determine if args were passed directly or need parsing
+    if target_install_dir is None or debug is None:
+        # Parse command line arguments if not called directly with values
+        parser = argparse.ArgumentParser(description="ANPE GUI Setup for macOS")
+        parser.add_argument('--debug', action='store_true', help='Run in debug mode')
+        parser.add_argument('--target-install-dir', type=str, required=target_install_dir is None,
+                            help='The target base directory for installation')
+        args = parser.parse_args()
+        
+        # Use parsed args if direct args were missing
+        final_target_dir = target_install_dir if target_install_dir is not None else args.target_install_dir
+        final_debug_mode = debug if debug is not None else args.debug
+    else:
+        # Use directly passed arguments
+        final_target_dir = target_install_dir
+        final_debug_mode = debug
+
     # Log the provided target directory
-    logger.info(f"Setup started with target directory: {args.target_install_dir}")
+    logger.info(f"Setup starting. Target directory: {final_target_dir}, Debug mode: {final_debug_mode}")
     
-    # Create and run the setup wizard, passing the target directory
-    wizard = SetupWizard(debug_mode=args.debug, target_install_dir=args.target_install_dir)
+    # Create and run the setup wizard
+    wizard = SetupWizard(debug_mode=final_debug_mode, target_install_dir=final_target_dir)
     return wizard.run()
 
 
 if __name__ == "__main__":
+    # When run as script, main() will use argparse internally
     sys.exit(main())

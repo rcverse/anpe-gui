@@ -3,7 +3,7 @@ Widget for displaying formatted ANPE extraction results.
 """
 
 import logging
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 from PyQt6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -123,20 +123,19 @@ class AnpeResultModel(QAbstractItemModel):
     COL_STRUCT = 3
     NUM_COLUMNS = 4
     
-    def __init__(self, result_data, parent=None):
+    def __init__(self, np_list: Optional[List[Dict[str, Any]]], parent=None):
         super().__init__(parent)
         # Updated header data for four columns
         self.root_item = NpTreeItem(["ID", "Noun Phrase", "Length", "Structures"])
-        self.setupModelData(result_data, self.root_item)
+        self.setupModelData(np_list, self.root_item)
         
-    def setupModelData(self, result_data, parent_node):
-        """Parse the ANPE result dictionary and build the tree structure."""
-        # TODO: Implement parsing logic
-        if not result_data or 'results' not in result_data:
-            return # No data to parse
+    def setupModelData(self, np_list: Optional[List[Dict[str, Any]]], parent_node):
+        """Parse the ANPE result list and build the tree structure."""
+        if not np_list: # If np_list is None or empty, do nothing.
+            return 
         
-        np_results = result_data.get('results', [])
-        self._recursive_setup(np_results, parent_node)
+        # np_list is already the list of noun phrase items.
+        self._recursive_setup(np_list, parent_node)
 
     def _recursive_setup(self, np_items, parent_item):
         """Helper to recursively build the tree from NP items for four columns."""
@@ -587,16 +586,18 @@ class ResultDisplayWidget(QWidget):
         else:
             logging.warning("Attempted to filter but proxy model is not set.")
 
-    def display_results(self, data: Dict[str, Any], metadata_enabled: bool = True):
+    def display_results(self, actual_np_results: Optional[List[Dict[str, Any]]], metadata_enabled: bool = True):
         """Create models and display results, optionally hiding metadata columns/buttons."""
-        if not data or not isinstance(data, dict) or 'metadata' not in data or 'results' not in data:
+        if actual_np_results is None: # Check if the provided list is None
             self.clear_display() 
-            logging.warning(f"Invalid or empty data passed to display_results: {data}")
+            logging.warning("Null data (None) passed to display_results. Clearing display.")
             return
+        # An empty list actual_np_results == [] is valid and means "no results found".
+        # AnpeResultModel will handle this by creating an empty tree.
 
         try:
             logging.debug("Creating source model...")
-            self.source_model = AnpeResultModel(data)
+            self.source_model = AnpeResultModel(actual_np_results) # Pass the list directly
             
             logging.debug("Creating custom proxy model for numeric sorting...")
             # Use our custom QSortFilterProxyModel that handles numeric sorting

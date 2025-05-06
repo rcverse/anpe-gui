@@ -80,19 +80,12 @@ class WelcomeViewWidget(QWidget):
         logo_layout = QHBoxLayout()
         logo_layout.addStretch(1)
         logo_label = QLabel()
-        try:
-            # Use the corrected resource finder
-            logo_path_obj = _get_bundled_resource_path_macos('assets/app_icon_logo.png')
-            logo_path = str(logo_path_obj) if logo_path_obj else None
-            if logo_path and os.path.exists(logo_path):
-                pixmap = QPixmap(logo_path)
-                if not pixmap.isNull():
-                    logo_label.setPixmap(pixmap.scaled(80, 80, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)) # Slightly smaller
-                else: logo_label.setText("[Logo]") # Simple fallback
-            else: logo_label.setText("[Logo]")
-        except Exception as e:
-            logger.error(f"Error loading logo: {e}", exc_info=True)
-            logo_label.setText("[Logo]")
+        # Pass only filename
+        logo_path_obj = _get_bundled_resource_path_macos('app_icon_logo.png') 
+        if logo_path_obj and logo_path_obj.is_file():
+            pixmap = QPixmap(str(logo_path_obj))
+            logo_label.setPixmap(pixmap.scaled(80, 80, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+        else: logo_label.setText("[Logo]")
         logo_layout.addWidget(logo_label)
         logo_layout.addStretch(1)
         main_layout.addLayout(logo_layout)

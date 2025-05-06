@@ -56,116 +56,98 @@ def print_failure(message: str):
 
 # --- macOS Specific Resource Finder ---
 
-def _get_bundled_resource_path_macos(relative_path: str) -> Optional[Path]:
+def _get_bundled_resource_path_macos(resource_name: str) -> Optional[Path]:
     """
-    Find a resource bundled by py2app or relative to the script.
-
-    Handles both data files copied to Resources/ and Python modules
-    bundled into Resources/lib/pythonX.Y/.
+    Find a resource using its base name. Handles bundled (py2app) 
+    and development environments.
+    
+    Assumes installer assets are in 'installer_assets/' (dev) or
+    'Resources/assets/' (bundled).
+    Also includes a fallback check relative to project root (dev) or Resources/ (bundled).
     """
-    # --- Determine if running in bundled mode ---
+    # --- Determine if running in bundled mode --- 
+    # (Bundle detection logic remains the same)
     is_bundled = False
     bundle_base_path = None
     resources_path = None
     if hasattr(sys, 'executable'):
         try:
-            # sys.executable is Contents/MacOS/AppName
-            bundle_base_path_check = Path(sys.executable).parent.parent # Up two levels to Contents/
+            bundle_base_path_check = Path(sys.executable).parent.parent
             resources_path_check = bundle_base_path_check / "Resources"
-            if resources_path_check.is_dir(): # Check if Resources/ directory exists
+            if resources_path_check.is_dir():
                 is_bundled = True
                 bundle_base_path = bundle_base_path_check
                 resources_path = resources_path_check
-                logger.debug(f"Detected bundled mode based on executable path: {sys.executable}")
+                logger.debug(f"Detected bundled mode via executable: {sys.executable}")
             else:
-                 logger.debug(f"Not bundled mode (Resources dir not found relative to executable): {resources_path_check}")
+                logger.debug(f"Not bundled mode (Resources dir not found): {resources_path_check}")
         except Exception as e:
-            logger.warning(f"Error checking bundle structure via sys.executable: {e}")
+            logger.warning(f"Error checking bundle structure: {e}")
 
-    # Fallback check using sys.frozen if executable check failed but frozen is set
     if not is_bundled and getattr(sys, 'frozen', False):
-         logger.warning("Detected bundled mode using sys.frozen as fallback.")
+         logger.warning("Using sys.frozen=True as fallback for bundle detection.")
          is_bundled = True
-         # Attempt to determine paths (might be less reliable)
          try:
              bundle_base_path = Path(sys.executable).parent.parent
              resources_path = bundle_base_path / "Resources"
          except Exception:
               logger.error("Could not determine bundle paths even with sys.frozen=True.")
-              return None # Cannot proceed without paths
+              return None
 
     # --- Path Finding Logic ---
     if is_bundled:
-        # --- Bundled App Mode ---
+        # --- Bundled App Mode --- 
         if not resources_path:
-             logger.error("Bundled mode detected, but resources_path is not set.")
+             logger.error("Bundled mode, but resources_path is not set.")
              return None
         try:
-            logger.debug(f"Bundled mode: Base bundle path: {bundle_base_path}, Resources path: {resources_path}")
-
-            # 1. Check for non-Python files copied directly into Resources/ or subdirs
-            #    (e.g., assets, requirement files specified in DATA_FILES)
-            path_in_resources = resources_path / relative_path
-            logger.debug(f"Bundled mode: Checking for data file directly in Resources: {path_in_resources}")
+            # 1. Primary Check: Look in Resources/assets/ 
+            path_in_bundle_assets = resources_path / "assets" / resource_name # MODIFIED
+            logger.debug(f"Bundled mode: Checking in Resources/assets/: {path_in_bundle_assets}")
+            if path_in_bundle_assets.exists():
+                logger.info(f"Found resource in bundle assets: {path_in_bundle_assets}")
+                return path_in_bundle_assets.resolve()
+                
+            # 2. Fallback Check: Look directly in Resources/ (for non-asset files?)
+            path_in_resources = resources_path / resource_name
+            logger.debug(f"Bundled mode: Checking directly in Resources/ (fallback): {path_in_resources}")
             if path_in_resources.exists():
-                logger.info(f"Found resource as data file: {path_in_resources}")
+                logger.info(f"Found resource directly in Resources: {path_in_resources}")
                 return path_in_resources.resolve()
 
-            # 2. Check for Python modules/packages bundled in lib/pythonX.Y
-            #    Construct the path relative to the standard library location
-            python_lib_path = resources_path / f"lib/python{sys.version_info.major}.{sys.version_info.minor}"
-            path_in_lib = python_lib_path / relative_path
-            logger.debug(f"Bundled mode: Checking for Python module in lib: {path_in_lib}")
-            if path_in_lib.exists():
-                 logger.info(f"Found resource as Python module: {path_in_lib}")
-                 return path_in_lib.resolve()
-
-            # If not found in either location
-            logger.error(f"Resource '{relative_path}' not found in bundle Resources/ or Resources/lib/pythonX.Y/")
+            logger.error(f"Resource '{resource_name}' not found in bundle Resources/assets/ or Resources/")
             return None
 
         except Exception as e:
-             logger.error(f"Error determining resource path in bundled mode: {e}", exc_info=True)
+             logger.error(f"Error finding resource in bundled mode: {e}", exc_info=True)
              return None
     else:
-        # --- Development Mode ---
+        # --- Development Mode --- 
         try:
-            installer_dir = Path(__file__).parent.absolute()
-            project_root = installer_dir.parent # Assume installer is one level down
+            script_dir = Path(__file__).parent.absolute()
+            project_root = script_dir.parent.parent 
             logger.debug(f"Development mode: Using project root: {project_root}")
 
-            # 1. Check relative to project root (e.g., 'anpe_gui/resources/...')
-            path_rel_to_root = project_root / relative_path
-            logger.debug(f"Development mode: Checking relative to root: {path_rel_to_root}")
+            # 1. Primary Check: Look in top-level installer_assets/ 
+            path_in_dev_assets = project_root / "installer_assets" / resource_name # MODIFIED
+            logger.debug(f"Development mode: Checking in installer_assets/: {path_in_dev_assets}")
+            if path_in_dev_assets.is_file():
+                logger.info(f"Development mode: Found resource in installer_assets/: {path_in_dev_assets}")
+                return path_in_dev_assets.resolve()
+                
+            # 2. Fallback Check: Look relative to project root (for non-installer assets?)
+            # Allows calls like _get_bundled_resource_path_macos('anpe_gui/resources/assets/logo.png') to still work.
+            path_rel_to_root = project_root / resource_name 
+            logger.debug(f"Development mode: Checking relative to root (fallback): {path_rel_to_root}")
             if path_rel_to_root.is_file():
-                logger.info(f"Development mode: Found resource relative to project root: {path_rel_to_root}")
-                return path_rel_to_root.resolve()
+                 logger.info(f"Development mode: Found resource relative to project root: {path_rel_to_root}")
+                 return path_rel_to_root.resolve()
 
-            # 2. Check within installer/assets/ (e.g., 'assets/logo.png')
-            #    Requires splitting relative_path if it contains dirs like 'installer/assets/...'
-            if relative_path.startswith("installer/assets/"):
-                 asset_name = Path(relative_path).name
-                 path_in_assets = installer_dir / "assets" / asset_name
-            else: # If path doesn't start with installer/assets/, check as is
-                 path_in_assets = installer_dir / "assets" / relative_path
-            logger.debug(f"Development mode: Checking in installer assets: {path_in_assets}")
-            if path_in_assets.is_file():
-                logger.info(f"Development mode: Found resource in installer assets subdir: {path_in_assets}")
-                return path_in_assets.resolve()
-
-            # 3. Check directly in installer/ (e.g., 'macos_requirements.txt')
-            path_in_installer = installer_dir / relative_path
-            logger.debug(f"Development mode: Checking directly in installer dir: {path_in_installer}")
-            if path_in_installer.is_file():
-                logger.info(f"Development mode: Found resource directly in installer dir: {path_in_installer}")
-                return path_in_installer.resolve()
-
-            # If not found in any common dev location
-            logger.error(f"Resource '{relative_path}' not found in development mode (checked relative to root, installer/, and installer/assets/)")
+            logger.error(f"Resource '{resource_name}' not found in development mode (checked installer_assets/ and relative to root)")
             return None
 
         except Exception as e:
-            logger.error(f"Error determining resource path in development mode: {e}", exc_info=True)
+            logger.error(f"Error finding resource in development mode: {e}", exc_info=True)
             return None
 
 # --- Core Logic Functions ---
@@ -204,11 +186,10 @@ def unpack_standalone_python_macos(target_install_path: str) -> str:
     else:
         print_failure(f"Unsupported macOS architecture: {arch}")
 
-    # Use the helper to find the archive path (in bundle Resources or installer/assets)
+    # Use the helper to find the archive path (in bundle Resources/assets or installer_assets)
     print_step(f"Locating Python archive: {python_archive_name}...")
-    # Pass the expected relative path within Resources
-    resource_relative_path = f'assets/{python_archive_name}'
-    python_archive_path_obj = _get_bundled_resource_path_macos(resource_relative_path)
+    # Pass ONLY the filename now
+    python_archive_path_obj = _get_bundled_resource_path_macos(python_archive_name)
 
     if not python_archive_path_obj:
         # Error message specific to debug/bundled mode is handled inside the helper

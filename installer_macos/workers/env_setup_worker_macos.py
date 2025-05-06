@@ -7,12 +7,12 @@ from pathlib import Path
 from PyQt6.QtCore import QObject, pyqtSignal, QThread, QProcess, QProcessEnvironment, QEventLoop
 
 # Use absolute import for utils and TaskStatus
-# REMOVED: from installer.utils import get_resource_path
-from installer.widgets.task_list_widget import TaskStatus
+# CORRECTED IMPORT for TaskStatus
+from installer_macos.widgets.task_list_widget_macos import TaskStatus
 
 # Import necessary functions from macOS-specific installer_core
 # Updated imports for standalone python approach
-from installer.installer_core_macos import (
+from installer_macos.installer_core_macos import (
     unpack_standalone_python_macos, # New unpack function
     find_standalone_python_executable_macos, # New helper
     bootstrap_pip_macos,
@@ -227,9 +227,11 @@ class EnvironmentSetupWorkerMacOS(QObject):
             # 3.2 Find requirements file
             self.status_update.emit("Locating requirements file...")
             reqs_filename = "macos_requirements.txt"
-            reqs_path_obj = _get_bundled_resource_path_macos(reqs_filename)
+            # Pass only the filename to the updated resource finder
+            reqs_path_obj = _get_bundled_resource_path_macos(reqs_filename) 
             if not reqs_path_obj or not reqs_path_obj.is_file():
-                 raise FileNotFoundError(f"Requirements file not found: {reqs_filename}")
+                 # Use the filename in the error message
+                 raise FileNotFoundError(f"Requirements file '{reqs_filename}' not found.")
             reqs_path = str(reqs_path_obj.resolve())
             self.log_update.emit(f"Found requirements file: {reqs_path}")
             
@@ -253,7 +255,9 @@ class EnvironmentSetupWorkerMacOS(QObject):
             # Comment out progress signals for indeterminate bar
             # self.progress_range_updated.emit(0, 1)
             # self.progress_updated.emit(1)
-            self.task_status_update.emit("env_setup", TaskStatus.FAILED, f"Error: {e}")
+            # Corrected task ID to match _tasks dict keys
+            failed_task_id = self._current_task if self._current_task else "validate_path" # Default if error is very early
+            self.task_status_update.emit(failed_task_id, TaskStatus.FAILED, f"Error: {e}") 
             self.status_update.emit(f"Environment setup failed: {e}")
             # Handle errors occurring *before* pip process starts
             self._handle_error(e)

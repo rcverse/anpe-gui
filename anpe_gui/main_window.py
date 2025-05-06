@@ -1118,8 +1118,17 @@ class MainWindow(QMainWindow):
         self.results = result_data # Store the complete result
         # Pass the current state of the metadata checkbox
         metadata_is_on = self.include_metadata.isChecked()
-        self.results_display_widget.display_results(result_data, metadata_enabled=metadata_is_on)
-        self.export_button.setEnabled(True) # Enable export
+        
+        # Extract the actual display data, assuming it's under the 'results' key
+        actual_display_data = result_data.get('results')
+        
+        if actual_display_data is not None:
+            self.results_display_widget.display_results(actual_display_data, metadata_enabled=metadata_is_on)
+        else:
+            logging.warning("ANPE core returned no 'results' data or 'results' key was missing for display (single text).")
+            self.results_display_widget.clear_display() # Clear display if no valid data
+
+        self.export_button.setEnabled(True) # Enable export (processing_finished will re-evaluate based on self.results)
         # Keep INFO for completion message
         self.log("Single text processing completed.")
         # processing_finished will handle status bar final message
@@ -1129,17 +1138,31 @@ class MainWindow(QMainWindow):
         """Handle the result for a single file from the BatchWorker."""
         if self.results is None: self.results = {} # Ensure results dict exists
         
-        self.results[file_path] = result_data # Store result for this file
+        self.results[file_path] = result_data # Store full result for this file (for export)
         
         # Populate combo box as results come in
         base_name = os.path.basename(file_path)
         self.file_selector_combo.addItem(base_name, file_path) # Display name, store full path
         
         # If this is the first result, display it and show the combo box
-        if len(self.results) == 1:
+        if self.file_selector_combo.count() == 1: # Check if it's the first item added to combo
             # Pass the current state of the metadata checkbox
             metadata_is_on = self.include_metadata.isChecked()
-            self.results_display_widget.display_results(result_data, metadata_enabled=metadata_is_on)
+            
+            # Extract the actual display data, assuming it's under the 'results' key
+            actual_display_data = result_data.get('results')
+
+            if actual_display_data is not None:
+                self.results_display_widget.display_results(actual_display_data, metadata_enabled=metadata_is_on)
+            else:
+                logging.warning(f"ANPE core returned no 'results' data or 'results' key was missing for display (batch file: {base_name}).")
+                # Don't clear display here as other files might have results; 
+                # display_selected_file_result will handle if the first displayed item is empty.
+                # However, if the widget was already displaying something, this might be an issue.
+                # For now, assume display_results handles None gracefully by clearing or showing "no data".
+                self.results_display_widget.display_results(None, metadata_enabled=metadata_is_on)
+
+
             self.file_selector_label.show()
             self.file_selector_combo.show()
              
@@ -1243,11 +1266,23 @@ class MainWindow(QMainWindow):
         if selected_file_path and isinstance(self.results, dict) and selected_file_path in self.results:           
             # Pass the current state of the metadata checkbox
             metadata_is_on = self.include_metadata.isChecked()
-            self.results_display_widget.display_results(self.results[selected_file_path], metadata_enabled=metadata_is_on)
+            
+            # Get the full result for the selected file
+            full_result_data = self.results[selected_file_path]
+            # Extract the actual display data
+            actual_display_data = full_result_data.get('results')
+
+            if actual_display_data is not None:
+                self.results_display_widget.display_results(actual_display_data, metadata_enabled=metadata_is_on)
+            else:
+                logging.warning(f"ANPE core returned no 'results' data or 'results' key was missing for display (selected file: {selected_file_path}).")
+                self.results_display_widget.clear_display() # Clear display if no valid data for selected file
+            
             logging.debug(f"Displayed results for selected file: {selected_file_path}")
         else:
             # This might happen if combo index changes before results are fully populated
             logging.warning(f"Could not find results for selected file: {selected_file_path}")
+            self.results_display_widget.clear_display() # Clear display
 
     def export_results(self):
         """Export the currently stored results to a file using unified naming."""

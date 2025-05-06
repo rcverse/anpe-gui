@@ -54,12 +54,10 @@ class CompletionViewWidget(QWidget):
         logo_container_layout = QHBoxLayout()
         logo_container_layout.addStretch(1)
         logo_label = QLabel()
-        logo_path_obj = _get_bundled_resource_path_macos("assets/app_icon_logo.png")
-        logo_path = str(logo_path_obj) if logo_path_obj else None
-        if logo_path and os.path.exists(logo_path):
-            pixmap = QPixmap(logo_path)
-            pixmap = pixmap.scaled(80, 80, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
-            logo_label.setPixmap(pixmap)
+        logo_path_obj = _get_bundled_resource_path_macos("app_icon_logo.png")
+        if logo_path_obj and logo_path_obj.is_file():
+            pixmap = QPixmap(str(logo_path_obj))
+            logo_label.setPixmap(pixmap.scaled(64, 64, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
         else:
             logo_label.setText("[Logo]")
         logo_container_layout.addWidget(logo_label)

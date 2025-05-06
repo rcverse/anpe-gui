@@ -61,16 +61,18 @@ class ResourceManager:
     @classmethod
     def get_style_url(cls, resource_name):
         """
-        Get the URL for a resource to be used in stylesheets.
+        Get the path string for a resource to be used in stylesheets.
         
         Args:
-            resource_name: Name of the resource file (e.g., 'expand_open.svg')
+            resource_name: Name of the resource file relative to the 'resources' dir
+                           (e.g., 'assets/expand_open.svg')
             
         Returns:
-            str: URL for the resource that works in Qt stylesheets
+            str: Absolute path string suitable for url() in Qt stylesheets
         """
-        # Calculate path relative to the CWD, assuming CWD is the project root
-        # and resources are in anpe_gui/resources/
-        relative_path = Path("anpe_gui") / "resources" / resource_name
-        # Convert to string and ensure forward slashes for CSS url()
-        return str(relative_path).replace("\\", "/") 
+        # Use the robust get_resource_path to find the absolute path first
+        absolute_path = cls.get_resource_path(resource_name)
+        
+        # Return the absolute path as a string, ensuring forward slashes
+        # This seems to be more reliably handled by Qt CSS url() than file:// URIs
+        return str(absolute_path).replace("\\", "/") 

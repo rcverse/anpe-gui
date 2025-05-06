@@ -76,7 +76,8 @@ class TaskItemMacOS(QWidget): # Renamed
             self.task_label.setStyleSheet(f"color: #3B7D23; font-weight: normal; {base_style}") # Green text for success
             # Load success icon using QPixmap (ensure assets are accessible)
             try:
-                success_icon_path_obj = _get_bundled_resource_path_macos("assets/success.png") 
+                # Pass only the filename
+                success_icon_path_obj = _get_bundled_resource_path_macos("success.png") 
                 success_icon_path = str(success_icon_path_obj) if success_icon_path_obj else None
                 if success_icon_path and os.path.exists(success_icon_path):
                     pixmap = QPixmap(success_icon_path)

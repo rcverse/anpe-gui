@@ -6,7 +6,7 @@ from typing import Optional
 from pathlib import Path
 from PyQt6.QtCore import QObject, pyqtSignal, QProcess, QProcessEnvironment, QThread
 
-from installer.widgets.task_list_widget import TaskStatus
+from installer_macos.widgets.task_list_widget_macos import TaskStatus
 
 # Get logger instance
 logger = logging.getLogger()

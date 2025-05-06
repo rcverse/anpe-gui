@@ -49,20 +49,18 @@ class ProgressViewWidget(QWidget):
         header_content_layout = QVBoxLayout() # Vertical layout for logo and text
         header_content_layout.setSpacing(5)
 
-        # Logo (smaller, centered)
-        logo_container_layout = QHBoxLayout()
-        logo_container_layout.addStretch(1)
+        # Logo (Optional)
         logo_label = QLabel()
-        logo_path_obj = _get_bundled_resource_path_macos("assets/app_icon_logo.png")
-        logo_path = str(logo_path_obj) if logo_path_obj else None
-
-        if logo_path and os.path.exists(logo_path):
-            logo_pixmap = QPixmap(logo_path)
-            # Make logo slightly smaller
-            logo_label.setPixmap(logo_pixmap.scaled(56, 56, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+        # Pass only filename
+        logo_path_obj = _get_bundled_resource_path_macos("app_icon_logo.png") 
+        if logo_path_obj and logo_path_obj.is_file():
+            pixmap = QPixmap(str(logo_path_obj))
+            logo_label.setPixmap(pixmap.scaled(64, 64, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
         else:
             logo_label.setText("ANPE")
             logo_label.setStyleSheet("font-size: 20px; font-weight: 500; font-family: 'SF Pro Display', 'Helvetica Neue', Arial, sans-serif;")
+        logo_container_layout = QHBoxLayout()
+        logo_container_layout.addStretch(1)
         logo_container_layout.addWidget(logo_label)
         logo_container_layout.addStretch(1)
         header_content_layout.addLayout(logo_container_layout)

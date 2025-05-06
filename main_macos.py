@@ -42,13 +42,11 @@ if not getattr(sys, 'frozen', False):
 # Now import from installer package
 try:
     # Use the correct macOS-specific function finder
-    from installer.installer_core_macos import ( 
+    from installer_macos.installer_core_macos import (
         find_standalone_python_executable_macos,
         _get_bundled_resource_path_macos # May need this for app icon later
     )
-    # Removed get_app_support_dir as it doesn't exist in utils.py
-    # from installer.utils import get_app_support_dir 
-    from installer.setup_macos import setup_logging # Use the same setup logging
+    from installer_macos.setup_macos import setup_logging, main as run_setup_wizard # MODIFIED, assuming main exists
 except ImportError as e:
     # Fallback basic logging if imports fail
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -74,7 +72,6 @@ SETUP_FLAG_FILENAME = ".setup_complete"
 
 # --- Logging Setup ---
 try:
-    # Use the setup_logging function from installer.setup_macos
     logger = setup_logging() 
 except Exception as log_e:
      # Basic console logging as fallback
@@ -186,44 +183,25 @@ if __name__ == "__main__":
         
         # --- Run the Setup Wizard --- 
         logger.info("Launching setup wizard...")
-        setup_script = _get_bundled_resource_path_macos("installer/setup_macos.py") 
-        
-        if not setup_script or not setup_script.exists():
-             err_msg = "Cannot start setup: setup_macos.py not found."
-             logger.critical(err_msg)
-             show_error_dialog("Setup Error", err_msg)
-             sys.exit(1)
-             
-        setup_command = [
-            sys.executable, # Use the *current* python (launcher) to run setup
-            str(setup_script),
-            "--target-install-dir",
-            str(base_install_path)
-        ]
-        # Add --debug if the launcher itself is in debug mode
-        if os.environ.get("ANPE_DEBUG") == "1": 
-             setup_command.append("--debug")
-        
-        logger.info(f"Running setup command: {' '.join(setup_command)}")
-        setup_process = QProcess()
-        setup_process.start(setup_command[0], setup_command[1:])
-        if not setup_process.waitForStarted():
-             err_msg = f"Failed to start setup wizard process: {setup_process.errorString()}"
-             logger.critical(err_msg)
-             show_error_dialog("Setup Error", err_msg)
-             sys.exit(1)
-        
-        # Wait for the setup process to finish
-        setup_process.waitForFinished(-1) 
-        exit_code = setup_process.exitCode()
-        logger.info(f"Setup wizard finished with exit code: {exit_code}")
-        
-        if exit_code != 0:
-             err_msg = "The setup wizard did not complete successfully. Cannot launch application."
-             logger.critical(err_msg)
-             # Error details might be in the setup log ~/Library/Logs/ANPE GUI/
-             show_error_dialog("Setup Failed", err_msg + "\nPlease check the setup log for details.")
-             sys.exit(1)
+        try:
+            # Directly call the setup wizard's main function
+            logger.info(f"Calling setup wizard with target directory: {base_install_path}")
+            # Pass arguments as needed, e.g., a dictionary or specific args
+            # Assuming run_setup_wizard can take base_install_path and a debug flag
+            debug_mode = os.environ.get("ANPE_DEBUG") == "1"
+            setup_exit_code = run_setup_wizard(target_install_dir=str(base_install_path), debug=debug_mode)
+            logger.info(f"Setup wizard finished with exit code: {setup_exit_code}")
+            
+            if setup_exit_code != 0:
+                 err_msg = "The setup wizard did not complete successfully. Cannot launch application."
+                 logger.critical(err_msg)
+                 show_error_dialog("Setup Failed", err_msg + "\nPlease check the setup log for details.")
+                 sys.exit(1)
+        except Exception as setup_e:
+            err_msg = f"An error occurred while running the setup wizard: {setup_e}"
+            logger.critical(err_msg, exc_info=True)
+            show_error_dialog("Setup Error", err_msg)
+            sys.exit(1)
         
         # Re-check for the flag after setup finishes
         if not setup_complete_flag.exists():
