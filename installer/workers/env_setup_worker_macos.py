@@ -4,7 +4,7 @@ import os
 import logging
 import traceback
 from pathlib import Path
-from PyQt6.QtCore import QObject, pyqtSignal, QThread, QProcess
+from PyQt6.QtCore import QObject, pyqtSignal, QThread, QProcess, QProcessEnvironment, QEventLoop
 
 # Use absolute import for utils and TaskStatus
 # REMOVED: from installer.utils import get_resource_path
@@ -66,11 +66,99 @@ class EnvironmentSetupWorkerMacOS(QObject):
         """Return the installation path."""
         return self._install_path
 
+    # <<< NEW HELPER METHOD for running pip commands synchronously >>>
+    def _run_pip_command_sync(self, python_exe: str, pip_args: list[str]) -> tuple[bool, str, str]:
+        """Runs a pip command synchronously using QProcess and returns success/output."""
+        success = False
+        stdout_str = ""
+        stderr_str = ""
+        process = QProcess()
+
+        # --- Setup Environment (CLEANED) ---
+        process_env = QProcessEnvironment.systemEnvironment()
+        process_env.remove("PYTHONHOME")
+        logger.info("Removed PYTHONHOME from pip QProcess environment.")
+
+        python_exe_path_obj = Path(python_exe)
+        # Derive version from the executable name (e.g., python3.11)
+        if python_exe_path_obj.name.startswith("python3."):
+            try:
+                version_str = python_exe_path_obj.name.split('python')[1]
+                major, minor = map(int, version_str.split('.')[:2])
+                logger.debug(f"Derived version {major}.{minor} from executable name for QProcess env.")
+            except Exception:
+                logger.warning(f"Could not derive version from {python_exe_path_obj.name} for QProcess env, falling back to 3.11")
+                major, minor = 3, 11
+        else:
+            logger.warning(f"Cannot parse version from {python_exe_path_obj.name} for QProcess env, assuming 3.11")
+            major, minor = 3, 11
+            
+        standalone_python_lib_dir = python_exe_path_obj.parent.parent / "lib" / f"python{major}.{minor}"
+        
+        if standalone_python_lib_dir.is_dir():
+            logger.info(f"Setting PYTHONPATH for pip QProcess EXCLUSIVELY to: {standalone_python_lib_dir}")
+            process_env.insert("PYTHONPATH", str(standalone_python_lib_dir)) # Set ONLY this path
+            logger.debug(f"Effective PYTHONPATH for pip QProcess: {process_env.value('PYTHONPATH')}")
+        else:
+            logger.error(f"Could not find standalone Python lib directory at {standalone_python_lib_dir} for QProcess. UNSETTING PYTHONPATH. pip install WILL likely fail.")
+            process_env.remove("PYTHONPATH")
+
+        process.setProcessEnvironment(process_env)
+        # --- End Environment Setup ---
+
+        command = [python_exe, "-m", "pip"] + pip_args
+        log_cmd_str = ' '.join(command)
+        self.log_update.emit(f"Running synchronous pip command: {log_cmd_str}")
+        logger.info(f"Running synchronous pip command: {log_cmd_str}")
+
+        try:
+            process.start(command[0], command[1:])
+            # Wait indefinitely for the process to finish.
+            # A timeout could be added: process.waitForFinished(timeout_ms)
+            if not process.waitForFinished(-1): 
+                stderr_str = f"QProcess waitForFinished timed out for command: {log_cmd_str}"
+                logger.error(stderr_str)
+                success = False
+            else:
+                exit_code = process.exitCode()
+                exit_status = process.exitStatus()
+                stdout_bytes = process.readAllStandardOutput().data()
+                stderr_bytes = process.readAllStandardError().data()
+                stdout_str = stdout_bytes.decode(errors='replace').strip()
+                stderr_str = stderr_bytes.decode(errors='replace').strip()
+
+                log_combined = f"Sync pip command finished. ExitCode: {exit_code}, ExitStatus: {exit_status}\n" \
+                               f"--- STDOUT ---\n{stdout_str}\n" \
+                               f"--- STDERR ---\n{stderr_str}"
+                logger.info(log_combined)
+                # Emit stdout/stderr lines to UI log
+                if stdout_str:
+                     for line in stdout_str.splitlines(): self.log_update.emit(line)
+                if stderr_str:
+                     for line in stderr_str.splitlines(): self.log_update.emit(f"PIP_STDERR: {line}")
+
+                if exit_status == QProcess.ExitStatus.NormalExit and exit_code == 0:
+                    success = True
+                else:
+                    success = False
+                    # Error details are in stderr_str already
+
+        except Exception as e:
+            logger.exception(f"Exception during _run_pip_command_sync for {log_cmd_str}: {e}")
+            stderr_str = f"Exception running command: {e}"
+            success = False
+        finally:
+             process.deleteLater() # Clean up QProcess object
+
+        return success, stdout_str, stderr_str
+
     def run(self):
-        """Execute the environment setup process. Runs in a separate thread."""
+        """Execute the environment setup process. Now runs synchronously for pip installs."""
         logger.info("EnvironmentSetupWorkerMacOS thread started.")
         python_extract_base_dir = None
         python_exe = None
+        overall_success = False
+        final_error_message = ""
 
         try:
             # Comment out progress signals for indeterminate bar
@@ -109,38 +197,56 @@ class EnvironmentSetupWorkerMacOS(QObject):
             self.log_update.emit(f"Found Python executable: {python_exe}")
             # self.progress_updated.emit(30)
 
+            # <<< ADDED: Bootstrap pip before trying to use it >>>
+            self.status_update.emit("Ensuring pip is available...")
+            self.log_update.emit("Running pip bootstrap check...")
+            try:
+                bootstrap_pip_macos(python_exe)
+                self.log_update.emit("Pip bootstrap check completed.")
+            except Exception as pip_bootstrap_error:
+                # If bootstrapping fails, we cannot proceed with pip install
+                self.log_update.emit(f"ERROR: Failed to bootstrap pip: {pip_bootstrap_error}")
+                logger.error(f"Failed to bootstrap pip: {pip_bootstrap_error}", exc_info=True)
+                raise RuntimeError(f"Failed to bootstrap pip: {pip_bootstrap_error}") from pip_bootstrap_error
+
             self.task_status_update.emit(self._current_task, TaskStatus.COMPLETED, f"Set up {self._tasks[self._current_task]}")
             self._completed_tasks.add(self._current_task)
 
-            # --- Stage 3: Install Packages (using QProcess) ---
+            # --- Stage 3: Install Packages (using synchronous helper) ---
             self._current_task = "install_packages"
             self.task_status_update.emit(self._current_task, TaskStatus.PROCESSING, f"Installing {self._tasks[self._current_task]}...")
-            self.status_update.emit("Installing required packages...")
+            self.status_update.emit("Installing required build tools...")
+            
+            # 3.1 Install Setuptools and Wheel first
+            pip_args_build_tools = ["install", "--no-cache-dir", "setuptools", "wheel"]
+            build_tools_success, _, build_tools_stderr = self._run_pip_command_sync(python_exe, pip_args_build_tools)
+            if not build_tools_success:
+                raise RuntimeError(f"Failed to install build tools (setuptools, wheel). Error: {build_tools_stderr}")
+            self.log_update.emit("Successfully installed/updated setuptools and wheel.")
 
-            # 3.2 Install required packages via QProcess
+            # 3.2 Find requirements file
+            self.status_update.emit("Locating requirements file...")
             reqs_filename = "macos_requirements.txt"
             reqs_path_obj = _get_bundled_resource_path_macos(reqs_filename)
             if not reqs_path_obj or not reqs_path_obj.is_file():
-                 raise FileNotFoundError(f"Requirements file not found using resource finder: {reqs_filename}")
+                 raise FileNotFoundError(f"Requirements file not found: {reqs_filename}")
             reqs_path = str(reqs_path_obj.resolve())
+            self.log_update.emit(f"Found requirements file: {reqs_path}")
             
-            self.status_update.emit(f"Installing required application dependencies...")
+            # 3.3 Install from requirements file
+            self.status_update.emit(f"Installing application dependencies from {reqs_filename}...")
+            pip_args_reqs = ["install", "--no-cache-dir", "-r", reqs_path]
+            reqs_success, _, reqs_stderr = self._run_pip_command_sync(python_exe, pip_args_reqs)
+            if not reqs_success:
+                 raise RuntimeError(f"Failed to install requirements from {reqs_filename}. Error: {reqs_stderr}")
 
-            self._pip_process = QProcess()
-            self._pip_process.readyReadStandardOutput.connect(self._handle_pip_stdout)
-            self._pip_process.readyReadStandardError.connect(self._handle_pip_stderr)
-            self._pip_process.finished.connect(self._handle_pip_finished) # Connect to new slot
-
-            command_args = ["-m", "pip", "install", "--no-cache-dir", "-r", reqs_path]
-
-            self.log_update.emit(f"Starting pip install process: {python_exe} {' '.join(command_args)}")
-            self._pip_error_occurred = False # Reset flag
-            self._pip_stderr_buffer = "" # Reset buffer
-            self._pip_process.start(python_exe, command_args)
-
-            # NOTE: The 'run' method will now exit, but the worker object persists.
-            # The final 'finished' signal for the *worker* will be emitted
-            # from the '_handle_pip_finished' slot.
+            # If we reach here, all install steps succeeded
+            self.log_update.emit("Installed dependencies successfully.")
+            self.task_status_update.emit(self._current_task, TaskStatus.COMPLETED, f"Installed {self._tasks[self._current_task]}")
+            self._completed_tasks.add(self._current_task)
+            self.status_update.emit("Environment setup complete.")
+            overall_success = True
+            self.setup_complete.emit() # Emit success signal
 
         except Exception as e:
             logger.exception(f"Error during environment setup: {e}")
@@ -151,89 +257,29 @@ class EnvironmentSetupWorkerMacOS(QObject):
             self.status_update.emit(f"Environment setup failed: {e}")
             # Handle errors occurring *before* pip process starts
             self._handle_error(e)
-
-    def _handle_pip_stdout(self):
-        """Handle stdout data from the pip process."""
-        if not self._pip_process: return
-        try:
-            data = self._pip_process.readAllStandardOutput().data().decode(errors='replace').strip()
-            if data:
-                for line in data.splitlines():
-                    if line.strip():
-                        self.log_update.emit(line.strip())
-        except Exception as e:
-            logger.error(f"Error processing pip stdout: {e}")
-
-    def _handle_pip_stderr(self):
-        """Handle stderr data from the pip process."""
-        if not self._pip_process: return
-        try:
-            data = self._pip_process.readAllStandardError().data().decode(errors='replace').strip()
-            if data:
-                # Only flag as error if stderr contains actual error indicators, not just notices
-                is_real_error = False
-                log_lines = []
-                for line in data.splitlines():
-                    line_strip = line.strip()
-                    if line_strip:
-                        log_line = f"PIP_STDERR: {line_strip}" # Log all stderr for debugging
-                        log_lines.append(log_line)
-                        self._pip_stderr_buffer += log_line + "\\n" # Store all stderr
-                        # Check for common error patterns, ignore '[notice]'
-                        if '[notice]' not in line_strip.lower() and any(err_kw in line_strip.lower() for err_kw in ['error', 'failed', 'traceback', 'exception']): 
-                            is_real_error = True
-                
-                if is_real_error:
-                    self._pip_error_occurred = True # Mark that a significant error happened
-                
-                # Emit all captured stderr lines to the log regardless of error status
-                for log_line in log_lines:
-                     self.log_update.emit(log_line) 
-
-        except Exception as e:
-            logger.error(f"Error processing pip stderr: {e}")
-
-    def _handle_pip_finished(self, exit_code: int, exit_status: QProcess.ExitStatus):
-        """Handle the QProcess finished signal for pip install."""
-        logger.info(f"pip process finished. ExitCode: {exit_code}, ExitStatus: {exit_status}, ErrorOccurred: {self._pip_error_occurred}")
-        self._pip_process = None # Clear the process reference
-
-        success = False
-        error_message_str = ""
-
-        if exit_status == QProcess.ExitStatus.NormalExit and exit_code == 0 and not self._pip_error_occurred:
-            self.log_update.emit("Installed dependencies successfully.")
-            self.task_status_update.emit("install_packages", TaskStatus.COMPLETED, f"Installed {self._tasks['install_packages']}")
-            self._completed_tasks.add("install_packages")
-            # self.progress_updated.emit(100)
-            self.status_update.emit("Environment setup complete.")
-            success = True
-            self.setup_complete.emit() # Emit success signal
-        else:
-            # Failure case
-            if self._current_task == "install_packages":
-                 self.task_status_update.emit(self._current_task, TaskStatus.FAILED, f"Failed: {self._tasks[self._current_task]}")
-            error_message_str = f"pip install failed. ExitCode: {exit_code}, ExitStatus: {exit_status}."
-            if self._pip_stderr_buffer:
-                error_message_str += f"\\n--- Pip Errors ---\\n{self._pip_stderr_buffer.strip()}"
-
-            self.status_update.emit(f"Error during dependency installation.")
-            self.log_update.emit(f"ERROR: {error_message_str}")
-            logger.error(error_message_str)
-            success = False
+            overall_success = False
             self._python_exe_path = None # Ensure path is None on failure
-            self.setup_failed.emit(error_message_str) # Emit failure signal
+            # NOTE: _handle_error now emits the final finished signal on error
 
-        # Emit the main finished signal for the worker
-        logger.info(f"Emitting finished signal: success={success}, error='{error_message_str}', python_exe={self._python_exe_path}")
-        self.finished.emit(success, error_message_str, self._python_exe_path)
-        logger.info("EnvironmentSetupWorkerMacOS thread finished processing pip result.")
+        # Emit the final finished signal *only* if no exception occurred
+        # (Error case is handled by _handle_error calling self.finished)
+        if overall_success:
+             logger.info(f"Emitting final finished signal: success=True, error='', python_exe={self._python_exe_path}")
+             self.finished.emit(True, "", self._python_exe_path)
+        
+        logger.info("EnvironmentSetupWorkerMacOS thread finished.") # Log thread exit
 
+    # Remove old QProcess slots - these are replaced by _run_pip_command_sync
+    # def _handle_pip_stdout(self): ... REMOVED
+    # def _handle_pip_stderr(self): ... REMOVED
+    # def _handle_pip_finished(self, exit_code: int, exit_status: QProcess.ExitStatus): ... REMOVED
+
+    # _handle_error method needs slight adjustment as it's now called for any exception
     def _handle_error(self, e: Exception):
-        """Handle exceptions occurring during setup (before or after pip process)."""
+        """Handle exceptions occurring during setup."""
         error_details = traceback.format_exc()
         error_message_str = str(e)
-        log_msg = f"ERROR during environment setup: {error_message_str}\\n{error_details}"
+        log_msg = f"ERROR during environment setup: {error_message_str}\n{error_details}"
         self.log_update.emit(log_msg)
         logger.error(log_msg)
         self.status_update.emit(f"Error during setup: {error_message_str}")
@@ -247,7 +293,7 @@ class EnvironmentSetupWorkerMacOS(QObject):
             for task_id in task_ids[current_index + 1:]:
                 if task_id not in self._completed_tasks:
                     self.task_status_update.emit(task_id, TaskStatus.FAILED, f"Failed: {self._tasks[task_id]}")
-        except ValueError:
+        except ValueError: # Handle if self._current_task was None
             for task_id in task_ids:
                 if task_id not in self._completed_tasks:
                     self.task_status_update.emit(task_id, TaskStatus.FAILED, f"Failed: {self._tasks[task_id]}")
@@ -257,24 +303,16 @@ class EnvironmentSetupWorkerMacOS(QObject):
 
         # Emit the main finished signal
         logger.info(f"Emitting finished signal due to error: success=False, error='{error_message_str}', python_exe=None")
-        # Ensure _pip_process is cleaned up if error happened before it finished
-        if self._pip_process and self._pip_process.state() != QProcess.ProcessState.NotRunning:
-             logger.warning("Terminating pip process due to earlier setup error.")
-             self._pip_process.terminate()
-             self._pip_process.waitForFinished(1000)
-        self._pip_process = None
+        # No QProcess to clean up here anymore as _run_pip_command_sync does it
         self.finished.emit(False, error_message_str, None)
-        logger.info("EnvironmentSetupWorkerMacOS thread finished due to error.")
+        # No need to log thread exit here, it happens in run()
 
-    # Method to be called by SetupWizard if cancellation occurs
     def request_stop(self):
-         logger.info("Stop requested for EnvironmentSetupWorkerMacOS")
-         if self._pip_process and self._pip_process.state() != QProcess.ProcessState.NotRunning:
-              logger.warning("Attempting to terminate pip process due to cancellation.")
-              self._pip_process.terminate() # Terminate the QProcess
-              # Optionally wait a very short time, but avoid blocking the main thread here
-              # self._pip_process.waitForFinished(500) 
-         # No need to explicitly stop the thread here, _stop_threads handles that
+        # Stop request might be harder to handle cleanly with synchronous calls.
+        # For now, log it. A more robust implementation might need flags checked
+        # between synchronous calls in run().
+        logger.warning("Stop requested for EnvironmentSetupWorkerMacOS, but synchronous operations may block immediate stop.")
+        # We can't easily terminate the blocked QProcess from here in the sync helper case.
 
 # Note: We don't define start() here anymore. The calling code (SetupWizard)
 # will be responsible for creating the QThread and starting it. 

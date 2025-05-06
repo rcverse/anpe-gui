@@ -80,7 +80,7 @@ class CompletionViewWidget(QWidget):
         self.info_text = QLabel("ANPE GUI is ready to launch!")
         self.info_text.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.info_text.setWordWrap(True)
-        self.info_text.setStyleSheet("font-size: 14px; color: #3c3c3c; font-family: 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif; line-height: 140%; max-width: 500px;")
+        self.info_text.setStyleSheet("font-size: 14px; color: #3c3c3c; font-family: 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif; line-height: 140%;")
         info_centering_layout.addWidget(self.info_text)
         info_centering_layout.addStretch(1)
         main_layout.addLayout(info_centering_layout)
@@ -90,15 +90,15 @@ class CompletionViewWidget(QWidget):
         self.success_container_centering_layout = QHBoxLayout()
         self.success_container_centering_layout.addStretch(1)
         self.success_container = QFrame()
-        self.success_container.setFixedWidth(550)
+        self.success_container.setFixedWidth(650)
         self.success_container.setStyleSheet("""
             QFrame { background-color: #e6f4ea; border-radius: 10px; border: none; }
         """)
         success_layout = QVBoxLayout(self.success_container)
         success_layout.setContentsMargins(20, 20, 20, 20)
         success_message = QLabel("You can now launch ANPE GUI to start extracting noun phrases.")
-        success_message.setWordWrap(True)
         success_message.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        success_message.setWordWrap(True)
         success_message.setStyleSheet("font-size: 13px; color: #2e7d32; font-family: 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif; background-color: transparent; border: none;")
         success_layout.addWidget(success_message)
         self.success_container_centering_layout.addWidget(self.success_container)
@@ -110,7 +110,7 @@ class CompletionViewWidget(QWidget):
         self.error_container_centering_layout = QHBoxLayout()
         self.error_container_centering_layout.addStretch(1)
         self.error_container = QFrame()
-        self.error_container.setFixedWidth(550)
+        self.error_container.setFixedWidth(650)
         self.error_container.setStyleSheet("""
             QFrame { background-color: #fdecea; border-radius: 10px; border: none; }
         """)

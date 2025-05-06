@@ -82,8 +82,8 @@ class ProgressViewWidget(QWidget):
         if explanation_text:
             explanation_label = QLabel(explanation_text)
             explanation_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            explanation_label.setWordWrap(True)
             # Removed max-width
+            explanation_label.setWordWrap(True) # Ensure word wrap
             explanation_label.setStyleSheet("font-size: 13px; color: #494949; font-family: 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif; background-color: transparent; border: none;")
             header_content_layout.addWidget(explanation_label)
 
@@ -104,7 +104,7 @@ class ProgressViewWidget(QWidget):
                 self._task_list.add_task(task_id, task_name)
 
         task_container = QFrame()
-        task_container.setFixedWidth(500) # Give container a fixed width for centering
+        task_container.setFixedWidth(650) # Changed width to 650
         task_container.setStyleSheet("""
             QFrame {
                 background-color: #F7F7F7;
@@ -133,6 +133,7 @@ class ProgressViewWidget(QWidget):
         # Status Label (centered)
         self._status_label = QLabel("Preparing...")
         self._status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._status_label.setWordWrap(True) # Ensure word wrap
         self._status_label.setStyleSheet("font-size: 13px; color: #494949; font-family: 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif; background-color: transparent; border: none;")
         progress_content_layout.addWidget(self._status_label)
 
@@ -200,7 +201,7 @@ class ProgressViewWidget(QWidget):
         # Log text area (centered, fixed width)
         self._log_area = QTextEdit()
         self._log_area.setReadOnly(True)
-        self._log_area.setFixedWidth(550) # Give fixed width
+        self._log_area.setFixedWidth(650) # Increased width
         self._log_area.setFont(QFont("Menlo", 11))
         self._log_area.setStyleSheet("""
             background-color: #F8F8F8;

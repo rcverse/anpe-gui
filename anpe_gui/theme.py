@@ -381,38 +381,35 @@ def get_stylesheet():
     /* Style the dropdown view */
     QComboBox QAbstractItemView {{
         background-color: {BACKGROUND_COLOR};
-        border: none; /* Explicitly remove border */
+        border: 1px solid {BORDER_COLOR}; /* Add subtle border */
         padding: 2px 0px; /* Add slight vertical padding to view */
         outline: 0px; /* Remove focus outline */
-        border-radius: 2px; /* Add slight rounding */
+        border-radius: 4px; /* Increase rounding */
     }}
     /* Style individual items */
     QComboBox QAbstractItemView::item {{
-        padding: 5px 10px; /* Increased padding for taller items */
+        padding: 4px 8px; /* Reduced padding */
         background-color: transparent; /* Use transparent background by default */
         color: {TEXT_COLOR}; /* Default text */
-        min-height: 22px; /* Increased min height */
         outline: 0;
         border: none; /* Ensure no borders on items */
     }}
-    /* Style selected items (when not hovered) - using a slightly darker blue */
+    /* Style selected items (when not hovered) */
     QComboBox QAbstractItemView::item:selected {{
-        background-color: {SECONDARY_COLOR}20; /* Light wash of secondary color */
+        background-color: {LIGHT_HOVER_BLUE}; /* Use consistent light blue */
         color: {TEXT_COLOR};
+        border-radius: 3px; /* Add rounding */
         outline: 0;
     }}
     /* Style hovered items (when not selected) */
     QComboBox QAbstractItemView::item:hover {{
-        background-color: {LIGHT_HOVER_BLUE} !important; /* Light blue hover (Forced) */
+        background-color: {LIGHT_HOVER_BLUE}; /* Use consistent light blue */
         color: {TEXT_COLOR};
+        border-radius: 3px; /* Add rounding */
         outline: 0;
     }}
-    /* Style selected AND hovered items - ensure hover color takes precedence */
-    QComboBox QAbstractItemView::item:selected:hover {{
-        background-color: {LIGHT_HOVER_BLUE} !important; /* Explicitly use light blue (Forced) */
-        color: {TEXT_COLOR};
-        outline: 0;
-    }}
+    /* Style selected AND hovered items - Handled by above */
+    /* QComboBox QAbstractItemView::item:selected:hover {{ ... }} REMOVED */
 
     /* List Widgets */
     QListWidget {{

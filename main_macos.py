@@ -7,6 +7,29 @@ from pathlib import Path
 from PyQt6.QtWidgets import QApplication, QMessageBox
 from PyQt6.QtCore import QProcess
 
+# --- VERY EARLY DEBUG LOGGING ---
+# Try to write to a known temporary location immediately.
+# This helps determine if the script starts at all in the .app bundle.
+# Use a unique filename to avoid clashes if multiple attempts are made.
+# We'll use a simple text file write, as even 'logging' might not be configured yet.
+_EARLY_DEBUG_LOG_FILE = f"/tmp/anpe_gui_launcher_debug_{int(time.time())}.log"
+try:
+    with open(_EARLY_DEBUG_LOG_FILE, "a") as f_debug:
+        f_debug.write(f"--- {time.asctime()}: main_macos.py script started ---\n")
+        f_debug.write(f"Python executable: {sys.executable}\n")
+        f_debug.write(f"sys.argv: {sys.argv}\n")
+        f_debug.write(f"sys.path: {sys.path}\n")
+        f_debug.write(f"Current working directory: {os.getcwd()}\n")
+        f_debug.write(f"sys.frozen attribute: {getattr(sys, 'frozen', 'Not set')}\n")
+        f_debug.write(f"__file__: {__file__}\n")
+except Exception as e_debug:
+    # If this fails, something is very wrong at a fundamental level.
+    # We can't do much more here, but this is a critical data point.
+    # In a real app, you might try another location or print to stderr
+    # if the .app allows stdout/stderr redirection to a file.
+    print(f"CRITICAL: Failed to write to early debug log {_EARLY_DEBUG_LOG_FILE}: {e_debug}", file=sys.stderr)
+# --- END VERY EARLY DEBUG LOGGING ---
+
 # --- Add project root to sys.path for dev/debug --- 
 # This helps find the installer package when run directly
 if not getattr(sys, 'frozen', False):
@@ -80,19 +103,39 @@ def _get_main_script_path_macos() -> str | None:
     Handles running from source and bundled app scenarios.
     """
     if getattr(sys, 'frozen', False):
-        # Running as a bundle
-        # In py2app, sys.executable is Contents/MacOS/AppName
-        # Resources are typically in Contents/Resources/
+        # --- Running as a Bundle ---
         bundle_dir = Path(sys.executable).parent.parent # Up two levels to Contents/
-        main_script = bundle_dir / "Resources" / "anpe_gui" / "run.py"
+        resources_lib_dir = bundle_dir / "Resources" / "lib"
+        
+        # Find the specific pythonX.Y directory created by py2app
+        target_python_lib_dir = None
+        if resources_lib_dir.is_dir():
+            for item in resources_lib_dir.iterdir():
+                # Look for a directory starting with 'python' (e.g., python3.12)
+                if item.is_dir() and item.name.startswith("python"):
+                    target_python_lib_dir = item
+                    logger.debug(f"Found py2app lib directory: {target_python_lib_dir}")
+                    break # Assume only one such directory exists
+        
+        if not target_python_lib_dir:
+             logger.error(f"Could not find pythonX.Y library directory under {resources_lib_dir}")
+             return None
+
+        main_script = target_python_lib_dir / "anpe_gui" / "run.py"
         logger.info(f"Running bundled. Main script expected at: {main_script}")
     else:
-        # Running from source (relative to this script's location)
+        # --- Running from Source ---
         script_dir = Path(__file__).parent
         main_script = script_dir / "anpe_gui" / "run.py"
         logger.info(f"Running from source. Main script expected at: {main_script}")
-        
-    return str(main_script) if main_script.exists() else None
+
+    # Check existence before returning
+    if main_script.exists():
+         logger.info(f"Confirmed main script exists at: {main_script}")
+         return str(main_script)
+    else:
+         logger.error(f"Main script not found at calculated path: {main_script}")
+         return None
 
 def show_error_dialog(title, message, detailed_text=""):
     """Displays a simple error message box using PyQt6."""
@@ -219,24 +262,50 @@ if __name__ == "__main__":
     logger.info(f"Found target Python: {target_python_exe}")
     logger.info(f"Found main application script: {main_app_script}")
 
-    # 4. Execute the main application script using os.execv
-    logger.info(f"Executing main application via os.execv: {target_python_exe} {main_app_script}")
+    # 4. Prepare environment and execute the main application script using os.execve
+    logger.info(f"Preparing environment for target Python: {target_python_exe}")
+    
+    # Create a clean environment for the target python
+    target_env = os.environ.copy()
+    target_env.pop("PYTHONHOME", None) # Remove potentially interfering PYTHONHOME
+    logger.info("Removed PYTHONHOME from target environment.")
+    
+    # Set PYTHONPATH exclusively to the standalone python's lib dir
+    python_exe_path_obj = Path(target_python_exe)
+    # Derive version string like "3.11" from executable name python3.11
+    python_version_str = "".join(filter(str.isdigit, python_exe_path_obj.name))
+    if len(python_version_str) >= 2:
+        major, minor = int(python_version_str[0]), int(python_version_str[1:])
+        logger.debug(f"Derived version {major}.{minor} for target Python library path.")
+    else:
+        logger.warning("Could not derive major/minor version from python executable name, assuming 3.11")
+        major, minor = 3, 11 # Fallback
+        
+    standalone_python_lib_dir = python_exe_path_obj.parent.parent / "lib" / f"python{major}.{minor}"
+    if standalone_python_lib_dir.is_dir():
+         logger.info(f"Setting PYTHONPATH for target process EXCLUSIVELY to: {standalone_python_lib_dir}")
+         target_env["PYTHONPATH"] = str(standalone_python_lib_dir)
+    else:
+         logger.error(f"Could not find standalone Python lib directory at {standalone_python_lib_dir} for execve. Unsetting PYTHONPATH.")
+         target_env.pop("PYTHONPATH", None)
+
+    logger.info(f"Executing main application via os.execve: {target_python_exe} {main_app_script}")
     try:
-        # Prepare arguments for execv: executable path, then list of args starting with executable name
+        # Prepare arguments for execve: executable path, list of args (starting with executable name), environment
         args = [target_python_exe, main_app_script] + sys.argv[1:] # Pass along any original args
-        os.execv(target_python_exe, args)
+        os.execve(target_python_exe, args, target_env) # Use execve with cleaned env
     except OSError as e:
-        err_msg = f"Failed to execute the main application using os.execv: {e}"
+        err_msg = f"Failed to execute the main application using os.execve: {e}"
         logger.critical(err_msg, exc_info=True)
         show_error_dialog("Launch Failure", err_msg)
         sys.exit(1)
     except Exception as e:
-         # Catch any other potential errors during execv setup
+         # Catch any other potential errors during execve setup
          err_msg = f"An unexpected error occurred trying to launch the main application: {e}"
          logger.critical(err_msg, exc_info=True)
          show_error_dialog("Launch Failure", err_msg)
          sys.exit(1)
 
-    # The code below os.execv will not be reached if execv succeeds
-    logger.critical("os.execv finished unexpectedly (this should not happen if launch succeeded).")
+    # The code below os.execve will not be reached if execve succeeds
+    logger.critical("os.execve finished unexpectedly (this should not happen if launch succeeded).")
     sys.exit(1) 

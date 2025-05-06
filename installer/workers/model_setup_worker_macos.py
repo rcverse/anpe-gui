@@ -117,10 +117,44 @@ class ModelSetupWorkerMacOS(QObject):
             self.finished.emit(False, self._error_message)
 
     def _setup_process(self):
-        """Set up the QProcess and connect signals. No environment setup needed.
-        Returns True (always, as env setup removed).
-        """
+        """Set up the QProcess, clean its environment, and connect signals."""
         self._process = QProcess()
+
+        # --- BEGIN ENVIRONMENT CLEANING FOR MODEL SCRIPT ---
+        process_env = QProcessEnvironment.systemEnvironment()
+        process_env.remove("PYTHONHOME")
+        logger.info("Removed PYTHONHOME from model setup QProcess environment.")
+
+        # Expecting python_exe_path to be 3.11 now
+        python_exe_path_obj = Path(self._python_exe_path)
+        # Derive version from the executable name (e.g., python3.11)
+        if python_exe_path_obj.name.startswith("python3."):
+            try:
+                version_str = python_exe_path_obj.name.split('python')[1]
+                major, minor = map(int, version_str.split('.')[:2])
+                logger.debug(f"Derived version {major}.{minor} from executable name for model setup QProcess env.")
+            except Exception:
+                logger.warning(f"Could not derive version from {python_exe_path_obj.name} for model setup QProcess env, falling back to 3.11")
+                major, minor = 3, 11 # Hardcoded fallback based on current target
+        else:
+            logger.warning(f"Cannot parse version from {python_exe_path_obj.name} for model setup QProcess env, assuming 3.11")
+            major, minor = 3, 11 # Hardcoded fallback
+
+        standalone_python_lib_dir = python_exe_path_obj.parent.parent / "lib" / f"python{major}.{minor}"
+
+        if standalone_python_lib_dir.is_dir():
+            logger.info(f"Setting PYTHONPATH for model setup QProcess EXCLUSIVELY to: {standalone_python_lib_dir}")
+            process_env.insert("PYTHONPATH", str(standalone_python_lib_dir)) # Set ONLY this path
+            logger.debug(f"Effective PYTHONPATH for model setup QProcess: {process_env.value('PYTHONPATH')}")
+        else:
+            # This would be a critical error, the previous steps should have ensured this exists
+            logger.error(f"CRITICAL: Could not find standalone Python lib directory at {standalone_python_lib_dir} for model setup QProcess.")
+            process_env.remove("PYTHONPATH")
+            self._error_message = f"Cannot find library path for standalone Python: {standalone_python_lib_dir}"
+            return False # Indicate failure to setup process
+
+        self._process.setProcessEnvironment(process_env)
+        # --- END ENVIRONMENT CLEANING FOR MODEL SCRIPT ---
 
         # --- Connect Signals --- 
         self._process.readyReadStandardOutput.connect(self._handle_stdout)

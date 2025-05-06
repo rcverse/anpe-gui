@@ -5,9 +5,9 @@ that contains all necessary files for running ANPE GUI on macOS.
 """
 
 import sys
+import glob
 from setuptools import setup
 import os
-import glob
 import platform
 
 # Verify we're on macOS
@@ -19,72 +19,69 @@ APP_NAME = "ANPE GUI"
 APP_SCRIPT = 'main_macos.py'
 
 # Define required Python archives (match constants in installer_core_macos.py)
-_PBS_VERSION_TAG = "3.12.10+20250409"
-_PBS_ARCHIVE_TEMPLATE = f"cpython-{_PBS_VERSION_TAG}-{{arch}}-apple-darwin-install_only_stripped.tar.gz"
+_PBS_VERSION_TAG = "3.11.12+20250409"
+_PBS_ARCHIVE_TEMPLATE = f"cpython-{_PBS_VERSION_TAG}-{{arch}}-apple-darwin-install_only.tar.gz"
 PBS_ARCHIVE_ARM64 = _PBS_ARCHIVE_TEMPLATE.format(arch="aarch64")
 PBS_ARCHIVE_X86_64 = _PBS_ARCHIVE_TEMPLATE.format(arch="x86_64")
 
 # Files/directories to include in the Resources folder
 # Add the Python archives here
 DATA_FILES = [
-    'installer/assets/app_icon.icns', 
-    'installer/assets/success_icon.png',
-    'installer/assets/error_icon.png',
-    f'installer/assets/{PBS_ARCHIVE_ARM64}', # ARM64 Python archive
-    f'installer/assets/{PBS_ARCHIVE_X86_64}', # x86_64 Python archive
-    'installer/macos_requirements.txt', # Requirements for the setup process
+    ('assets', glob.glob('anpe_gui/resources/assets/*')),
+    ('installer/assets', glob.glob('installer/assets/*')),
+    ('installer', ['installer/macos_requirements.txt']),
 ]
 
 # Create options dict for py2app
 py2app_options = {
-    'argv_emulation': True,
+    'argv_emulation': False,
     'strip': True,
     'packages': [
-        'PyQt6',      # Needed for Installer UI and main app UI shell
-        'installer',  # First-run setup logic and UI views
-        # REMOVED: 'spacy', 'benepar', 'anpe' - these are installed by the setup wizard
+        'PyQt6',
+        'installer',
+        'anpe_gui',
     ],
     'includes': [
         'sip',
         'PyQt6.QtCore',
         'PyQt6.QtGui',
         'PyQt6.QtWidgets',
+        'jaraco',
+        'jaraco.text',
+        'pkg_resources',
     ],
     'excludes': [
-        # Exclude packages installed by the setup wizard
-        'spacy',
-        'benepar',
-        'anpe',
-        'torch', # Explicitly exclude torch and its variants
-        'torchvision',
-        'torchaudio',
-        
-        # General exclusions
-        'tkinter',
-        'matplotlib',
-        'numpy', # Exclude numpy if it's only needed by spacy/torch/etc.
-        'scipy',
-        'pandas',
-        'PyQt5',
-        'PySide2',
         'PySide6',
         'pytest',
+        'wheel',
+        'spacy',
+        'benepar',
+        'nltk',
+        'tensorflow',
+        'torch',
+        'transformers',
+        'anpe',
     ],
-    'iconfile': 'installer/assets/app_icon.icns',  # Ensure this .icns file exists
+    'iconfile': 'installer/assets/app_icon_mac.icns',
     'resources': [
-        'installer/assets',  # Copy contents of installer/assets to Resources dir
-        'installer/macos_requirements.txt' # Explicitly copy the requirements file to Resources root
+        'installer/assets',
+        'installer/macos_requirements.txt'
     ],
     'plist': {
         'CFBundleName': APP_NAME,
         'CFBundleDisplayName': APP_NAME,
         'CFBundleGetInfoString': "Analyze Natural Language Processing Evidence",
-        'CFBundleIdentifier': "com.yourcompany.anpe-gui", # CHANGE THIS to your bundle identifier
-        'CFBundleVersion': "0.1.0", # CHANGE THIS to your app version
-        'CFBundleShortVersionString': "0.1", # CHANGE THIS
-        'NSHumanReadableCopyright': u"Copyright © 2024, Your Name or Company. All rights reserved.", # CHANGE THIS
-        'LSMinimumSystemVersion': '11.0' # Require macOS Big Sur or later (adjust if needed)
+        'CFBundleIdentifier': "com.yourcompany.anpe-gui",
+        'CFBundleVersion': "0.1.0",
+        'CFBundleShortVersionString': "0.1",
+        'NSHumanReadableCopyright': u"Copyright © 2024, Your Name or Company. All rights reserved.",
+        'LSMinimumSystemVersion': '11.0',
+        'PyRuntimeLocations': [
+             '@executable_path/../Frameworks/Python.framework/Versions/3.12/Python'
+        ]
     },
+    'no_strip': False,
+    'optimize': 2,
 }
 
 setup(

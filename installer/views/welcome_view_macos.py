@@ -111,8 +111,8 @@ class WelcomeViewWidget(QWidget):
             "using the <a href='https://github.com/rcverse/another-noun-phrase-extractor'>ANPE library</a>, "
             "without needing to write any code."
         )
-        intro_text.setWordWrap(True)
         intro_text.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        intro_text.setWordWrap(True)
         intro_text.setOpenExternalLinks(True)
         intro_text.setStyleSheet("font-size: 14px; color: #3c3c3c; font-family: 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif; line-height: 140%;")
         main_layout.addWidget(intro_text)

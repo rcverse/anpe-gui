@@ -14,8 +14,9 @@ from typing import Optional
 # Define base dir name for unpacked standalone python
 STANDALONE_PYTHON_DIR_NAME = "python-standalone"
 # Define specific archive filenames
-_PBS_VERSION_TAG = "3.12.10+20250409" # Base version + build tag
-_PBS_ARCHIVE_TEMPLATE = f"cpython-{_PBS_VERSION_TAG}-{{arch}}-apple-darwin-install_only_stripped.tar.gz"
+_PBS_VERSION_TAG = "3.11.12+20250409" # Base version + build tag
+# Use the non-stripped version for better standard library compatibility
+_PBS_ARCHIVE_TEMPLATE = f"cpython-{_PBS_VERSION_TAG}-{{arch}}-apple-darwin-install_only.tar.gz"
 PBS_ARCHIVE_ARM64 = _PBS_ARCHIVE_TEMPLATE.format(arch="aarch64")
 PBS_ARCHIVE_X86_64 = _PBS_ARCHIVE_TEMPLATE.format(arch="x86_64")
 
@@ -56,21 +57,73 @@ def print_failure(message: str):
 # --- macOS Specific Resource Finder ---
 
 def _get_bundled_resource_path_macos(relative_path: str) -> Optional[Path]:
-    """Find a resource bundled by py2app or relative to the script."""
-    resource_file_path = None # Initialize
+    """
+    Find a resource bundled by py2app or relative to the script.
 
-    if getattr(sys, 'frozen', False):
-        # --- Bundled App Mode ---
+    Handles both data files copied to Resources/ and Python modules
+    bundled into Resources/lib/pythonX.Y/.
+    """
+    # --- Determine if running in bundled mode ---
+    is_bundled = False
+    bundle_base_path = None
+    resources_path = None
+    if hasattr(sys, 'executable'):
         try:
-            # Resources are expected directly in Contents/Resources
-            resources_path = Path(sys.executable).parent.parent / "Resources"
-            resource_file_path = resources_path / relative_path
-            logger.info(f"Bundled mode: Checking for resource at: {resource_file_path}")
-            if resource_file_path.is_file():
-                return resource_file_path.resolve() # Return absolute path
+            # sys.executable is Contents/MacOS/AppName
+            bundle_base_path_check = Path(sys.executable).parent.parent # Up two levels to Contents/
+            resources_path_check = bundle_base_path_check / "Resources"
+            if resources_path_check.is_dir(): # Check if Resources/ directory exists
+                is_bundled = True
+                bundle_base_path = bundle_base_path_check
+                resources_path = resources_path_check
+                logger.debug(f"Detected bundled mode based on executable path: {sys.executable}")
             else:
-                 logger.error(f"Resource '{relative_path}' not found in bundle Resources directory: {resources_path}")
-                 return None
+                 logger.debug(f"Not bundled mode (Resources dir not found relative to executable): {resources_path_check}")
+        except Exception as e:
+            logger.warning(f"Error checking bundle structure via sys.executable: {e}")
+
+    # Fallback check using sys.frozen if executable check failed but frozen is set
+    if not is_bundled and getattr(sys, 'frozen', False):
+         logger.warning("Detected bundled mode using sys.frozen as fallback.")
+         is_bundled = True
+         # Attempt to determine paths (might be less reliable)
+         try:
+             bundle_base_path = Path(sys.executable).parent.parent
+             resources_path = bundle_base_path / "Resources"
+         except Exception:
+              logger.error("Could not determine bundle paths even with sys.frozen=True.")
+              return None # Cannot proceed without paths
+
+    # --- Path Finding Logic ---
+    if is_bundled:
+        # --- Bundled App Mode ---
+        if not resources_path:
+             logger.error("Bundled mode detected, but resources_path is not set.")
+             return None
+        try:
+            logger.debug(f"Bundled mode: Base bundle path: {bundle_base_path}, Resources path: {resources_path}")
+
+            # 1. Check for non-Python files copied directly into Resources/ or subdirs
+            #    (e.g., assets, requirement files specified in DATA_FILES)
+            path_in_resources = resources_path / relative_path
+            logger.debug(f"Bundled mode: Checking for data file directly in Resources: {path_in_resources}")
+            if path_in_resources.exists():
+                logger.info(f"Found resource as data file: {path_in_resources}")
+                return path_in_resources.resolve()
+
+            # 2. Check for Python modules/packages bundled in lib/pythonX.Y
+            #    Construct the path relative to the standard library location
+            python_lib_path = resources_path / f"lib/python{sys.version_info.major}.{sys.version_info.minor}"
+            path_in_lib = python_lib_path / relative_path
+            logger.debug(f"Bundled mode: Checking for Python module in lib: {path_in_lib}")
+            if path_in_lib.exists():
+                 logger.info(f"Found resource as Python module: {path_in_lib}")
+                 return path_in_lib.resolve()
+
+            # If not found in either location
+            logger.error(f"Resource '{relative_path}' not found in bundle Resources/ or Resources/lib/pythonX.Y/")
+            return None
+
         except Exception as e:
              logger.error(f"Error determining resource path in bundled mode: {e}", exc_info=True)
              return None
@@ -79,21 +132,30 @@ def _get_bundled_resource_path_macos(relative_path: str) -> Optional[Path]:
         try:
             installer_dir = Path(__file__).parent.absolute()
             project_root = installer_dir.parent # Assume installer is one level down
+            logger.debug(f"Development mode: Using project root: {project_root}")
 
             # 1. Check relative to project root (e.g., 'anpe_gui/resources/...')
             path_rel_to_root = project_root / relative_path
+            logger.debug(f"Development mode: Checking relative to root: {path_rel_to_root}")
             if path_rel_to_root.is_file():
                 logger.info(f"Development mode: Found resource relative to project root: {path_rel_to_root}")
                 return path_rel_to_root.resolve()
-            
+
             # 2. Check within installer/assets/ (e.g., 'assets/logo.png')
-            path_in_assets = installer_dir / "assets" / relative_path
+            #    Requires splitting relative_path if it contains dirs like 'installer/assets/...'
+            if relative_path.startswith("installer/assets/"):
+                 asset_name = Path(relative_path).name
+                 path_in_assets = installer_dir / "assets" / asset_name
+            else: # If path doesn't start with installer/assets/, check as is
+                 path_in_assets = installer_dir / "assets" / relative_path
+            logger.debug(f"Development mode: Checking in installer assets: {path_in_assets}")
             if path_in_assets.is_file():
                 logger.info(f"Development mode: Found resource in installer assets subdir: {path_in_assets}")
                 return path_in_assets.resolve()
 
             # 3. Check directly in installer/ (e.g., 'macos_requirements.txt')
             path_in_installer = installer_dir / relative_path
+            logger.debug(f"Development mode: Checking directly in installer dir: {path_in_installer}")
             if path_in_installer.is_file():
                 logger.info(f"Development mode: Found resource directly in installer dir: {path_in_installer}")
                 return path_in_installer.resolve()
@@ -144,7 +206,9 @@ def unpack_standalone_python_macos(target_install_path: str) -> str:
 
     # Use the helper to find the archive path (in bundle Resources or installer/assets)
     print_step(f"Locating Python archive: {python_archive_name}...")
-    python_archive_path_obj = _get_bundled_resource_path_macos(python_archive_name)
+    # Pass the expected relative path within Resources
+    resource_relative_path = f'assets/{python_archive_name}'
+    python_archive_path_obj = _get_bundled_resource_path_macos(resource_relative_path)
 
     if not python_archive_path_obj:
         # Error message specific to debug/bundled mode is handled inside the helper
@@ -234,29 +298,57 @@ def bootstrap_pip_macos(python_exe_path: str):
         RuntimeError: If pip bootstrapping fails.
         PipError: If running pip check fails after bootstrapping.
     """
-    # No longer needs python_extract_path or env vars
     print_step(f"Ensuring pip is available for {python_exe_path}...")
 
-    # Prepare environment (just use default system env)
-    current_env = os.environ.copy()
+    python_exe_path_obj = Path(python_exe_path)
+    # Derive version from the executable name (e.g., python3.11) or know it's 3.11
+    # Assuming the executable is named python3.X or python3.XY
+    if python_exe_path_obj.name.startswith("python3."):
+        try:
+            version_str = python_exe_path_obj.name.split('python')[1]
+            major, minor = map(int, version_str.split('.')[:2])
+            logger.debug(f"Derived version {major}.{minor} from executable name.")
+        except Exception:
+            logger.warning(f"Could not derive version from {python_exe_path_obj.name}, falling back to hardcoded 3.11")
+            major, minor = 3, 11 # Fallback, adjust if needed
+    else:
+        logger.warning(f"Cannot parse version from {python_exe_path_obj.name}, assuming 3.11")
+        major, minor = 3, 11 # Fallback, adjust if needed
+
+    standalone_python_lib_dir = python_exe_path_obj.parent.parent / "lib" / f"python{major}.{minor}"
+
+    # Prepare environment for pip subprocess - CLEANED
+    pip_env = os.environ.copy()
+    # Remove PYTHONHOME and set exclusive PYTHONPATH
+    pip_env.pop("PYTHONHOME", None)
+    logger.info("Removed PYTHONHOME from pip bootstrap environment.")
+
+    if standalone_python_lib_dir.is_dir():
+        logger.info(f"Setting PYTHONPATH for pip bootstrap EXCLUSIVELY to: {standalone_python_lib_dir}")
+        pip_env["PYTHONPATH"] = str(standalone_python_lib_dir) # Set ONLY this path
+        logger.debug(f"Effective PYTHONPATH for pip bootstrap: {pip_env['PYTHONPATH']}")
+    else:
+        logger.error(f"Could not find standalone Python lib directory at {standalone_python_lib_dir}. UNSETTING PYTHONPATH. Pip bootstrap WILL likely fail.")
+        pip_env.pop("PYTHONPATH", None)
 
     # Check if pip module is runnable with the target Python
     print_step("Checking if pip is runnable...")
     try:
         check_command = [python_exe_path, "-m", "pip", "--version"]
         logger.debug(f"Running pip check command: {' '.join(check_command)}")
+        # Use the modified CLEAN environment (pip_env)
         result = subprocess.run(
             check_command,
             capture_output=True,
             text=True,
-            check=False, # Check return code manually
-            env=current_env # Use default env
+            check=False,
+            env=pip_env # USE CLEANED ENV
         )
 
         if result.returncode == 0:
             logger.info(f"Pip check successful: {result.stdout.strip()}")
             print_success("Pip is already available.")
-            return # Pip already installed
+            return 
         else:
             logger.warning(f"Pip check failed (Return Code: {result.returncode}). Stdout: {result.stdout.strip()}. Stderr: {result.stderr.strip()}. Proceeding with bootstrap.")
 
@@ -280,45 +372,44 @@ def bootstrap_pip_macos(python_exe_path: str):
             except Exception as e:
                 print_failure(f"Failed to download get-pip.py: {e}")
 
-            # Run get-pip.py using the target standalone Python
             bootstrap_command = [python_exe_path, str(get_pip_path), "--no-warn-script-location"]
             logger.debug(f"Running pip bootstrap command: {' '.join(bootstrap_command)}")
 
+            # Use the modified CLEAN environment (pip_env)
             result = subprocess.run(
                 bootstrap_command,
                 capture_output=True,
                 text=True,
-                check=False, # Check return code manually
-                env=current_env,
+                check=False,
+                env=pip_env, # USE CLEANED ENV
                 cwd=tmpdir
             )
 
             if result.returncode != 0:
-                # Updated error message formatting
                 error_message = (
-                    f"get-pip.py script execution failed with return code {result.returncode}.\n"
-                    f"Command: {' '.join(bootstrap_command)}\n"
-                    f"Stdout:\n{result.stdout}\n"
-                    f"Stderr:\n{result.stderr}"
+                    f"get-pip.py script execution failed with return code {result.returncode}.\\n"
+                    f"Command: {' '.join(bootstrap_command)}\\n"
+                    f"Stdout:\\n{result.stdout}\\n"
+                    f"Stderr:\\n{result.stderr}"
                 )
                 print_failure(error_message)
 
             logger.info("get-pip.py executed successfully.")
-            logger.debug(f"get-pip.py stdout:\n{result.stdout}")
+            logger.debug(f"get-pip.py stdout:\\n{result.stdout}")
             if result.stderr:
-                logger.warning(f"get-pip.py stderr:\n{result.stderr}")
+                logger.warning(f"get-pip.py stderr:\\n{result.stderr}")
 
-        # Verify pip installation again after bootstrap
         print_step("Verifying pip installation after bootstrap...")
         try:
             check_command = [python_exe_path, "-m", "pip", "--version"]
             logger.debug(f"Running post-bootstrap pip check command: {' '.join(check_command)}")
+            # Use the modified CLEAN environment (pip_env)
             result = subprocess.run(
                 check_command,
                 capture_output=True,
                 text=True,
-                check=True, # Check=True now
-                env=current_env
+                check=True,
+                env=pip_env # USE CLEANED ENV
             )
             logger.info(f"Pip verification successful: {result.stdout.strip()}")
             print_success("Pip bootstrap completed successfully.")
@@ -327,12 +418,11 @@ def bootstrap_pip_macos(python_exe_path: str):
              logger.error(error_message)
              raise PipError(error_message)
         except subprocess.CalledProcessError as e:
-            # Updated error message formatting
              error_message = (
-                 f"Verification check 'pip --version' failed after bootstrap (Return Code: {e.returncode}).\n"
-                 f"Command: {' '.join(check_command)}\n"
-                 f"Stdout:\n{e.stdout}\n"
-                 f"Stderr:\n{e.stderr}"
+                 f"Verification check 'pip --version' failed after bootstrap (Return Code: {e.returncode}).\\n"
+                 f"Command: {' '.join(check_command)}\\n"
+                 f"Stdout:\\n{e.stdout}\\n"
+                 f"Stderr:\\n{e.stderr}"
              )
              logger.error(error_message)
              raise PipError(error_message)

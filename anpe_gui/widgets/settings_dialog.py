@@ -2275,6 +2275,7 @@ class SettingsDialog(QDialog):
 
         self.nav_list = QListWidget()
         self.nav_list.setFixedWidth(180) # Adjust width as needed
+        self.nav_list.setIconSize(QSize(16, 16)) # <<< SET ICON SIZE
         self.nav_list.setStyleSheet(f"""
             QListWidget {{
                 background-color: #f0f0f0;
