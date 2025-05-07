@@ -4,23 +4,21 @@
 
 **The user-friendly way to extract noun phrases!**
 
-ANPE GUI provides an intuitive graphical interface for the powerful [ANPE (Another Noun Phrase Extractor)](https://github.com/rcverse/another-noun-phrase-extractor) Python library. It's designed to empower researchers, students, analysts, and anyone needing to extract noun phrases from text—**no coding required**.
+ANPE GUI provides an intuitive graphical interface for the powerful [ANPE (Another Noun Phrase Extractor)](https://github.com/rcverse/another-noun-phrase-extractor) Python library. It provides a user-friendly way to extract noun phrases from text—**no coding required**.
 
-This application bundles all necessary components and guides you through model setup, offering a standalone experience primarily for **Windows**. macOS support is planned for a future release.
 
 ---
+
 
 ## ✨ Features
 
 ANPE GUI packs a range of features to streamline your noun phrase extraction workflow:
 
-*   **🖥️ Intuitive Interface:** A clean, tabbed layout (Input/Output) guides you effortlessly.
-*   **✍️ Flexible Input:** Paste text directly or process single/multiple `.txt` files via familiar file dialogs.
+*   **✍️ Flexible Input:** Paste text directly or process single/multiple `.txt` files.
 *   **⚙️ Granular Control:** Configure extraction options like including nested phrases, adding metadata (source filename), and handling sentence boundaries.
 *   **🔍 Powerful Filtering:** Refine results by filtering phrases based on word count (min/max length) or specific grammatical structures (e.g., *Determiner*, *Compound*, *Possessive*).
-*   **📊 Clear Results View:** Displays extracted phrases in a structured, hierarchical tree, revealing relationships between nested phrases.
-*   **✨ Detached Viewer:** Pop out the results into a separate, resizable window for focused analysis or comparison.
-*   **💾 Versatile Export:** Save your extracted noun phrases to user-friendly formats: plain text (`.txt`), comma-separated values (`.csv`), or structured data (`.json`).
+*   **📊 Clear Results View:** Displays extracted phrases in a structured, hierarchical tree, revealing relationships between nested phrases. You may also pop out the results into a separate, resizable window for focused analysis or comparison.
+*   **💾 Versatile Export:** Save your extracted noun phrases to multiple formats: plain text (`.txt`), comma-separated values (`.csv`), or structured data (`.json`).
 *   **📚 Easy Model Management:** Install, uninstall, and manage required spaCy and Benepar language models directly within the app via Settings (internet connection needed).
 *   **🔄 Core Library Updates:** Check for and install updates to the underlying ANPE extraction engine with a single click in Settings.
 *   **📜 Detailed Logging:** A toggleable log panel (accessible from the status bar) provides insights into the extraction process and aids in troubleshooting.
@@ -60,14 +58,14 @@ Getting ANPE GUI running is simple:
 
 1.  Open ANPE GUI and go to the **Input** tab.
 2.  Choose how to add your text:
-    *   **Paste Text:** Copy your text and paste it into the large text area.
     *   **Add Files:** Click "Add Files..." or "Add Directory..." to select one or more `.txt` files.
+    *   **Paste Text:** Copy your text and paste it into the large text area.
 3.  Adjust **Configuration** options in the right-hand panel as needed (e.g., check "Include nested phrases", set length filters).
 4.  Click the **Process** button. You can monitor progress in the status bar at the bottom.
 5.  Navigate to the **Output** tab. The extracted noun phrases will appear in the tree view. If you processed multiple files, use the dropdown menu at the top to switch between file results.
 6.  Click the **Export** button to save the currently viewed results. Choose your desired format (`.txt`, `.csv`, `.json`) and save location.
 
-For a more detailed exploration of all features, please refer to the built-in **Help Guide**. You can access it via the menu (`Help > Show Help`) or by pressing the `F1` key.
+For a more detailed exploration of all features, please refer to the built-in **Help Guide**.
 
 ---
 

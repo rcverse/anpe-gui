@@ -153,7 +153,7 @@ pyinstaller ANPE_Uninstaller.spec
 
 ### macOS (Experimental)
 
-macOS support appears to be under development. Building likely involves `main_macos.py` and potentially custom scripts or modifications to the `.spec` files. Consult specific macOS build instructions if available, or analyze `main_macos.py` and related scripts (`debug_macos_*.sh`).
+macOS support is under development. Building likely involves `main_macos.py` and potentially custom scripts or modifications to the `.spec` files. Consult specific macOS build instructions if available, or analyze `main_macos.py` and related scripts (`debug_macos_*.sh`).
 
 ---
 
