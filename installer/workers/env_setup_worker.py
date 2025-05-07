@@ -50,7 +50,7 @@ class EnvironmentSetupWorker(QObject):
             from installer.installer_core import (
                 unpack_python, find_python_executable, enable_site_packages,
                 bootstrap_pip, run_pip_install, copy_app_code, 
-                copy_bundled_executables, copy_icon_file # Added copy_icon_file
+                copy_bundled_executables, copy_icon_file, install_required_packages # Added install_required_packages
             )
 
             # Set all tasks to pending initially
@@ -105,21 +105,9 @@ class EnvironmentSetupWorker(QObject):
             self.task_status_update.emit(self._current_task, TaskStatus.PROCESSING)
             self.status_update.emit("Installing required packages...")
 
-            # Define dependencies (Ensure this list matches needs of ANPE.exe)
-            required_packages = [
-                "PyQt6", # Keep if needed by ANPE.exe runtime
-                "spacy",
-                "benepar",
-                "anpe", # Assuming this is the core package name
-                "pyshortcuts", # Needed post-install by setup_windows.pyw?
-                "pywin32", # Common Windows dependency
-                # "requests", # Example if needed
-            ]
-            total_packages = len(required_packages)
-            for i, package in enumerate(required_packages):
-                self.status_update.emit(f"Installing {package} ({i+1}/{total_packages})...")
-                run_pip_install(python_exe, package)
-                self.log_update.emit(f"Installed {package}.")
+            # Call the new function from installer_core to handle package installation
+            install_required_packages(python_exe, self._install_path)
+            self.log_update.emit("Required packages installed via installer_core.")
 
             self.task_status_update.emit(self._current_task, TaskStatus.COMPLETED)
             self._completed_tasks.add(self._current_task)

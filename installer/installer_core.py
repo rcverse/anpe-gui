@@ -29,8 +29,8 @@ except ImportError:
 # --- Constants ---
 PYTHON_DIR_NAME = "python"
 APP_CODE_DIR_NAME = "anpe_gui" # Target directory name in install location
-# Source path for anpe_gui relative to _MEIPASS root (needs .. from installer base)
-APP_SOURCE_FOLDER_NAME = "../assets/anpe_gui"
+# Source path for anpe_gui relative to _MEIPASS root
+APP_SOURCE_FOLDER_NAME = "../assets/anpe_gui"  # Changed to match actual MEIPASS structure where files are in assets/
 GET_PIP_URL = "https://bootstrap.pypa.io/get-pip.py"
 # Add constant for docs directory
 DOCS_DIR_NAME = "docs"
@@ -268,6 +268,42 @@ def run_pip_install(python_exe: str, package: str):
     except Exception as e:
          print_failure(f"An unexpected error occurred while running pip for {package}: {e}")
 
+def install_required_packages(python_exe: str, install_base_path: str):
+    """Reads requirements.txt and installs all specified packages."""
+    print_step("Installing required packages from requirements file...")
+    requirements_filename = "windows_requirements.txt"
+    required_packages = []
+    try:
+        # find_and_get_resource_path expects the path relative to the installer dir.
+        # If this script (installer_core.py) is in the installer dir,
+        # then windows_requirements.txt should also be in the installer dir
+        # or a subdirectory accessible via a relative path from it.
+        # Assuming windows_requirements.txt is located alongside installer_core.py or in a known relative path.
+        requirements_path_str = find_and_get_resource_path(requirements_filename) # Path relative to installer module
+        requirements_path = Path(requirements_path_str)
+        
+        logger.info(f"Reading requirements from {requirements_path}...")
+        lines = requirements_path.read_text(encoding='utf-8').splitlines()
+        for line in lines:
+            stripped_line = line.strip()
+            if stripped_line and not stripped_line.startswith('#'):
+                required_packages.append(stripped_line)
+        logger.info(f"Found {len(required_packages)} packages to install: {required_packages}")
+        if not required_packages:
+             print_failure(f"No packages found in {requirements_filename}. Installation cannot proceed.")
+
+    except FileNotFoundError:
+        # This will be caught by find_and_get_resource_path if file not found.
+        # Added specific check for clarity and to ensure print_failure is called directly.
+        print_failure(f"Could not find the requirements file: {requirements_filename}. Ensure it is bundled correctly relative to the installer module.")
+    except Exception as e:
+        print_failure(f"Failed to read or parse {requirements_filename}: {e}")
+
+    # Install the packages read from the file
+    for package in required_packages:
+        run_pip_install(python_exe, package)
+    print_step("All required packages installed successfully.")
+
 def copy_app_code(target_install_path: str):
     """Copies the application source code (anpe_gui) to the target dir."""
     print_step("Deploying application source code...")
@@ -391,32 +427,7 @@ def main(install_path: str):
     run_pip_install(python_exe, "--upgrade pip")
 
     # 6. Install packages from requirements file
-    requirements_filename = "windows_requirements.txt"
-    required_packages = []
-    try:
-        # Use find_and_get_resource_path, assuming the req file is bundled
-        # relative to the installer module's location.
-        requirements_path_str = find_and_get_resource_path(requirements_filename)
-        requirements_path = Path(requirements_path_str)
-        
-        print_step(f"Reading requirements from {requirements_filename}...")
-        lines = requirements_path.read_text(encoding='utf-8').splitlines()
-        for line in lines:
-            stripped_line = line.strip()
-            if stripped_line and not stripped_line.startswith('#'):
-                required_packages.append(stripped_line)
-        logger.info(f"Found {len(required_packages)} packages to install: {required_packages}")
-        if not required_packages:
-             print_failure(f"No packages found in {requirements_filename}. Installation cannot proceed.")
-
-    except FileNotFoundError:
-        print_failure(f"Could not find the requirements file: {requirements_filename}. Make sure it is bundled correctly.")
-    except Exception as e:
-        print_failure(f"Failed to read or parse {requirements_filename}: {e}")
-
-    # Install the packages read from the file
-    for package in required_packages:
-        run_pip_install(python_exe, package)
+    install_required_packages(python_exe, str(install_path_abs))
 
     # 7. Copy application code (anpe_gui source)
     copy_app_code(str(install_path_abs))

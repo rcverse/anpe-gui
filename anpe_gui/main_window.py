@@ -896,10 +896,10 @@ class MainWindow(QMainWindow):
             # --- Validate Preferences Against Installed Models ---
             installed_spacy_models = []
             installed_benepar_models = []
-            if hasattr(self, '_model_status') and self._model_status and 'spacy_models' in self._model_status:
-                installed_spacy_models = self._model_status['spacy_models']
-            if hasattr(self, '_model_status') and self._model_status and 'benepar_models' in self._model_status:
-                installed_benepar_models = self._model_status['benepar_models']
+            if hasattr(self, 'model_status') and self.model_status and 'spacy_models' in self.model_status:
+                installed_spacy_models = self.model_status['spacy_models']
+            if hasattr(self, 'model_status') and self.model_status and 'benepar_models' in self.model_status:
+                installed_benepar_models = self.model_status['benepar_models']
 
             validated_spacy_pref = None # Default to None (auto-detect)
             if spacy_pref != "(Auto-detect)" and spacy_pref in installed_spacy_models:

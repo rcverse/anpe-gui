@@ -47,29 +47,17 @@ bundled_data.append((PYTHON_ZIP_SOURCE, PYTHON_ZIP_TARGET))
 # 2. Application Source Code (anpe_gui) - Use direct tuple
 # PyInstaller typically excludes __pycache__ automatically with dir copy
 bundled_data.append((APP_SOURCE_DIR, APP_TARGET_DIR))
-# Old way using collect_data_files removed:
-# app_files = collect_data_files(APP_SOURCE_DIR, 
-#                                excludes=['**/__pycache__', '**/*.pyc'])
-# bundled_data.extend(app_files)
 
-# 3. Documentation (docs) (REMOVED)
-# doc_files = collect_data_files(DOCS_SOURCE_DIR, 
-#                                destdir=DOCS_TARGET_DIR,
-#                                # Only include specific files if needed, e.g., *.md
-#                                # includes=['*.md']) 
-#                               ) 
-# bundled_data.extend(doc_files) 
-
-# 4. Requirements file
+# 3. Requirements file
 bundled_data.append((REQUIREMENTS_SOURCE, REQUIREMENTS_TARGET))
 
-# 5. Installer packages
+# 4. Installer packages
 # This is essential - add the entire installer folder as a module package
 # It will include views, widgets, etc. all while preserving package structure
 installer_dir = 'installer'
 bundled_data.append((installer_dir, 'installer'))
 
-# 6. Installer Assets (icons, etc. needed by setup_windows.pyw GUI itself)
+# 5. Installer Assets (icons, etc. needed by setup_windows.pyw GUI itself)
 # Explicitly copy allowed files from the source assets folder to the target assets folder root.
 installer_assets_to_bundle = []
 allowed_files = [
@@ -115,10 +103,10 @@ bundled_data.extend(installer_assets_to_bundle)
 # # bundled_data.extend(installer_assets)
 
 
-# 7. Pre-built Launcher (ANPE.exe)
+# 6. Pre-built Launcher (ANPE.exe)
 bundled_data.append((PREBUILT_LAUNCHER_SOURCE, PREBUILT_LAUNCHER_TARGET))
 
-# 8. Pre-built Uninstaller (uninstall.exe)
+# 7. Pre-built Uninstaller (uninstall.exe)
 bundled_data.append((PREBUILT_UNINSTALLER_SOURCE, PREBUILT_UNINSTALLER_TARGET))
 
 # --- Collect PyQt6 ---
@@ -216,6 +204,11 @@ a = Analysis([SCRIPT_FILE],
              win_private_assemblies=False,
              cipher=block_cipher,
              noarchive=False)
+
+# Remove any remaining __pycache__ entries from the TOCs
+a.binaries = [b for b in a.binaries if "__pycache__" not in b[1]]
+a.pure = [p for p in a.pure if "__pycache__" not in p[1]]
+a.datas = [d for d in a.datas if "__pycache__" not in d[1]]
 
 # --- PYZ ---
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)

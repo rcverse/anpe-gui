@@ -104,13 +104,14 @@ class ModelsPage(QWidget):
         # For log dialog
         self.log_dialog = None
         self.log_text = ""
+        self.log_text_edit = None # Will hold the QTextEdit widget instance
         
         # Metadata for manageable models (Updated descriptions and sizes)
         self.manageable_models = [
             {'type': 'spacy', 'alias': 'sm', 'name': SPACY_MODEL_MAP.get('sm'), 'desc': 'Small (~12MB): Fast, lower accuracy.'}, # Added (default)
             {'type': 'spacy', 'alias': 'md', 'name': SPACY_MODEL_MAP.get('md'), 'desc': 'Medium (~40MB): Good balance (default).'}, 
-            {'type': 'spacy', 'alias': 'lg', 'name': SPACY_MODEL_MAP.get('lg'), 'desc': 'Large (~560MB): Best accuracy.'}, 
-            {'type': 'spacy', 'alias': 'trf', 'name': SPACY_MODEL_MAP.get('trf'), 'desc': 'Transformer-based (~430MB): State-of-the-art.'}, 
+            {'type': 'spacy', 'alias': 'lg', 'name': SPACY_MODEL_MAP.get('lg'), 'desc': 'Large (~560MB): Higher accuracy.'}, 
+            {'type': 'spacy', 'alias': 'trf', 'name': SPACY_MODEL_MAP.get('trf'), 'desc': 'Transformer-based (~430MB): Best accuracy.'}, 
             {'type': 'benepar', 'alias': 'default', 'name': BENEPAR_MODEL_MAP.get('default'), 'desc': 'Standard model (~63MB) T5-small based. (default)'}, # Updated Benepar
             {'type': 'benepar', 'alias': 'large', 'name': BENEPAR_MODEL_MAP.get('large'), 'desc': 'Large model (~208 MB) T5-large based. Higher accuracy.'}, # Updated Benepar
         ]
@@ -159,8 +160,9 @@ class ModelsPage(QWidget):
         
         spacy_explanation_label = QLabel(
             "spaCy models handle sentence segmentation and structural analysis. "
-            "Smaller models (e.g., 'sm') are faster but less accurate. Larger models ('lg', 'trf') "
-            "offer higher accuracy but require more resources."
+            "Smaller models (e.g., 'sm') are faster but slightly less accurate. Larger models ('lg', 'trf') "
+            "offer higher accuracy but require more resources. If you are on a CPU-only machine, the transformer model"
+            "may be too slow for practical use."
         )
         spacy_explanation_label.setWordWrap(True)
         spacy_explanation_label.setStyleSheet(explanation_style)
@@ -168,8 +170,8 @@ class ModelsPage(QWidget):
         usage_layout.addRow(spacy_explanation_label) 
         
         benepar_explanation_label = QLabel(
-             "Benepar models perform detailed constituent parsing. The 'large' model generally provides "
-             "higher accuracy but significantly increases processing time and memory usage."
+             "Benepar models handle detailed constituent parsing. The 'large' model generally provides "
+             "higher accuracy but slighlty increases processing time and memory usage."
         )
         benepar_explanation_label.setWordWrap(True)
         benepar_explanation_label.setStyleSheet(explanation_style)
@@ -543,26 +545,24 @@ class ModelsPage(QWidget):
             # Rely on module-level imports
             default_spacy_name = SPACY_MODEL_MAP[DEFAULT_SPACY_ALIAS]
             default_benepar_name = BENEPAR_MODEL_MAP[DEFAULT_BENEPAR_ALIAS]
-            all_defaults_present = (
-                default_spacy_name in installed_spacy_models and
-                default_benepar_name in installed_benepar_models
-            )
+            # NEW: Check if minimum requirements (at least one of each type) are met
+            minimum_requirements_met = bool(installed_spacy_models and installed_benepar_models) # MODIFIED
         except KeyError: # Handle case where default alias might not be in map
             logging.error("Default model alias not found in map during UI update.")
-            all_defaults_present = False
+            minimum_requirements_met = False # MODIFIED
         except Exception as e:
-            logging.error(f"Error determining default model presence: {e}")
-            all_defaults_present = False
+            logging.error(f"Error determining model presence: {e}")
+            minimum_requirements_met = False # MODIFIED
 
         # Check keyboard modifiers for Alt key
         alt_modifier_pressed = bool(QApplication.keyboardModifiers() & Qt.KeyboardModifier.AltModifier)
 
         # Update the install/clean button dynamically
-        if alt_modifier_pressed or all_defaults_present:
+        if alt_modifier_pressed or minimum_requirements_met: # MODIFIED condition
             self.install_clean_button.setText("Clean All")
             self.install_clean_button.setToolTip("Clean all installed ANPE models and resources (spaCy, Benepar).")
             self.install_clean_button.setProperty("danger", True)
-        else: # Models missing and Alt not pressed
+        else: # Models missing (minimum requirements not met) and Alt not pressed
             self.install_clean_button.setText("Install Defaults")
             # Use the names determined above, even if fallback N/A
             # Need to handle potential KeyError if maps didn't load
@@ -1260,17 +1260,25 @@ class ModelsPage(QWidget):
 
     @pyqtSlot(str)
     def _append_log_details(self, message: str):
-        """Appends a message to the log details."""
-        logging.debug(f"ModelsPage._append_log_details received: '{message[:100]}...'") # <<< ADD LOG
-        self.log_text += message + "\n"
-        
-        # If log dialog exists and is visible, update it
-        if self.log_dialog and self.log_dialog.isVisible():
-            self.log_dialog.text_edit.append(message)
-    
+        """Append a message to the log display in the model action log dialog."""
+        self.log_text += message + "\n"  # Append to the primary string buffer
+        if self.log_text_edit: # Check if the QTextEdit widget exists
+            self.log_text_edit.append(message) # Append to the widget for live update
+        else:
+            logging.debug("_append_log_details: log_text_edit (QTextEdit widget) does not exist yet. Message buffered.")
+
+    @pyqtSlot()
+    def _clear_log(self):
+        """Clear the log display in the model action log dialog."""
+        self.log_text = ""  # Clear the primary string buffer
+        if self.log_text_edit: # Check if the QTextEdit widget exists
+            self.log_text_edit.clear()
+        else:
+            logging.debug("_clear_log called but log_text_edit (QTextEdit widget) does not exist yet.")
+
     @pyqtSlot()
     def _show_log_dialog(self):
-        """Shows a dialog with the log details."""
+        """Create and show (or raise) the dialog containing model action logs."""
         # Create dialog if it doesn't exist
         if not self.log_dialog:
             parent_dialog = self.window()
@@ -1281,11 +1289,11 @@ class ModelsPage(QWidget):
             # Create layout
             layout = QVBoxLayout(self.log_dialog)
             
-            # Create text edit
-            self.log_dialog.text_edit = QTextEdit()
-            self.log_dialog.text_edit.setReadOnly(True)
-            self.log_dialog.text_edit.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)
-            self.log_dialog.text_edit.setStyleSheet("""
+            # Create text edit and assign to ModelsPage attribute
+            self.log_text_edit = QTextEdit()
+            self.log_text_edit.setReadOnly(True)
+            self.log_text_edit.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)
+            self.log_text_edit.setStyleSheet("""
                 QTextEdit { 
                     background-color: #f8f8f8; 
                     border: 1px solid #e0e0e0; 
@@ -1297,11 +1305,10 @@ class ModelsPage(QWidget):
             """)
             
             # Set placeholder text
-            self.log_dialog.text_edit.setPlaceholderText("Model install/update details will be displayed here.")
+            self.log_text_edit.setPlaceholderText("Model install/update details will be displayed here.")
             
-            # Add current log text if any
-            if self.log_text:
-                self.log_dialog.text_edit.setText(self.log_text)
+            # Populate with current buffered log text
+            self.log_text_edit.setText(self.log_text)
             
             # Add close button
             close_button = QPushButton("Close") # Changed text
@@ -1315,7 +1322,7 @@ class ModelsPage(QWidget):
             button_layout.addWidget(close_button) # Changed variable name
             
             # Add widgets to layout
-            layout.addWidget(self.log_dialog.text_edit)
+            layout.addWidget(self.log_text_edit) # Add the correct widget
             layout.addLayout(button_layout)
             
             # Position dialog relative to main window
@@ -1368,7 +1375,7 @@ class ModelsPage(QWidget):
                               If None, uses QApplication.keyboardModifiers().
         """
         # Determine default model presence (reusing logic structure)
-        all_defaults_present = False
+        minimum_requirements_met = False # MODIFIED
         default_spacy_name = "N/A"
         default_benepar_name = "N/A"
         if self.model_status:
@@ -1378,13 +1385,10 @@ class ModelsPage(QWidget):
                 installed_spacy = self.model_status.get('spacy_models', [])
                 installed_benepar = self.model_status.get('benepar_models', [])
 
-                all_defaults_present = (
-                    default_spacy_name in installed_spacy and
-                    default_benepar_name in installed_benepar
-                )
+                minimum_requirements_met = bool(installed_spacy and installed_benepar) # MODIFIED
             except Exception as e:
                 logging.error(f"Error determining default model presence for dynamic button: {e}")
-                all_defaults_present = False # Fallback
+                minimum_requirements_met = False # Fallback
 
         # Check keyboard modifiers for Alt key, using hint if provided
         if alt_pressed_hint is not None:
@@ -1395,17 +1399,14 @@ class ModelsPage(QWidget):
             logging.debug(f"_update_dynamic_button_state using global state: {alt_modifier_pressed}")
 
         # Update the install/clean button dynamically
-        if alt_modifier_pressed or all_defaults_present:
+        if alt_modifier_pressed or minimum_requirements_met: # MODIFIED condition
             self.install_clean_button.setText("Clean All")
             self.install_clean_button.setToolTip("Clean all installed ANPE models and resources (spaCy, Benepar).")
             self.install_clean_button.setProperty("danger", True)
         else: # Models missing and Alt not pressed
             self.install_clean_button.setText("Install Defaults")
             # Use the names determined above, even if fallback N/A
-            self.install_clean_button.setToolTip(f"Install required default models:\
-- spaCy: {default_spacy_name}\
-- Benepar: {default_benepar_name}\
-(Hold Alt to Clean All instead)")
+            self.install_clean_button.setToolTip(f"Install required default models:\n- spaCy: {default_spacy_name}\n- Benepar: {default_benepar_name}\n(Hold Alt to Clean All instead)")
             self.install_clean_button.setProperty("danger", False)
             
         # Force style re-evaluation
