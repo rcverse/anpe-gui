@@ -65,7 +65,7 @@ except ImportError as e:
     sys.exit(1)
 
 # --- Constants ---
-APP_NAME = "ANPE GUI"
+APP_NAME = "ANPE"
 # Standard macOS Application Support path
 MACOS_APP_SUPPORT_DIR = Path.home() / "Library" / "Application Support" / APP_NAME
 SETUP_FLAG_FILENAME = ".setup_complete"

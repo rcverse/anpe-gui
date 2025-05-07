@@ -15,7 +15,7 @@ if platform.system() != "Darwin":
     raise RuntimeError("This setup script is for macOS only")
 
 # Application name
-APP_NAME = "ANPE GUI"
+APP_NAME = "ANPE"
 APP_SCRIPT = 'main_macos.py'
 
 # Define required Python archives (match constants in installer_core_macos.py)
@@ -137,8 +137,8 @@ OPTIONS = {
 
 setup_args = dict(
     name=APP_NAME,
-    version="0.1.0",
-    description=f"{APP_NAME}: The user-friendly way to extract noun phrases!",
+    version="1.0.0",
+    description=f"{APP_NAME}: The user-friendly way to extract noun phrases.",
     author="Richard Chen",
     author_email="rcverse6@gmail.com",
     url="https://github.com/rcverse/anpe-gui",
