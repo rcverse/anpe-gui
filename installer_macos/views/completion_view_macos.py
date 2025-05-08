@@ -75,9 +75,10 @@ class CompletionViewWidget(QWidget):
         # --- Main Info Text (Centered) ---
         info_centering_layout = QHBoxLayout()
         info_centering_layout.addStretch(1)
-        self.info_text = QLabel("ANPE GUI is ready to launch!")
+        self.info_text = QLabel("ANPE GUI is ready for using.")
         self.info_text.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.info_text.setWordWrap(True)
+        self.info_text.setWordWrap(False)
+        self.info_text.setMinimumWidth(350)
         self.info_text.setStyleSheet("font-size: 14px; color: #3c3c3c; font-family: 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif; line-height: 140%;")
         info_centering_layout.addWidget(self.info_text)
         info_centering_layout.addStretch(1)
@@ -103,6 +104,30 @@ class CompletionViewWidget(QWidget):
         self.success_container_centering_layout.addStretch(1)
         main_layout.addLayout(self.success_container_centering_layout)
         self.success_container.setVisible(True) # Show by default, hide on error
+
+        # --- Uninstall Info Label (Centered, below success container) ---
+        uninstall_info_centering_layout = QHBoxLayout()
+        uninstall_info_centering_layout.addStretch(1)
+        self.uninstall_info_label = QLabel()
+        self.uninstall_info_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.uninstall_info_label.setWordWrap(True)
+        self.uninstall_info_label.setOpenExternalLinks(False) # No links here
+        self.uninstall_info_label.setStyleSheet("""
+            font-size: 12px; color: #4A4A4A; /* Slightly muted color */
+            font-family: 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
+            background-color: #F3F3F3; /* Subtle background */
+            border: 1px solid #E0E0E0;
+            border-radius: 8px;
+            padding: 10px;
+            line-height: 130%;
+        """)
+        # Set a fixed width to control its appearance within the centered layout
+        self.uninstall_info_label.setFixedWidth(600)
+        uninstall_info_centering_layout.addWidget(self.uninstall_info_label)
+        uninstall_info_centering_layout.addStretch(1)
+        main_layout.addLayout(uninstall_info_centering_layout)
+        main_layout.addSpacing(15) # Added spacing after uninstall_info_label
+        self.uninstall_info_label.setVisible(False) # Hidden by default
 
         # --- Error Highlight Frame (Centered when visible) ---
         self.error_container_centering_layout = QHBoxLayout()
@@ -207,11 +232,22 @@ class CompletionViewWidget(QWidget):
         self._success = success
 
         if success:
-            self.status_title.setText("Setup Complete!")
-            self.info_text.setText("ANPE GUI is ready to launch.")
+            self.status_title.setText("Setup Complete")
+            self.info_text.setText("ANPE GUI is now ready for use.")
             self.success_container.setVisible(True)
             self.error_container.setVisible(False)
             self.log_container.setVisible(False) # Keep log hidden on success
+            
+            # Set and show uninstall info
+            self.uninstall_info_label.setText(
+                "<b>Tips for Uninstall:</b> A utility script named <code>clean_anpe.sh</code> is available in the "
+                "<code>/Extras</code> folder inside the downloaded <code>.dmg</code> file. "
+                "To use it, open the <code>.dmg</code>, scroll down to find the folder and script, then in Terminal, "
+                "type <code>sh </code>, drag the script file into the Terminal window, and press Enter. "
+                "This will help remove the application and its related data."
+            )
+            self.uninstall_info_label.setVisible(True)
+            
             self.final_button.setText("Launch ANPE GUI")
             self.final_button.setObjectName("") # Reset object name for styling
             self.final_button.setStyleSheet(self.final_button.styleSheet()) # Re-apply default style
@@ -221,6 +257,7 @@ class CompletionViewWidget(QWidget):
             self.success_container.setVisible(False)
             self.error_container.setVisible(True)
             self.log_container.setVisible(True) # Show log on error
+            self.uninstall_info_label.setVisible(False) # Hide on error
 
             if error_message:
                 self._error_message = error_message

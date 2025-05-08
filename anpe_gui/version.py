@@ -6,7 +6,7 @@ It should not import any other modules from the package.
 """
 
 # Version of the ANPE GUI package
-__version__ = "1.0.0b"
+__version__ = "1.0.0"
 
 # Function to get version information
 def get_version():

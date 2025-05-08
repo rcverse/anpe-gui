@@ -12,8 +12,8 @@ import logging
 import argparse
 import time
 from pathlib import Path
-from PyQt6.QtWidgets import QApplication, QStackedWidget
-from PyQt6.QtGui import QIcon
+from PyQt6.QtWidgets import QApplication, QStackedWidget, QProgressBar, QTextEdit
+from PyQt6.QtGui import QIcon, QFont
 from PyQt6.QtCore import QThread, QProcess
 
 # --- Add project root to sys.path --- 
@@ -101,8 +101,8 @@ class SetupWizard:
         self._setup_views()
         
         # Configure window
-        self.stacked_widget.setWindowTitle("ANPE GUI First Run Setup")
-        self.stacked_widget.setFixedSize(700, 600)
+        self.stacked_widget.setWindowTitle("ANPE GUI First Run Setup Wizard")
+        self.stacked_widget.setFixedSize(720, 620)
         self.stacked_widget.show()
         
         self.env_worker = None
@@ -122,7 +122,7 @@ class SetupWizard:
         # Set custom welcome text if in debug mode
         if self.debug_mode:
             self.welcome_view.set_welcome_text(
-                "ANPE Setup (Debug Mode)",
+                "ANPE GUI Setup (Debug Mode)",
                 "Running in debug mode. The application will be installed in a local directory."
             )
     

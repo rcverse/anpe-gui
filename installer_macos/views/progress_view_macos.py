@@ -73,9 +73,9 @@ class ProgressViewWidget(QWidget):
 
         explanation_text = ""
         if "Environment" in self._title:
-            explanation_text = "Setting up a dedicated Python environment with required dependencies for ANPE."
+            explanation_text = "Setting up a dedicated Python environment with required dependencies."
         elif "Language Models" in self._title:
-            explanation_text = "Downloading and installing the language processing models needed for text analysis."
+            explanation_text = "Downloading and installing the language models needed for text analysis."
 
         if explanation_text:
             explanation_label = QLabel(explanation_text)
@@ -336,28 +336,87 @@ class ProgressViewWidget(QWidget):
         """Update the status of a task, using provided text."""
         self._task_list.update_task_status(task_id, status, status_text)
 
+    def _simplify_model_name(self, full_model_name: str) -> str:
+        """Simplifies a full model filename like 'en_core_web_sm-3.7.1.tar.gz' to 'en_core_web_sm'."""
+        # Regex to capture the base name, e.g., en_core_web_sm from en_core_web_sm-3.7.1.tar.gz
+        match = re.match(r'^([a-zA-Z0-9_]+(?:-[a-zA-Z0-9_]+)*)', full_model_name)
+        if match:
+            return match.group(1)
+        # Fallback if regex fails
+        if '-' in full_model_name:
+            base_name = full_model_name.split('-', 1)[0]
+            # Avoid returning just 'en' if model is 'en-core-web-sm' etc. by checking length or presence of underscore
+            if len(base_name) > 3 or '_' in base_name: 
+                return base_name
+        if '.' in full_model_name:
+            # Fallback to splitting by dot if hyphen split wasn't satisfactory or applicable
+            return full_model_name.split('.', 1)[0]
+        return full_model_name
+
+    def _clean_model_status(self, status: str) -> Optional[str]:
+        """
+        Cleans model-related status messages to be more user-friendly.
+        Returns a cleaned string if a model pattern is matched, otherwise None.
+        """
+        # Pattern for "Downloading model file en_core_web_sm-3.7.1.tar.gz ..."
+        match_specific_model_download = re.search(r'Downloading model file ([^/\s]+)', status, re.IGNORECASE)
+        if match_specific_model_download:
+            full_model_name = match_specific_model_download.group(1)
+            simplified_name = self._simplify_model_name(full_model_name)
+            progress_match = re.search(r'(\d+%?)', status) # Capture progress percentage
+            progress_str = f" ({progress_match.group(1)})" if progress_match else ""
+            return f"Downloading language model: {simplified_name}{progress_str}"
+
+        # Pattern for generic model download messages like "Downloading [url] to [path]"
+        # Ensure "model" is present to be more specific
+        if "downloading" in status.lower() and "model" in status.lower():
+            progress_match = re.search(r'(\d+%?)', status)
+            progress_str = f" ({progress_match.group(1)})" if progress_match else ""
+            return f"Downloading language models{progress_str}"
+
+        # Pattern for "Extracting archive" or "Extracting model"
+        if "extracting" in status.lower() and ("archive" in status.lower() or "model" in status.lower()):
+            return "Extracting language models"
+
+        return None # No model-specific pattern matched
+
     def handle_status_update(self, status: str):
-        """Handle a status update."""
-        if status.startswith("Executing command:"):
-            status = "Running setup script..."
-        elif "model setup script STDERR:" in status:
+        """Handle a status update by making it more user-friendly."""
+        # Rule 1: Model related statuses (handled by _clean_model_status)
+        cleaned_model_status = self._clean_model_status(status)
+        if cleaned_model_status:
+            self.update_status(cleaned_model_status)
             return
 
-        if "Downloading" in status:
-            status = self._clean_model_status(status)
+        # Rule 2: Hide stderr messages from model setup script from main status
+        if "model setup script STDERR:" in status:
+            # These messages are often too verbose or cryptic for the main status.
+            # They will still appear in the detailed log if logged by the worker.
+            return
+
+        # Rule 3: "Executing command:"
+        if status.startswith("Executing command:"):
+            self.update_status("Running setup script...")
+            return
+            
+        # Rule 4: Common setup messages that might expose paths or be too verbose
+        if "creating virtual environment" in status.lower():
+            self.update_status("Setting up isolated Python environment...")
+            return
+        if "installing python" in status.lower() or "setting up python" in status.lower():
+             self.update_status("Preparing Python runtime...")
+             return
+        if "verifying python installation" in status.lower():
+            self.update_status("Verifying Python setup...")
+            return
+        
+        # Rule 5: Standalone progress percentages
+        if re.fullmatch(r'\s*\d+\s*%?\s*', status.strip()): # Matches "50%" or "50"
+            self.update_status(f"Progress: {status.strip()}")
+            return
+
+        # Fallback: If no specific rule applies, show the original status.
         self.update_status(status)
-
-    def _clean_model_status(self, status: str) -> str:
-        """Clean model status message to make it more user-friendly."""
-        match = re.search(r'Downloading model file ([^/]+)', status)
-        if match:
-            model_name = match.group(1)
-            return f"Downloading language model: {model_name}"
-
-        status = re.sub(r'Downloading [^ ]+ to [^ ]+', 'Downloading language models', status)
-        status = re.sub(r'Extracting archive', 'Extracting language models', status)
-
-        return status
 
     def handle_log_update(self, log_line: str):
         """Handle a log update by appending to the log area."""

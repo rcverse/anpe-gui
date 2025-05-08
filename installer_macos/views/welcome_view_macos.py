@@ -51,7 +51,7 @@ class WelcomeViewWidget(QWidget):
         
         # Store notes text for reuse in the popup
         self._storage_text = (
-            "<b>Storage (~1.8 GB):</b> ANPE uses powerful NLP libraries like spaCy and Benepar. "
+            "<b>Storage (~1 GB):</b> ANPE uses powerful NLP libraries like spaCy and Benepar. "
             "These require large pre-trained models (data files) and depend on frameworks like PyTorch, "
             "which are also substantial in size, leading to the large total footprint."
         )

@@ -23,7 +23,7 @@ try:
     logging.basicConfig(filename=log_filename,
                         level=logging.DEBUG,
                         format='%(asctime)s - %(levelname)s - %(message)s')
-    logging.info(f"ANPE Installer logging initialized. Log file: {log_filename}")
+    logging.info(f"ANPE GUI Installer logging initialized. Log file: {log_filename}")
 except Exception as e:
     # Fallback: print to stderr if logging setup fails
     print(f"Error setting up logging to file '{log_filename if log_filename else 'UNKNOWN'}': {e}", file=sys.stderr)
