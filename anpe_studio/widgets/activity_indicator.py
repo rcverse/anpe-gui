@@ -4,7 +4,7 @@ from PyQt6.QtGui import QPainter, QColor, QBrush, QPen, QRadialGradient
 import math
 
 # Import theme colors
-from anpe_gui.theme import PRIMARY_COLOR, SUCCESS_COLOR, WARNING_COLOR, ERROR_COLOR
+from anpe_studio.theme import PRIMARY_COLOR, SUCCESS_COLOR, WARNING_COLOR, ERROR_COLOR
 
 # --- State Constants ---
 STATE_IDLE = 'idle'

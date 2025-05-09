@@ -12,7 +12,7 @@ from PyQt6.QtCore import QProcess
 # This helps determine if the script starts at all in the .app bundle.
 # Use a unique filename to avoid clashes if multiple attempts are made.
 # We'll use a simple text file write, as even 'logging' might not be configured yet.
-_EARLY_DEBUG_LOG_FILE = f"/tmp/anpe_gui_launcher_debug_{int(time.time())}.log"
+_EARLY_DEBUG_LOG_FILE = f"/tmp/anpe_studio_launcher_debug_{int(time.time())}.log"
 try:
     with open(_EARLY_DEBUG_LOG_FILE, "a") as f_debug:
         f_debug.write(f"--- {time.asctime()}: main_macos.py script started ---\n")
@@ -56,7 +56,7 @@ except ImportError as e:
         app = QApplication(sys.argv)
         msg = QMessageBox()
         msg.setIcon(QMessageBox.Icon.Critical)
-        msg.setWindowTitle("ANPE GUI Launch Error")
+        msg.setWindowTitle("ANPE Studio Launch Error")
         msg.setText("A critical error occurred during launch.\nCould not load required installation components.")
         msg.setDetailedText(f"ImportError: {e}")
         msg.exec()
@@ -65,7 +65,7 @@ except ImportError as e:
     sys.exit(1)
 
 # --- Constants ---
-APP_NAME = "ANPE"
+APP_NAME = "ANPE Studio"
 # Standard macOS Application Support path
 MACOS_APP_SUPPORT_DIR = Path.home() / "Library" / "Application Support" / APP_NAME
 SETUP_FLAG_FILENAME = ".setup_complete"
@@ -96,7 +96,7 @@ def _get_base_install_path() -> Path:
         return MACOS_APP_SUPPORT_DIR
 
 def _get_main_script_path_macos() -> str | None:
-    """Gets the path to the main anpe_gui application script (`anpe_gui/run.py`).
+    """Gets the path to the main anpe_studio application script (`anpe_studio/run.py`).
     Handles running from source and bundled app scenarios.
     """
     if getattr(sys, 'frozen', False):
@@ -118,12 +118,12 @@ def _get_main_script_path_macos() -> str | None:
              logger.error(f"Could not find pythonX.Y library directory under {resources_lib_dir}")
              return None
 
-        main_script = target_python_lib_dir / "anpe_gui" / "run.py"
+        main_script = target_python_lib_dir / "anpe_studio" / "run.py"
         logger.info(f"Running bundled. Main script expected at: {main_script}")
     else:
         # --- Running from Source ---
         script_dir = Path(__file__).parent
-        main_script = script_dir / "anpe_gui" / "run.py"
+        main_script = script_dir / "anpe_studio" / "run.py"
         logger.info(f"Running from source. Main script expected at: {main_script}")
 
     # Check existence before returning
@@ -161,7 +161,7 @@ def show_error_dialog(title, message, detailed_text=""):
 # --- Main Execution Logic ---
 
 if __name__ == "__main__":
-    logger.info("--- ANPE GUI macOS Launcher Started ---")
+    logger.info("--- ANPE Studio macOS Launcher Started ---")
     logger.info(f"Launcher Python: {sys.executable}")
     logger.info(f"Launcher working directory: {os.getcwd()}")
 
@@ -229,10 +229,10 @@ if __name__ == "__main__":
         show_error_dialog("Launch Error", err_msg, detailed_text="Please ensure the application setup completed correctly.")
         sys.exit(1)
 
-    # Get the path to the application's main script (anpe_gui/run.py)
+    # Get the path to the application's main script (anpe_studio/run.py)
     main_app_script = _get_main_script_path_macos()
     if not main_app_script:
-        err_msg = "Cannot launch application: Main script (anpe_gui/run.py) not found."
+        err_msg = "Cannot launch application: Main script (anpe_studio/run.py) not found."
         logger.critical(err_msg)
         show_error_dialog("Launch Error", err_msg)
         sys.exit(1)

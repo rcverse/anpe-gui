@@ -20,7 +20,7 @@ INSTALLER_ICON_FILE = 'installer/assets/app_icon_logo.ico' # Reusing app icon
 
 # --- Paths to items to bundle (Relative to this spec file) ---
 PYTHON_ZIP_SOURCE = 'installer/assets/python-3.12.9-embed-amd64.zip'
-APP_SOURCE_DIR = 'anpe_gui'
+APP_SOURCE_DIR = 'anpe_studio'
 DOCS_SOURCE_DIR = 'docs'
 REQUIREMENTS_SOURCE = 'requirements.txt'
 INSTALLER_ASSETS_SOURCE = 'installer/assets'
@@ -30,7 +30,7 @@ PREBUILT_UNINSTALLER_SOURCE = 'dist/uninstall.exe' # Assumes built uninstall.exe
 # --- Target paths within the bundle ---
 # These must match what installer_core.py expects via get_resource_path
 PYTHON_ZIP_TARGET = 'assets'
-APP_TARGET_DIR = 'assets/anpe_gui' # installer_core copies from assets/anpe_gui
+APP_TARGET_DIR = 'assets/anpe_studio' # installer_core copies from assets/anpe_studio
 DOCS_TARGET_DIR = 'assets/docs' # installer_core copies from assets/docs
 REQUIREMENTS_TARGET = 'assets' # installer_core looks for it in assets
 INSTALLER_ASSETS_TARGET = 'assets' # For installer GUI's own assets (logo, etc.)
@@ -44,7 +44,7 @@ bundled_data = []
 # 1. Embeddable Python
 bundled_data.append((PYTHON_ZIP_SOURCE, PYTHON_ZIP_TARGET))
 
-# 2. Application Source Code (anpe_gui) - Use direct tuple
+# 2. Application Source Code (anpe_studio) - Use direct tuple
 # PyInstaller typically excludes __pycache__ automatically with dir copy
 bundled_data.append((APP_SOURCE_DIR, APP_TARGET_DIR))
 

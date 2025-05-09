@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import pyqtSignal, Qt
 
 # Import theme colors
-from anpe_gui.theme import PRIMARY_COLOR, LIGHT_HOVER_BLUE, TEXT_COLOR, BORDER_COLOR
+from anpe_studio.theme import PRIMARY_COLOR, LIGHT_HOVER_BLUE, TEXT_COLOR, BORDER_COLOR
 
 
 class FileListWidget(QWidget):

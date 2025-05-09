@@ -7,8 +7,8 @@ import ctypes
 from pathlib import Path
 
 # --- Configuration ---
-APP_NAME = "ANPE GUI"
-APP_RUN_SCRIPT = "anpe_gui/run.py" # Relative to install root
+APP_NAME = "ANPE Studio"
+APP_RUN_SCRIPT = "anpe_studio/run.py" # Relative to install root
 PYTHON_DIR_NAME = "python" # Directory containing pythonw.exe
 PYTHON_EXECUTABLE = "pythonw.exe" # Windowed executable
 LAUNCHER_LOG_FILE = "launcher_debug.log"

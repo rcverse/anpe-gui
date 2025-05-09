@@ -111,7 +111,7 @@ class WelcomeViewWidget(QWidget):
         layout.addSpacing(15)
 
         # --- Installation Path (Windows Specific) ---
-        path_label = QLabel("Install ANPE GUI to:")
+        path_label = QLabel("Install ANPE Studio to:")
         path_label.setStyleSheet("font-size: 14px; font-weight: bold; color: #444444; font-family: 'Segoe UI', Arial, sans-serif;")
         layout.addWidget(path_label)
 

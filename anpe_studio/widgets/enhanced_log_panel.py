@@ -13,8 +13,8 @@ import sys      # For Python version
 import importlib.metadata # For package versions
 from datetime import datetime # For timestamp
 import os       # For path operations
-from anpe_gui.theme import get_scroll_bar_style
-from anpe_gui.resource_manager import ResourceManager # Keep for now, might be used elsewhere
+from anpe_studio.theme import get_scroll_bar_style
+from anpe_studio.resource_manager import ResourceManager # Keep for now, might be used elsewhere
 
 class EnhancedLogPanel(QWidget):
     """Enhanced log panel with filtering and copy functionality."""
@@ -178,7 +178,7 @@ class EnhancedLogPanel(QWidget):
             # Prepare log content
             log_content_parts = [
                 "========================================",
-                "        ANPE GUI Log Export",
+                "        ANPE Studio Log Export",
                 "========================================",
                 f"Exported: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
                 "\n--- System Information ---",
@@ -195,7 +195,7 @@ class EnhancedLogPanel(QWidget):
             
             # Suggest filename
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            suggested_filename = f"anpe_gui_log_{timestamp}.log"
+            suggested_filename = f"anpe_studio_log_{timestamp}.log"
             
             # Ask for save location
             save_path, _ = QFileDialog.getSaveFileName(
@@ -241,12 +241,12 @@ class EnhancedLogPanel(QWidget):
             info_parts.append(f"Python Version: {sys.version}")
             info_parts.append(f"Python Executable: {sys.executable}")
             
-            # ANPE GUI Version
+            # ANPE Studio Version
             try:
-                from anpe_gui.version import __version__ as gui_version
-                info_parts.append(f"ANPE GUI Version: {gui_version}")
+                from anpe_studio.version import __version__ as gui_version
+                info_parts.append(f"ANPE Studio Version: {gui_version}")
             except ImportError:
-                info_parts.append("ANPE GUI Version: N/A (Could not import)")
+                info_parts.append("ANPE Studio Version: N/A (Could not import)")
                 
             # ANPE Core Version
             try:

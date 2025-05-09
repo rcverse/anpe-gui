@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import pyqtSignal, Qt
 from typing import List
-from anpe_gui.theme import get_scroll_bar_style
+from anpe_studio.theme import get_scroll_bar_style
 
 
 class StructureFilterWidget(QWidget):

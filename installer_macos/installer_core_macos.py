@@ -136,7 +136,7 @@ def _get_bundled_resource_path_macos(resource_name: str) -> Optional[Path]:
                 return path_in_dev_assets.resolve()
                 
             # 2. Fallback Check: Look relative to project root (for non-installer assets?)
-            # Allows calls like _get_bundled_resource_path_macos('anpe_gui/resources/assets/logo.png') to still work.
+            # Allows calls like _get_bundled_resource_path_macos('anpe_studio/resources/assets/logo.png') to still work.
             path_rel_to_root = project_root / resource_name 
             logger.debug(f"Development mode: Checking relative to root (fallback): {path_rel_to_root}")
             if path_rel_to_root.is_file():

@@ -1,5 +1,5 @@
 """
-ANPE GUI Package
+ANPE Studio Package
 """
 
 # Import version from dedicated module

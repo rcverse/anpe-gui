@@ -1,5 +1,5 @@
 """
-Background workers for ANPE GUI settings dialog operations.
+Background workers for ANPE Studio settings dialog operations.
 """
 
 import sys

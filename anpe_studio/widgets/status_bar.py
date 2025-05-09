@@ -1,4 +1,4 @@
-# anpe_gui/widgets/status_bar.py
+# anpe_studio/widgets/status_bar.py
 from PyQt6.QtWidgets import (QWidget, QHBoxLayout, QProgressBar, 
                              QLabel, QFrame, QSizePolicy)
 from PyQt6.QtCore import Qt, pyqtSignal, pyqtSlot, QTimer, QPropertyAnimation, QEasingCurve, QByteArray

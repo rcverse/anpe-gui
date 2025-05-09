@@ -1,5 +1,5 @@
 """
-Dialog to display the GNU General Public License (GPL) for the ANPE GUI application.
+Dialog to display the GNU General Public License (GPL) for the ANPE Studio application.
 """
 
 from PyQt6.QtWidgets import (
@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtGui import QIcon, QPixmap, QDesktopServices
 from PyQt6.QtCore import Qt, QUrl
-from anpe_gui.theme import PRIMARY_COLOR
+from anpe_studio.theme import PRIMARY_COLOR
 
 class LicenseDialog(QDialog):
     """Dialog window to display the GPL license information."""

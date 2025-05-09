@@ -1,5 +1,5 @@
 """
-Main window implementation for the ANPE GUI application.
+Main window implementation for the ANPE Studio application.
 """
 
 import os
@@ -14,7 +14,7 @@ import subprocess # Added subprocess
 import importlib.metadata # Added importlib.metadata
 
 # Import version from dedicated module
-from anpe_gui.version import __version__ as GUI_VERSION
+from anpe_studio.version import __version__ as GUI_VERSION
 
 # Corrected imports: QCoreApplication moved to QtCore
 from PyQt6.QtCore import Qt, QThreadPool, pyqtSignal, QSize, QTimer, QObject, QThread, pyqtSlot, QPropertyAnimation, QEasingCurve, pyqtProperty, QUrl, QCoreApplication, QSettings, QEvent # Added QSettings and QEvent
@@ -49,13 +49,13 @@ except ImportError:
         def export_to_file(self, *args, **kwargs): pass
 
 
-from anpe_gui.workers import ExtractionWorker, BatchWorker, QtLogHandler
-from anpe_gui.widgets import (FileListWidget, StructureFilterWidget, 
+from anpe_studio.workers import ExtractionWorker, BatchWorker, QtLogHandler
+from anpe_studio.widgets import (FileListWidget, StructureFilterWidget, 
                               StatusBar, EnhancedLogPanel, ResultDisplayWidget) # Ensure StatusBar is imported from widgets
-from anpe_gui.theme import get_stylesheet # Import the function to get the stylesheet
-from anpe_gui.widgets.settings_dialog import SettingsDialog # Import the new dialog
-from anpe_gui.resource_manager import ResourceManager # Added import
-from anpe_gui.workers.status_worker import ModelStatusChecker # IMPORT NEW WORKER
+from anpe_studio.theme import get_stylesheet # Import the function to get the stylesheet
+from anpe_studio.widgets.settings_dialog import SettingsDialog # Import the new dialog
+from anpe_studio.resource_manager import ResourceManager # Added import
+from anpe_studio.workers.status_worker import ModelStatusChecker # IMPORT NEW WORKER
 
 # Helper function to get the base path
 def get_base_path():
@@ -64,12 +64,12 @@ def get_base_path():
         # If the application is run as a bundle/frozen executable, the base path is the directory containing the executable
         base_path = Path(sys.executable).parent
     else:
-        # If run from source, assume main_window.py is in anpe_gui and we need the parent (project root)
+        # If run from source, assume main_window.py is in anpe_studio and we need the parent (project root)
         base_path = Path(__file__).resolve().parent.parent
     return base_path
 
 class MainWindow(QMainWindow):
-    """Main window for the ANPE GUI application."""
+    """Main window for the ANPE Studio application."""
     
     # Status bar styles (remains here for now, could be moved to theme.py later)
     STATUS_BAR_STYLE = f"""
@@ -143,7 +143,7 @@ class MainWindow(QMainWindow):
     def __init__(self, model_status: Dict):
         super().__init__()
         
-        self.setWindowTitle(f"ANPE GUI v{GUI_VERSION}")
+        self.setWindowTitle(f"ANPE Studio v{GUI_VERSION}")
         # Set default size first (Enlarged)
         self.initial_width = 950
         self.initial_height = 900
@@ -153,7 +153,7 @@ class MainWindow(QMainWindow):
         self._center_on_screen()
         
         # Set window icon
-        from anpe_gui.resource_manager import ResourceManager
+        from anpe_studio.resource_manager import ResourceManager
         self.setWindowIcon(ResourceManager.get_icon("app_icon.png"))
         
         # Apply theme stylesheet
@@ -376,7 +376,7 @@ class MainWindow(QMainWindow):
 
     def setup_header(self):
         """Set up the application header with text title and version."""
-        from anpe_gui.resource_manager import ResourceManager
+        from anpe_studio.resource_manager import ResourceManager
         
         header_container = QWidget()
         header_layout = QHBoxLayout(header_container)
@@ -399,14 +399,14 @@ class MainWindow(QMainWindow):
         
         # Main Title: ANPE
         title_label = QLabel()
-        title_label.setText(f'<b style="color:{PRIMARY_COLOR}; font-size: 22pt;">ANPE</b>')
+        title_label.setText(f'<b style="color:{PRIMARY_COLOR}; font-size: 20pt;">ANPE Studio</b>')
         title_layout.addWidget(title_label)
         
         # Subtitle (two lines with version and creator)
         subtitle_label = QLabel()
         subtitle_label.setText(f'''
             <div style="color: #666666; font-size: 9pt; line-height: 0.8; margin-top: 3px;">
-                GUI v{GUI_VERSION} | Core v{anpe_version_str}<br>
+                Studio v{GUI_VERSION} | Core v{anpe_version_str}<br>
                 Created by @rcverse
             </div>
         ''')
@@ -888,7 +888,7 @@ class MainWindow(QMainWindow):
                 logging.warning("Structure filter widget not found/ready during config gathering.")
 
             # --- Read Model Usage Preferences from QSettings ---
-            settings = QSettings("rcverse", "ANPE_GUI") # Use the same org/app name as in ModelsPage
+            settings = QSettings("rcverse", "ANPE_STUDIO") # Use the same org/app name as in ModelsPage
             spacy_pref = settings.value("modelUsage/spacyModel", "(Auto-detect)")
             benepar_pref = settings.value("modelUsage/beneparModel", "(Auto-detect)")
             logging.debug(f"Read raw model usage preferences: spaCy='{spacy_pref}', Benepar='{benepar_pref}'") # Changed log message slightly

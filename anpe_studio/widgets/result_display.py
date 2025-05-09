@@ -20,14 +20,14 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtGui import QColor, QFont, QStandardItemModel, QStandardItem, QIcon, QKeySequence, QShortcut
 from PyQt6.QtCore import Qt, QAbstractItemModel, QModelIndex, QVariant, QSortFilterProxyModel, QRegularExpression, QSize
-from anpe_gui.resource_manager import ResourceManager
+from anpe_studio.resource_manager import ResourceManager
 
 # Attempt relative import first, then absolute
 try:
     from ..theme import get_scroll_bar_style, LIGHT_HOVER_BLUE, PRIMARY_COLOR
 except ImportError:
     try:
-        from anpe_gui.theme import get_scroll_bar_style, LIGHT_HOVER_BLUE, PRIMARY_COLOR
+        from anpe_studio.theme import get_scroll_bar_style, LIGHT_HOVER_BLUE, PRIMARY_COLOR
     except ImportError:
         logging.warning("Could not import theme constants. Styling may be affected.")
         # Provide fallback values if necessary

@@ -92,7 +92,7 @@ class WelcomeViewWidget(QWidget):
         main_layout.addSpacing(5) # Less space after logo
 
         # --- Welcome Title ---
-        title_label = QLabel("Welcome to ANPE GUI Setup")
+        title_label = QLabel("Welcome to ANPE Studio Setup")
         title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title_label.setStyleSheet("font-size: 24px; font-weight: 600; color: #1a1a1a; font-family: 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif;")
         main_layout.addWidget(title_label)
@@ -100,7 +100,7 @@ class WelcomeViewWidget(QWidget):
 
         # --- ANPE Introduction Text ---
         intro_text = QLabel(
-            "ANPE GUI provides a user-friendly interface for extracting noun phrases from text "
+            "ANPE Studio provides a user-friendly interface for extracting noun phrases from text "
             "using the <a href='https://github.com/rcverse/another-noun-phrase-extractor'>ANPE library</a>, "
             "without needing to write any code."
         )
@@ -130,13 +130,13 @@ class WelcomeViewWidget(QWidget):
 
         # Use HTML list for better structure and wrapping
         explanation_body = QLabel(
-            "To run ANPE GUI, we need to set up a few things first:"
+            "To run ANPE Studio, we need to set up a few things first:"
             "<ul>"
             "<li>A dedicated <b>Python environment</b> will be created.</li>"
             "<li>Required <b>language models</b> and dependencies (~1.8 GB) will be downloaded.</li>"
             "</ul>"
             "<p>This process requires an active internet connection and may take <b>several minutes</b> depending on your speed. "
-            "Components will be installed in <code>~/Library/Application Support/ANPE GUI/</code>.</p>"
+            "Components will be installed in <code>~/Library/Application Support/ANPE Studio/</code>.</p>"
         )
         explanation_body.setWordWrap(True)
         explanation_body.setStyleSheet("font-size: 13px; color: #4c4c4c; font-family: 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif; line-height: 150%;")

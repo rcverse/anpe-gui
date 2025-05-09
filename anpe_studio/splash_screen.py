@@ -1,5 +1,5 @@
 """
-Alternative Splash screen for the ANPE GUI application, featuring a centered
+Alternative Splash screen for the ANPE Studio application, featuring a centered
 activity indicator behind a transparent logo.
 """
 
@@ -13,11 +13,11 @@ from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QCoreApplication, QPropertyAnim
 from PyQt6.QtSvg import QSvgRenderer # Added for SVG rendering
 
 # Import necessary components from the project
-from anpe_gui.widgets.activity_indicator import PulsingActivityIndicator, STATE_IDLE, STATE_ACTIVE, STATE_CHECKING, STATE_ERROR, STATE_WARNING, STATE_LOADING # Added STATE_LOADING
-from anpe_gui.theme import PRIMARY_COLOR, SUCCESS_COLOR, WARNING_COLOR, ERROR_COLOR
-from anpe_gui.version import __version__ as gui_version
-from anpe_gui.workers.status_worker import ModelStatusChecker
-from anpe_gui.resource_manager import ResourceManager
+from anpe_studio.widgets.activity_indicator import PulsingActivityIndicator, STATE_IDLE, STATE_ACTIVE, STATE_CHECKING, STATE_ERROR, STATE_WARNING, STATE_LOADING # Added STATE_LOADING
+from anpe_studio.theme import PRIMARY_COLOR, SUCCESS_COLOR, WARNING_COLOR, ERROR_COLOR
+from anpe_studio.version import __version__ as gui_version
+from anpe_studio.workers.status_worker import ModelStatusChecker
+from anpe_studio.resource_manager import ResourceManager
 
 # Attempt to import ANPE core version (still needed for display)
 try:

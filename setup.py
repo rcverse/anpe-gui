@@ -1,7 +1,7 @@
 """
-ANPE GUI Setup Script for py2app
+ANPE Studio Setup Script for py2app
 This script configures py2app to build a standalone macOS app bundle (.app)
-that contains all necessary files for running ANPE GUI on macOS.
+that contains all necessary files for running ANPE Studio on macOS.
 """
 
 import sys
@@ -29,7 +29,7 @@ PBS_ARCHIVE_X86_64 = _PBS_ARCHIVE_TEMPLATE.format(arch="x86_64")
 
 # --- Resource Paths ---
 PATH_TO_INSTALLER_ASSETS = 'installer_assets'
-PATH_TO_ANPE_GUI_ASSETS = 'anpe_gui/resources/assets'
+PATH_TO_ANPE_STUDIO_ASSETS = 'anpe_studio/resources/assets'
 APP_ICON_FILE = os.path.join(PATH_TO_INSTALLER_ASSETS, 'app_icon_mac.icns')
 
 # --- Files from installer_assets to include in Resources/assets ---
@@ -72,7 +72,7 @@ OPTIONS = {
     'packages': [
         'PyQt6',
         'installer_macos',
-        'anpe_gui',
+        'anpe_studio',
         # Add other top-level packages your app directly uses if not automatically found
     ],
     'includes': [
@@ -125,8 +125,8 @@ OPTIONS = {
     'optimize': 2, # 0 for no .pyo files (easier debugging), 1 for .pyo, 2 for .pyo and no .pyc docstrings
     'strip': True,
     'resources': [
-        # Copy contents of anpe_gui/resources/assets/* into Resources/assets/ - REMOVED as py2app bundles package contents
-        # ('assets', glob.glob(os.path.join(PATH_TO_ANPE_GUI_ASSETS, '*'))),
+        # Copy contents of anpe_studio/resources/assets/* into Resources/assets/ - REMOVED as py2app bundles package contents
+        # ('assets', glob.glob(os.path.join(PATH_TO_ANPE_STUDIO_ASSETS, '*'))),
         # Copy specific files from INSTALLER_ASSET_FILES_TO_INCLUDE into Resources/assets/
         # This will place them like: Contents/Resources/assets/cpython-...tar.gz, Contents/Resources/assets/macos_requirements.txt
         ('assets', INSTALLER_ASSET_FILES_TO_INCLUDE)
@@ -154,7 +154,7 @@ if __name__ == '__main__':
 
 # Print instructions for building the app
 print("""
-To build the ANPE GUI app bundle:
+To build the ANPE Studio app bundle:
 
 1. Install py2app if not already installed:
    pip install py2app

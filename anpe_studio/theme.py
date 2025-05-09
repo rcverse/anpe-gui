@@ -1,11 +1,11 @@
 """
-Theme constants and stylesheet definitions for the ANPE GUI application.
+Theme constants and stylesheet definitions for the ANPE Studio application.
 Uses a cohesive blue theme.
 """
 from PyQt6.QtGui import QPalette, QColor
 
 # Import ResourceManager for consistent resource access
-from anpe_gui.resource_manager import ResourceManager
+from anpe_studio.resource_manager import ResourceManager
 
 # --- Color Palette (Simplified Grey/White Style) --- 
 PRIMARY_COLOR = "#005A9C"     # Dark blue for key elements
@@ -607,7 +607,7 @@ def get_stylesheet():
 
 def apply_theme(app):
     """
-    Apply the ANPE GUI theme to the application.
+    Apply the ANPE Studio theme to the application.
     
     Args:
         app: QApplication instance

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-ANPE GUI Setup for macOS
+ANPE Studio Setup for macOS
 
 This is the main entry point for the macOS setup wizard.
-It manages the installation of Python, dependencies, and models for ANPE GUI.
+It manages the installation of Python, dependencies, and models for ANPE Studio.
 """
 
 import sys
@@ -44,7 +44,7 @@ def setup_logging():
     Returns the logger instance.
     """
     # Create log directory in user's Library/Logs
-    log_dir = Path.home() / "Library" / "Logs" / "ANPE GUI"
+    log_dir = Path.home() / "Library" / "Logs" / "ANPE Studio"
     log_dir.mkdir(parents=True, exist_ok=True)
     
     # Use timestamp for unique log file name
@@ -101,7 +101,7 @@ class SetupWizard:
         self._setup_views()
         
         # Configure window
-        self.stacked_widget.setWindowTitle("ANPE GUI First Run Setup Wizard")
+        self.stacked_widget.setWindowTitle("ANPE Studio First Run Setup Wizard")
         self.stacked_widget.setFixedSize(720, 620)
         self.stacked_widget.show()
         
@@ -122,7 +122,7 @@ class SetupWizard:
         # Set custom welcome text if in debug mode
         if self.debug_mode:
             self.welcome_view.set_welcome_text(
-                "ANPE GUI Setup (Debug Mode)",
+                "ANPE Studio Setup (Debug Mode)",
                 "Running in debug mode. The application will be installed in a local directory."
             )
     
@@ -401,7 +401,7 @@ class SetupWizard:
             if not started:
                 logger.error("Failed to start the main application process.")
                 # Optionally show a message box here
-                # QMessageBox.critical(self.stacked_widget, "Launch Error", "Could not launch ANPE GUI.")
+                # QMessageBox.critical(self.stacked_widget, "Launch Error", "Could not launch ANPE Studio.")
             else:
                 logger.info("Main application process launched successfully.")
                 
@@ -429,7 +429,7 @@ def main(target_install_dir: str | None = None, debug: bool | None = None):
     # Determine if args were passed directly or need parsing
     if target_install_dir is None or debug is None:
         # Parse command line arguments if not called directly with values
-        parser = argparse.ArgumentParser(description="ANPE GUI Setup for macOS")
+        parser = argparse.ArgumentParser(description="ANPE Studio Setup for macOS")
         parser.add_argument('--debug', action='store_true', help='Run in debug mode')
         parser.add_argument('--target-install-dir', type=str, required=target_install_dir is None,
                             help='The target base directory for installation')

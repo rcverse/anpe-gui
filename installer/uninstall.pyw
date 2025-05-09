@@ -48,11 +48,11 @@ def get_logo_image(size: Tuple[int, int]) -> Optional[tk.PhotoImage]:
 APP_NAME = "ANPE"
 REGISTRY_KEY_PATH = rf"Software\Microsoft\Windows\CurrentVersion\Uninstall\{APP_NAME}"
 # Additional registry locations that might store ANPE-related settings
-REGISTRY_SETTINGS_PATH = rf"Software\rcverse\ANPE_GUI" # Settings path used by QSettings in the app
+REGISTRY_SETTINGS_PATH = rf"Software\rcverse\ANPE_STUDIO" # Settings path used by QSettings in the app
 REGISTRY_USER_PATHS = [
     REGISTRY_KEY_PATH,           # Main uninstall key
     REGISTRY_SETTINGS_PATH,      # App settings
-    rf"Software\rcverse",        # Parent company key (only if empty after removing ANPE_GUI)
+    rf"Software\rcverse",        # Parent company key (only if empty after removing ANPE_STUDIO)
 ]
 REGISTRY_INSTALL_LOCATION_VALUE = "InstallLocation"
 REGISTRY_SHORTCUT_LOCATION_VALUE = "ShortcutLocation"
@@ -100,7 +100,7 @@ UNINSTALL_LOG_FILE = "uninstall_log.txt"
 
 # Add to constants section at the top
 ANPE_INSTALLED_DIRS = [
-    "anpe_gui",  # Main application code directory
+    "anpe_studio",  # Main application code directory
     "python",    # Python environment directory
 ]
 
@@ -1055,7 +1055,7 @@ class WelcomeFrame(ttk.Frame):
             "uninstall.exe"
         ]
         expected_anpe_dirs = [
-            "anpe_gui",
+            "anpe_studio",
             "python"
         ]
         

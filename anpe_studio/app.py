@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Main entry point for the ANPE GUI application.
+Main entry point for the ANPE Studio application.
 """
 
 import sys
@@ -10,11 +10,11 @@ import logging
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import QTimer, pyqtSlot, QObject, Qt # Added Qt
 from PyQt6.QtGui import QFont # Original import
-from anpe_gui.main_window import MainWindow
-# from anpe_gui.splash_screen import SplashScreen # Original
-from anpe_gui.splash_screen import SplashScreen # USE THE ALTERNATIVE SPLASH
-from anpe_gui.theme import apply_theme
-from anpe_gui.resource_manager import ResourceManager
+from anpe_studio.main_window import MainWindow
+# from anpe_studio.splash_screen import SplashScreen # Original
+from anpe_studio.splash_screen import SplashScreen # USE THE ALTERNATIVE SPLASH
+from anpe_studio.theme import apply_theme
+from anpe_studio.resource_manager import ResourceManager
 
 
 # Variable to hold the main window instance
@@ -33,7 +33,7 @@ def main():
     
     # Create application
     app = QApplication(sys.argv)
-    app.setApplicationName("ANPE GUI")
+    app.setApplicationName("ANPE Studio")
     app.setOrganizationName("ANPE")
     
     # Force Fusion style for consistent look across platforms (especially macOS)

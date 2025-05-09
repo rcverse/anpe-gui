@@ -28,9 +28,9 @@ except ImportError:
 
 # --- Constants ---
 PYTHON_DIR_NAME = "python"
-APP_CODE_DIR_NAME = "anpe_gui" # Target directory name in install location
-# Source path for anpe_gui relative to _MEIPASS root
-APP_SOURCE_FOLDER_NAME = "../assets/anpe_gui"  # Changed to match actual MEIPASS structure where files are in assets/
+APP_CODE_DIR_NAME = "anpe_studio" # Target directory name in install location
+# Source path for anpe_studio relative to _MEIPASS root
+APP_SOURCE_FOLDER_NAME = "../assets/anpe_studio"  # Changed to match actual MEIPASS structure where files are in assets/
 GET_PIP_URL = "https://bootstrap.pypa.io/get-pip.py"
 # Add constant for docs directory
 DOCS_DIR_NAME = "docs"
@@ -305,7 +305,7 @@ def install_required_packages(python_exe: str, install_base_path: str):
     print_step("All required packages installed successfully.")
 
 def copy_app_code(target_install_path: str):
-    """Copies the application source code (anpe_gui) to the target dir."""
+    """Copies the application source code (anpe_studio) to the target dir."""
     print_step("Deploying application source code...")
     try:
         # Source path is now relative to installer dir (needs ..)
@@ -328,7 +328,7 @@ def copy_app_code(target_install_path: str):
             return [f for f in files if f == '__pycache__']
         # --------------------------
         shutil.copytree(source_gui_path, target_gui_path, dirs_exist_ok=False, ignore=ignore_pycache)
-        logger.info("Successfully copied anpe_gui directory.")
+        logger.info("Successfully copied anpe_studio directory.")
         print_step("Application source code deployed successfully.")
 
     except FileNotFoundError as fnf_error:
@@ -429,7 +429,7 @@ def main(install_path: str):
     # 6. Install packages from requirements file
     install_required_packages(python_exe, str(install_path_abs))
 
-    # 7. Copy application code (anpe_gui source)
+    # 7. Copy application code (anpe_studio source)
     copy_app_code(str(install_path_abs))
 
     # 8. Copy bundled executables (ANPE.exe, uninstall.exe)

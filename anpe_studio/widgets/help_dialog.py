@@ -15,8 +15,8 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QUrl, QSize, QCoreApplication
 from PyQt6.QtGui import QDesktopServices, QIcon, QPixmap, QFont, QColor, QTextDocument, QGuiApplication # For opening URLs and painting
 from PyQt6.QtWidgets import QMessageBox # For About box
-from anpe_gui.theme import PRIMARY_COLOR, get_scroll_bar_style, LIGHT_HOVER_BLUE  # Import theme colors and scroll bar style
-from anpe_gui.resource_manager import ResourceManager
+from anpe_studio.theme import PRIMARY_COLOR, get_scroll_bar_style, LIGHT_HOVER_BLUE  # Import theme colors and scroll bar style
+from anpe_studio.resource_manager import ResourceManager
 
 class HelpDialog(QDialog):
     def __init__(self, help_file_path: Path, gui_version: str, core_version: str, parent=None):
@@ -24,7 +24,7 @@ class HelpDialog(QDialog):
         self.help_file_path = help_file_path
         self.gui_version = gui_version
         self.core_version = core_version
-        self.setWindowTitle("ANPE GUI Help")
+        self.setWindowTitle("ANPE Studio Help")
         self.setMinimumSize(800, 700)  # Reduced minimum width
         self.resize(800, 700)  # Reduced default width
         

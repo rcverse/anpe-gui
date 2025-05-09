@@ -5,7 +5,7 @@ from PyInstaller.utils.hooks import collect_data_files
 block_cipher = None
 
 # --- Application Configuration ---
-APP_NAME = 'ANPE'
+APP_NAME = 'ANPE Studio'
 SCRIPT_FILE = 'launcher.py'
 # --- ICON PATH: Update this path if your icon is located elsewhere ---
 ICON_FILE = 'installer/assets/app_icon_logo.ico' 

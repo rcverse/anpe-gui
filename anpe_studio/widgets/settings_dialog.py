@@ -21,11 +21,11 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtGui import QIcon, QPixmap, QTextCursor, QColor, QTransform, QDesktopServices # <<< Added QDesktopServices
 
-from anpe_gui.theme import ERROR_COLOR, PRIMARY_COLOR, get_scroll_bar_style, LIGHT_HOVER_BLUE # Import theme elements
-from anpe_gui.resource_manager import ResourceManager # ADDED THIS IMPORT
-from anpe_gui.widgets.activity_indicator import PulsingActivityIndicator # IMPORT THE INDICATOR
+from anpe_studio.theme import ERROR_COLOR, PRIMARY_COLOR, get_scroll_bar_style, LIGHT_HOVER_BLUE # Import theme elements
+from anpe_studio.resource_manager import ResourceManager # ADDED THIS IMPORT
+from anpe_studio.widgets.activity_indicator import PulsingActivityIndicator # IMPORT THE INDICATOR
 # Import the worker classes from their new location
-from anpe_gui.workers.settings_workers import CoreUpdateWorker, CleanWorker, InstallDefaultsWorker, ModelActionWorker, StatusCheckWorker # <<< ADDED StatusCheckWorker
+from anpe_studio.workers.settings_workers import CoreUpdateWorker, CleanWorker, InstallDefaultsWorker, ModelActionWorker, StatusCheckWorker # <<< ADDED StatusCheckWorker
 
 # Assuming these utilities exist and work as expected
 try:
@@ -75,7 +75,7 @@ class ModelsPage(QWidget):
         super().__init__(parent)
         logging.debug(f"ModelsPage.__init__: Received model_status = {model_status}") # LOGGING
         self.setObjectName("ModelsPage")
-        self.settings = QSettings("rcverse", "ANPE_GUI") # For usage persistence
+        self.settings = QSettings("rcverse", "ANPE_STUDIO") # For usage persistence
         self.model_status = model_status # Store initial status
         self.management_group = None # Initialize attribute
         
@@ -2001,7 +2001,7 @@ class AboutPage(QWidget):
         icon_label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
         # Need ResourceManager - assume it's importable or handle import error
         try:
-             from anpe_gui.resource_manager import ResourceManager
+             from anpe_studio.resource_manager import ResourceManager
              pixmap = ResourceManager.get_pixmap("app_icon.png")
         except ImportError:
              logging.warning("ResourceManager not found, using placeholder icon.")
@@ -2114,7 +2114,7 @@ class AboutPage(QWidget):
             "• <b>spaCy</b> (MIT License)<br>"
             "• <b>Benepar</b> (MIT License)<br>"
             "• <b>NLTK</b> (Apache License 2.0)<br><br>"
-            "We are grateful for the developers of these packages that make ANPE and ANPE GUI possible. "
+            "We are grateful for the developers of these packages that make ANPE and ANPE Studio possible. "
             "Click 'View License' for more details."
         )
         ack_label = QLabel(ack_text)
@@ -2162,7 +2162,7 @@ class AboutPage(QWidget):
         """Show the license dialog."""
         # Need LicenseDialog - assume it's importable or handle error
         try:
-            from anpe_gui.widgets.license_dialog import LicenseDialog
+            from anpe_studio.widgets.license_dialog import LicenseDialog
             from PyQt6.QtWidgets import QApplication # Added import
 
             license_dialog = LicenseDialog(self.window()) # Parent to the main dialog window
@@ -2333,7 +2333,7 @@ class SettingsDialog(QDialog):
         self.core_page = CorePage(self)
         # Pass version info to AboutPage
         try:
-            from anpe_gui.version import __version__ as gui_version
+            from anpe_studio.version import __version__ as gui_version
         except ImportError:
             gui_version = "N/A"
         try:

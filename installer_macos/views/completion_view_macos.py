@@ -75,7 +75,7 @@ class CompletionViewWidget(QWidget):
         # --- Main Info Text (Centered) ---
         info_centering_layout = QHBoxLayout()
         info_centering_layout.addStretch(1)
-        self.info_text = QLabel("ANPE GUI is ready for using.")
+        self.info_text = QLabel("ANPE Studio is ready for using.")
         self.info_text.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.info_text.setWordWrap(False)
         self.info_text.setMinimumWidth(350)
@@ -95,7 +95,7 @@ class CompletionViewWidget(QWidget):
         """)
         success_layout = QVBoxLayout(self.success_container)
         success_layout.setContentsMargins(20, 20, 20, 20)
-        success_message = QLabel("You can now launch ANPE GUI to start extracting noun phrases.")
+        success_message = QLabel("You can now launch ANPE Studio to start extracting noun phrases.")
         success_message.setAlignment(Qt.AlignmentFlag.AlignCenter)
         success_message.setWordWrap(True)
         success_message.setStyleSheet("font-size: 13px; color: #2e7d32; font-family: 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif; background-color: transparent; border: none;")
@@ -206,7 +206,7 @@ class CompletionViewWidget(QWidget):
         button_layout.addStretch(1) # Push buttons to the right
 
         # Final button (Launch or Close)
-        self.final_button = QPushButton("Launch ANPE GUI") # Default to Launch
+        self.final_button = QPushButton("Launch ANPE Studio") # Default to Launch
         self.final_button.setDefault(True)
         self.final_button.setStyleSheet("""
             QPushButton {
@@ -233,7 +233,7 @@ class CompletionViewWidget(QWidget):
 
         if success:
             self.status_title.setText("Setup Complete")
-            self.info_text.setText("ANPE GUI is now ready for use.")
+            self.info_text.setText("ANPE Studio is now ready for use.")
             self.success_container.setVisible(True)
             self.error_container.setVisible(False)
             self.log_container.setVisible(False) # Keep log hidden on success
@@ -248,7 +248,7 @@ class CompletionViewWidget(QWidget):
             )
             self.uninstall_info_label.setVisible(True)
             
-            self.final_button.setText("Launch ANPE GUI")
+            self.final_button.setText("Launch ANPE Studio")
             self.final_button.setObjectName("") # Reset object name for styling
             self.final_button.setStyleSheet(self.final_button.styleSheet()) # Re-apply default style
         else:

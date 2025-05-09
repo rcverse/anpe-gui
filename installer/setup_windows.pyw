@@ -37,20 +37,20 @@ VIEW_ENV_PROGRESS = 1
 VIEW_MODEL_PROGRESS = 2
 VIEW_COMPLETION = 3
 
-# Define a primary color (using value from anpe_gui.theme)
+# Define a primary color (using value from anpe_studio.theme)
 PRIMARY_COLOR = "#005A9C"
 BORDER_RADIUS = 10 # Adjust for desired roundness
 BORDER_THICKNESS = 2 # Adjust for desired thickness
 
 # --- Helper function to read bundled version ---
 def get_bundled_app_version() -> str | None:
-    """Reads the __version__ from the bundled anpe_gui/version.py file."""
+    """Reads the __version__ from the bundled anpe_studio/version.py file."""
     try:
         # Path relative to the installer script location or _MEIPASS root
         # utils.py's get_resource_path handles the _MEIPASS resolution.
-        # This path assumes version.py is at _MEIPASS/assets/anpe_gui/version.py
+        # This path assumes version.py is at _MEIPASS/assets/anpe_studio/version.py
         # and the script is at _MEIPASS/installer/setup_windows.pyw
-        version_file_rel_path = "../assets/anpe_gui/version.py"
+        version_file_rel_path = "../assets/anpe_studio/version.py"
         version_file_abs_path = get_resource_path(version_file_rel_path)
 
         if not os.path.exists(version_file_abs_path):

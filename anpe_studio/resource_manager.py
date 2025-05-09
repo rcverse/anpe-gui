@@ -1,5 +1,5 @@
 """
-Resource management utilities for ANPE GUI.
+Resource management utilities for ANPE Studio.
 
 This module provides a centralized way to access resources relative to the application structure.
 """
