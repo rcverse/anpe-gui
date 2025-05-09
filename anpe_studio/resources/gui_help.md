@@ -1,6 +1,6 @@
-# ANPE GUI Help
+# ANPE Studio Help
 
-Welcome to the ANPE (Another Noun Phrase Extractor) GUI! This application provides a user-friendly interface to the core ANPE library, allowing you to easily extract noun phrases from text without needing to write code.
+Welcome to the ANPE Studio (Another Noun Phrase Extractor)! This application provides a user-friendly interface to the core ANPE library, allowing you to easily extract noun phrases from text without needing to write code.
 
 ## Starting the app
 When you start the app, ANPE will automatically check for required language models in the background. 

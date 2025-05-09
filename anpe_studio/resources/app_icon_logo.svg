@@ -1,32 +1,47 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+<svg width="1024" height="1024" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
   <!-- Definitions for gradients -->
   <defs>
     <linearGradient id="bg_gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#f9f9f9" />
-      <stop offset="100%" stop-color="#f5f5f5" />
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="100%" stop-color="#f1f1f1" />
     </linearGradient>
-    <linearGradient id="text_gradient" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#0073c2" />
+    <linearGradient id="text_gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#318eda" />
       <stop offset="100%" stop-color="#005A9C" />
     </linearGradient>
-    <filter id="shadow" x="-5%" y="-5%" width="110%" height="110%">
-      <feDropShadow dx="0" dy="1" stdDeviation="1" flood-opacity="0.15" />
+    <filter id="neumorphism" x="-50%" y="-50%" width="200%" height="200%">
+      <!-- Base shape for shadows -->
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="blur"/>
+      <!-- Dark shadow (bottom-right) -->
+      <feOffset in="blur" dx="6" dy="6" result="offsetDark"/>
+      <feFlood flood-color="#3d3d3d" flood-opacity="0.25" result="colorDark"/>
+      <feComposite in="colorDark" in2="offsetDark" operator="in" result="shadowDark"/>
+      <!-- Light shadow (top-left) -->
+      <feOffset in="blur" dx="-6" dy="-6" result="offsetLight"/>
+      <feFlood flood-color="#eeeeee" flood-opacity="0.6" result="colorLight"/>
+      <feComposite in="colorLight" in2="offsetLight" operator="in" result="shadowLight"/>
+      <!-- Merge shadows and original graphic -->
+      <feMerge>
+        <feMergeNode in="shadowDark"/>
+        <feMergeNode in="shadowLight"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
     </filter>
   </defs>
   
   <!-- Background with rounded corners -->
-  <rect width="512" height="512" rx="80" fill="url(#bg_gradient)"/> 
+  <rect x="26" y="26" width="460" height="460" rx="90" fill="url(#bg_gradient)"/> 
   
   <!-- Text Group - AN over PE - Symmetrically centered and scaled up -->
-  <g fill="url(#text_gradient)" filter="url(#shadow)" font-family="'Segoe UI Black', 'Arial Black', sans-serif" font-size="230" font-weight="900" text-anchor="middle" dominant-baseline="central" 
+  <g fill="url(#text_gradient)" filter="url(#neumorphism)" font-family="'-apple-system, BlinkMacSystemFont, Segoe UI Black', 'Arial Black', sans-serif" font-size="230" font-weight="900" text-anchor="middle" dominant-baseline="central" 
      transform="translate(256, 256) scale(1.15) translate(-256, -256)">
     <!-- Top Row (Centered around x=256, y adjusted for scale) -->
     <text x="180" y="180">A</text> <!-- Coordinates are relative to pre-transform state -->
     <text x="332" y="180">N</text> 
     
     <!-- Bottom Row (Centered around x=256, y adjusted for scale) -->
-    <text x="180" y="330">P</text> 
+    <text x="184" y="330">P</text> 
     <text x="332" y="330">E</text> 
   </g>
 </svg> 
