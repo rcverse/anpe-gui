@@ -31,10 +31,10 @@
   </defs>
   
   <!-- Background with rounded corners -->
-  <rect x="26" y="26" width="460" height="460" rx="90" fill="url(#bg_gradient)"/> 
+  <!-- <rect x="26" y="26" width="460" height="460" rx="90" fill="url(#bg_gradient)"/> -->
   
   <!-- Text Group - AN over PE - Symmetrically centered and scaled up -->
-  <g fill="url(#text_gradient)" filter="url(#neumorphism)" font-family="'-apple-system, BlinkMacSystemFont, Segoe UI Black', 'Arial Black', sans-serif" font-size="230" font-weight="900" text-anchor="middle" dominant-baseline="central" 
+  <g fill="url(#text_gradient)" font-family="'-apple-system, BlinkMacSystemFont, Segoe UI Black', 'Arial Black', sans-serif" font-size="230" font-weight="900" text-anchor="middle" dominant-baseline="central" 
      transform="translate(256, 256) scale(1.15) translate(-256, -256)">
     <!-- Top Row (Centered around x=256, y adjusted for scale) -->
     <text x="180" y="180">A</text> <!-- Coordinates are relative to pre-transform state -->

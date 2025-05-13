@@ -19,7 +19,7 @@ class ResourceManager:
         Get the full path to a resource file.
         
         Args:
-            resource_name: Name of the resource file (e.g., 'app_icon.png')
+            resource_name: Name of the resource file
             
         Returns:
             Path: Path object to the resource in the 'resources' directory.
@@ -34,7 +34,7 @@ class ResourceManager:
         Get a QIcon for the specified resource file.
         
         Args:
-            icon_name: Name of the icon file (e.g., 'app_icon.png')
+            icon_name: Name of the icon file
             
         Returns:
             QIcon: The loaded icon
@@ -49,7 +49,7 @@ class ResourceManager:
         Get a QPixmap for the specified resource file.
         
         Args:
-            image_name: Name of the image file (e.g., 'app_icon.png')
+            image_name: Name of the image file
             
         Returns:
             QPixmap: The loaded image

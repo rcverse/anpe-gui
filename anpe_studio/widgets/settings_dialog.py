@@ -162,7 +162,7 @@ class ModelsPage(QWidget):
             "spaCy models handle sentence segmentation and structural analysis. "
             "Smaller models (e.g., 'sm') are faster but slightly less accurate. Larger models ('lg', 'trf') "
             "offer higher accuracy but require more resources. If you are on a CPU-only machine, the transformer model"
-            "may be too slow for practical use."
+            " may be too slow for practical use."
         )
         spacy_explanation_label.setWordWrap(True)
         spacy_explanation_label.setStyleSheet(explanation_style)
@@ -2002,7 +2002,7 @@ class AboutPage(QWidget):
         # Need ResourceManager - assume it's importable or handle import error
         try:
              from anpe_studio.resource_manager import ResourceManager
-             pixmap = ResourceManager.get_pixmap("app_icon.png")
+             pixmap = ResourceManager.get_pixmap("app_icon_logo_transparent.png")
         except ImportError:
              logging.warning("ResourceManager not found, using placeholder icon.")
              pixmap = QPixmap(100, 100)
@@ -2020,12 +2020,12 @@ class AboutPage(QWidget):
         title_layout.setSpacing(2) # Reduced spacing between title and subtitle
         # REMOVED: title_layout.addStretch(1) # Let alignment handle vertical position
 
-        title_label = QLabel("ANPE")
+        title_label = QLabel("ANPE Studio")
         title_label.setStyleSheet(f"font-size: 24px; font-weight: bold; color: {PRIMARY_COLOR};")
         # title_label.setAlignment(Qt.AlignmentFlag.AlignBottom) # Let default alignment handle
         title_layout.addWidget(title_label)
 
-        subtitle_label = QLabel("Another Noun Phrase Extractor")
+        subtitle_label = QLabel(" Another Noun Phrase Extractor Studio")
         subtitle_label.setStyleSheet("font-size: 16px; color: #666666;")
         # subtitle_label.setAlignment(Qt.AlignmentFlag.AlignTop) # Let default alignment handle
         title_layout.addWidget(subtitle_label)
@@ -2228,11 +2228,6 @@ class SettingsDialog(QDialog):
 
         # Center the dialog after setup
         self._center_on_screen()
-        
-        # --- Trigger initial refresh after dialog is set up --- 
-        # Use QTimer.singleShot to schedule the refresh slightly after __init__ completes
-        # REMOVED: QTimer.singleShot(50, self.models_page.refresh_status)
-        # NOTE: Initial UI state is now set in ModelsPage.__init__ using the passed model_status
 
         # Install event filter to capture Alt key presses/releases globally within the dialog
         self.installEventFilter(self)

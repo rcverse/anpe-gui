@@ -7,14 +7,14 @@ import os
 import time
 import logging
 from PyQt6.QtWidgets import (QWidget, QApplication, QLabel, QVBoxLayout, 
-                             QHBoxLayout, QFrame, QSizePolicy, QStackedLayout) # Added QFrame, QSizePolicy, QStackedLayout, QHBoxLayout
+                             QHBoxLayout, QFrame, QSizePolicy, QStackedLayout, QProgressBar) # Added QProgressBar
 from PyQt6.QtGui import QPixmap, QPainter, QColor, QFont, QRegion, QPainterPath, QPen
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QCoreApplication, QPropertyAnimation, QEasingCurve, QPoint, QRect, QSize, QObject, pyqtSlot, QRectF, pyqtProperty, QThread # Added QThread
 from PyQt6.QtSvg import QSvgRenderer # Added for SVG rendering
 
 # Import necessary components from the project
 from anpe_studio.widgets.activity_indicator import PulsingActivityIndicator, STATE_IDLE, STATE_ACTIVE, STATE_CHECKING, STATE_ERROR, STATE_WARNING, STATE_LOADING # Added STATE_LOADING
-from anpe_studio.theme import PRIMARY_COLOR, SUCCESS_COLOR, WARNING_COLOR, ERROR_COLOR
+from anpe_studio.theme import PRIMARY_COLOR, SUCCESS_COLOR, WARNING_COLOR, ERROR_COLOR, DISABLED_COLOR # Changed LIGHT_GREY to DISABLED_COLOR
 from anpe_studio.version import __version__ as gui_version
 from anpe_studio.workers.status_worker import ModelStatusChecker
 from anpe_studio.resource_manager import ResourceManager
@@ -73,38 +73,23 @@ class SplashScreen(QWidget): # Changed from QSplashScreen to QWidget for custom 
         self.logo_label = QLabel()
         self.logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         # Load and set the PNG logo pixmap
-        self._load_and_set_logo() 
+        self._load_and_set_logo()
         self.stacked_layout.addWidget(self.logo_label)
+
+        # Progress Bar (Moved out of stack)
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setFixedHeight(8) # Thin progress bar
+        self.progress_bar.setTextVisible(False) # Hide percentage text
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(0)
+        # Set max width - slightly shorter than full width
+        self.progress_bar.setMaximumWidth(self.INDICATOR_SIZE + 5)
+        # Policy: Expanding horizontally, fixed height
+        self.progress_bar.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.progress_bar.setObjectName("SplashScreenProgressBar") # Assign object name
 
         # Explicitly set the logo label as the current widget to ensure it's on top
         self.stacked_layout.setCurrentWidget(self.logo_label)
-
-        # --- Bottom Area (Status Pillar) ---
-        self.status_pillar = QFrame()
-        self.status_pillar.setFixedHeight(self.PILLAR_HEIGHT) # Set fixed height
-        # Constrain width relative to indicator size
-        max_pillar_width = int(self.INDICATOR_SIZE * self.PILLAR_MAX_WIDTH_FACTOR)
-        self.status_pillar.setMaximumWidth(max_pillar_width)
-        self.status_pillar.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed) # Fixed height, max width
-        # Calculate radius for capsule shape
-        pillar_radius = self.PILLAR_HEIGHT // 2
-        self.status_pillar.setStyleSheet(f"""
-            QFrame {{
-                background-color: white;
-                border-radius: {pillar_radius}px; /* Capsule shape */
-            }}
-        """)
-        pillar_layout = QVBoxLayout(self.status_pillar)
-        # Adjust margins for new height/shape
-        pillar_layout.setContentsMargins(pillar_radius, 5, pillar_radius, 5) 
-        pillar_layout.setSpacing(0) # Reduce spacing if needed
-
-        self.status_label = QLabel("Initializing...")
-        self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        # Make font bold and slightly larger
-        self.status_label.setStyleSheet("color: #333; font-size: 12pt; font-weight: bold;") 
-
-        pillar_layout.addWidget(self.status_label)
 
         # --- Assemble Main Layout ---
         # Center the top container horizontally
@@ -112,21 +97,21 @@ class SplashScreen(QWidget): # Changed from QSplashScreen to QWidget for custom 
         h_layout_top.addStretch()
         h_layout_top.addWidget(self.top_container)
         h_layout_top.addStretch()
-        
-        # Center the pillar horizontally
-        h_layout_bottom = QHBoxLayout()
-        h_layout_bottom.addStretch()
-        h_layout_bottom.addWidget(self.status_pillar)
-        h_layout_bottom.addStretch()
-        
-        self.main_layout.addLayout(h_layout_top)
-        # Add specific spacing between logo area and pillar
-        self.main_layout.addSpacing(3) # Reduced from 5
-        self.main_layout.addLayout(h_layout_bottom)
-        self.main_layout.addSpacing(10) # Add some padding below pillar
 
-        # Adjust window size - make width slightly larger than indicator for padding
-        total_height = self.INDICATOR_SIZE + self.PILLAR_HEIGHT + 20 # Indicator + Spacing + Pillar + Spacing
+        # Progress bar layout (stretches removed)
+        h_layout_progress = QHBoxLayout()
+        h_layout_progress.addWidget(self.progress_bar)
+
+        self.main_layout.addLayout(h_layout_top)
+        self.main_layout.addLayout(h_layout_progress)
+        self.main_layout.addSpacing(10) # Add some padding below the progress bar
+
+        # Calculate new height based on top container, progress bar, and spacing
+        progress_bar_height = self.progress_bar.height()
+        spacing_above_progress = 0
+        spacing_below_progress = 10
+        total_height = self.INDICATOR_SIZE + spacing_above_progress + progress_bar_height + spacing_below_progress + 5 # Added extra 5 padding at top maybe?
+
         self.setFixedSize(self.INDICATOR_SIZE + 40, total_height) # Wider padding
 
         # --- Initialization State (Copied from original) ---
@@ -135,8 +120,11 @@ class SplashScreen(QWidget): # Changed from QSplashScreen to QWidget for custom 
         self.final_init_status = None
         self.activity_indicator.checking() # Start in checking state
 
-        # --- Animation Setup (Copied from original) ---
+        # --- Animation Setup (Copied from original for fade) ---
         self._fade_animation = None
+        # --- Animation Setup for Progress Bar ---
+        self._progress_animation = None
+
         self.setWindowOpacity(0.0)
 
         # Center the splash screen
@@ -146,9 +134,9 @@ class SplashScreen(QWidget): # Changed from QSplashScreen to QWidget for custom 
         """Loads the PNG logo and sets it on the label, handling HiDPI."""
         try:
             # Use the standard PNG icon
-            logo_pixmap = ResourceManager.get_pixmap("app_icon.png")
+            logo_pixmap = ResourceManager.get_pixmap("app_icon_logo_transparent.png")
             if logo_pixmap.isNull():
-                 logging.error("Failed to load app_icon.png")
+                 logging.error("Failed to load app_icon_logo_transparent.png")
                  return
 
             # Determine device pixel ratio for high-DPI rendering
@@ -187,21 +175,7 @@ class SplashScreen(QWidget): # Changed from QSplashScreen to QWidget for custom 
         else:
              logging.warning("Could not get primary screen geometry to center splash.")
              # Fallback: center based on available screens? Or just default position.
-             pass 
-
-    # --- Message Handling ---
-    def showMessage(self, message, alignment=None, color=None): # Args ignored, kept for compatibility if needed
-        """Display a message on the status label."""
-        self.status_label.setText(message)
-        # REMOVED: State changes should be handled explicitly in init callbacks
-        # if "success" in message.lower():
-        #     self.activity_indicator.idle() # Use idle (green) for success
-        # elif "fail" in message.lower() or "error" in message.lower():
-        #     self.activity_indicator.error()
-        # else:
-        #     # Keep checking or default to active if needed?
-        #     # Let external calls manage indicator state mostly.
-        #     pass
+             pass
 
     # --- Fade Animations (Copied & Adapted) ---
     def _fade(self, start_value, end_value, duration, on_finish=None):
@@ -262,8 +236,10 @@ class SplashScreen(QWidget): # Changed from QSplashScreen to QWidget for custom 
     # --- Initialization Logic (Copied & Adapted) ---
     def start_initialization(self):
         """Start the background model check using ModelStatusChecker."""
-        self.showMessage("Loading ANPE...")
         self.activity_indicator.loading() # USE NEW LOADING STATE
+        self.progress_bar.setValue(0) # Reset progress bar value
+        self._start_progress_animation() # Start the progress animation
+
         logging.info("Splash: Starting background initialization check...")
         QCoreApplication.processEvents()
 
@@ -303,16 +279,24 @@ class SplashScreen(QWidget): # Changed from QSplashScreen to QWidget for custom 
     def _on_init_success(self, status_dict):
         logging.info(f"Splash: Initialization check successful. Status: {status_dict}")
         self.final_init_status = status_dict
-        self.showMessage("ANPE initialization successful.")
         # self.activity_indicator.idle() # REMOVED: Keep loading animation running on success
+        # If animation is running, let it complete. If not, set to 100.
+        if not (self._progress_animation and self._progress_animation.state() == QPropertyAnimation.State.Running):
+            self.progress_bar.setValue(100)
         self._emit_completion(self.final_init_status)
 
     @pyqtSlot(str)
     def _on_init_error(self, error_message):
         logging.error(f"Splash: Initialization check failed: {error_message}")
+        if self._progress_animation and self._progress_animation.state() == QPropertyAnimation.State.Running:
+            self._progress_animation.stop()
+        self._set_progress_error_style() # Set error style for progress bar
+        # Optionally set value to 100 to fill the bar with error color, or 0, or leave as is.
+        # For now, let's fill it to indicate completion of the (failed) attempt.
+        self.progress_bar.setValue(100)
+
         error_status = {'spacy_models': [], 'benepar_models': [], 'error': error_message}
         self.final_init_status = error_status
-        self.showMessage(f"Initialization failed: {error_message.split(':')[0]}...")
         self.activity_indicator.error() # Switch to red blink on error
         self._emit_completion(self.final_init_status)
 
@@ -331,6 +315,35 @@ class SplashScreen(QWidget): # Changed from QSplashScreen to QWidget for custom 
     # Define the property
     windowOpacity = pyqtProperty(float, getWindowOpacity, setWindowOpacity)
 
+    def _set_progress_error_style(self):
+        """Sets the error style for the progress bar."""
+        radius = self.progress_bar.height() // 2 # Or use fixed 4px if height is problematic
+        self.progress_bar.setStyleSheet(f"""
+            QProgressBar#SplashScreenProgressBar {{
+                background-color: {DISABLED_COLOR};
+                border: none;
+                border-radius: {radius}px;
+                min-height: 8px;
+                max-height: 8px;
+            }}
+            QProgressBar#SplashScreenProgressBar::chunk {{
+                background-color: {ERROR_COLOR};
+                border-radius: {radius}px;
+                margin: 0px;
+            }}
+        """)
+
+    def _start_progress_animation(self, duration=2500):
+        """Starts the progress bar animation."""
+        if self._progress_animation and self._progress_animation.state() == QPropertyAnimation.State.Running:
+            self._progress_animation.stop()
+
+        self._progress_animation = QPropertyAnimation(self.progress_bar, b"value", self)
+        self._progress_animation.setDuration(duration)
+        self._progress_animation.setStartValue(0)
+        self._progress_animation.setEndValue(100)
+        self._progress_animation.setEasingCurve(QEasingCurve.Type.InOutCubic)
+        self._progress_animation.start()
 
 # --- Example Usage (for testing standalone) ---
 if __name__ == '__main__':

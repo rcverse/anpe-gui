@@ -602,7 +602,22 @@ def get_stylesheet():
     }}
     
     /* Larger scrollbars for QTextBrowser */
-    QTextBrowser {textbrowser_scrollbar_style}
+    QTextBrowser {{textbrowser_scrollbar_style}}
+
+    /* Specific style for Splash Screen Progress Bar */
+    QProgressBar#SplashScreenProgressBar {{
+        background-color: {{DISABLED_COLOR}};
+        border: none;
+        border-radius: 4px; /* Fixed radius, as height isn't available here */
+        min-height: 8px; /* Set height */
+        max-height: 8px; /* Set height */
+        text-align: center; /* Keep default alignment just in case */
+    }}
+    QProgressBar#SplashScreenProgressBar::chunk {{
+        background-color: {{PRIMARY_COLOR}};
+        border-radius: 4px; /* Match parent radius */
+        margin: 0px; /* No margin for thin bar */
+    }}
     """
 
 def apply_theme(app):

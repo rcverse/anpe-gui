@@ -11,8 +11,7 @@ from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import QTimer, pyqtSlot, QObject, Qt # Added Qt
 from PyQt6.QtGui import QFont # Original import
 from anpe_studio.main_window import MainWindow
-# from anpe_studio.splash_screen import SplashScreen # Original
-from anpe_studio.splash_screen import SplashScreen # USE THE ALTERNATIVE SPLASH
+from anpe_studio.splash_screen import SplashScreen 
 from anpe_studio.theme import apply_theme
 from anpe_studio.resource_manager import ResourceManager
 

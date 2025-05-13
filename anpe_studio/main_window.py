@@ -154,7 +154,7 @@ class MainWindow(QMainWindow):
         
         # Set window icon
         from anpe_studio.resource_manager import ResourceManager
-        self.setWindowIcon(ResourceManager.get_icon("app_icon.png"))
+        self.setWindowIcon(ResourceManager.get_icon("app_icon.ico"))
         
         # Apply theme stylesheet
         self.setStyleSheet(get_stylesheet())
@@ -391,7 +391,7 @@ class MainWindow(QMainWindow):
 
         # Icon Label (Added)
         icon_label = QLabel()
-        pixmap = ResourceManager.get_pixmap("app_icon.png")
+        pixmap = ResourceManager.get_pixmap("app_icon_logo_transparent.png")
         pixmap = pixmap.scaled(60, 60, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation) # Scaled icon
         icon_label.setPixmap(pixmap)
         icon_label.setFixedSize(60, 60) # Set fixed size for alignment
