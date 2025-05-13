@@ -39,7 +39,15 @@ class ProgressViewWidget(QWidget):
         # Check if the logo file exists
         if os.path.exists(logo_path):
             logo_pixmap = QPixmap(logo_path)
-            logo_label.setPixmap(logo_pixmap.scaled(70, 70, Qt.AspectRatioMode.KeepAspectRatio))
+            # High-DPI support
+            from PyQt6.QtWidgets import QApplication
+            screen = QApplication.primaryScreen()
+            dpr = screen.devicePixelRatio() if screen else 1.0
+            target_size = int(70 * dpr)
+            scaled_pixmap = logo_pixmap.scaled(target_size, target_size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            scaled_pixmap.setDevicePixelRatio(dpr)
+            logo_label.setPixmap(scaled_pixmap)
+            logo_label.setFixedSize(70, 70)
         else:
             # Create a text label as fallback
             logo_label.setText("ANPE")

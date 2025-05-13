@@ -5,7 +5,7 @@
 PyQt6==6.9.0
 
 # Core NLP / ANPE packages
-anpe==0.4.0 
+anpe
 spacy==3.8.5
 benepar==0.2.0
 nltk==3.9.1

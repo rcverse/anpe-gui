@@ -1,6 +1,6 @@
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QCheckBox, QPushButton, QSizePolicy, QSpacerItem, QHBoxLayout, QFrame,
-    QTextEdit, QFileDialog, QMessageBox
+    QTextEdit, QFileDialog, QMessageBox, QApplication
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QPixmap, QFont, QColor, QTextCursor
@@ -47,8 +47,14 @@ class CompletionViewWidget(QWidget):
         logo_path = get_resource_path("assets/app_icon_logo.png")
         if os.path.exists(logo_path):
             pixmap = QPixmap(logo_path)
-            pixmap = pixmap.scaled(60, 60, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
-            logo_label.setPixmap(pixmap)
+            # High-DPI support
+            screen = QApplication.primaryScreen()
+            dpr = screen.devicePixelRatio() if screen else 1.0
+            target_size = int(60 * dpr)
+            scaled_pixmap = pixmap.scaled(target_size, target_size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            scaled_pixmap.setDevicePixelRatio(dpr)
+            logo_label.setPixmap(scaled_pixmap)
+            logo_label.setFixedSize(60, 60)
         header_layout.addWidget(logo_label)
         
         # Status Title

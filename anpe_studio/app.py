@@ -38,9 +38,6 @@ def main():
     # Force Fusion style for consistent look across platforms (especially macOS)
     app.setStyle("Fusion")
     
-    # REMOVED: Initialize resource manager (no longer needed)
-    # ResourceManager.initialize()
-    
     # Adjust default font slightly based on screen DPI
     screen = app.primaryScreen()
     if screen:

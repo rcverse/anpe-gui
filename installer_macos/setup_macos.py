@@ -101,7 +101,7 @@ class SetupWizard:
         self._setup_views()
         
         # Configure window
-        self.stacked_widget.setWindowTitle("ANPE Studio First Run Setup Wizard")
+        self.stacked_widget.setWindowTitle("ANPE Studio Setup Wizard")
         self.stacked_widget.setFixedSize(720, 620)
         self.stacked_widget.show()
         

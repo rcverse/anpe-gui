@@ -80,7 +80,15 @@ class WelcomeViewWidget(QWidget):
                 pixmap = QPixmap(logo_path)
                 if not pixmap.isNull():
                     logger.debug(f"Logo pixmap loaded successfully.")
-                    logo_label.setPixmap(pixmap.scaled(96, 96, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+                    # High-DPI support
+                    from PyQt6.QtWidgets import QApplication
+                    screen = QApplication.primaryScreen()
+                    dpr = screen.devicePixelRatio() if screen else 1.0
+                    target_size = int(96 * dpr)
+                    scaled_pixmap = pixmap.scaled(target_size, target_size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                    scaled_pixmap.setDevicePixelRatio(dpr)
+                    logo_label.setPixmap(scaled_pixmap)
+                    logo_label.setFixedSize(96, 96)
                     logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 else:
                     logger.warning(f"Failed to load logo pixmap from {logo_path}. pixmap.isNull() is True.")

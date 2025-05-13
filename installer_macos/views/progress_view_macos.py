@@ -16,6 +16,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, pyqtSlot, QSize, pyqtSignal
 from PyQt6.QtGui import QPixmap, QFont, QColor
+from PyQt6.QtWidgets import QApplication
 
 from ..widgets.task_list_widget_macos import TaskListWidgetMacOS, TaskStatus
 from ..installer_core_macos import _get_bundled_resource_path_macos
@@ -55,7 +56,14 @@ class ProgressViewWidget(QWidget):
         logo_path_obj = _get_bundled_resource_path_macos("app_icon_logo.png") 
         if logo_path_obj and logo_path_obj.is_file():
             pixmap = QPixmap(str(logo_path_obj))
-            logo_label.setPixmap(pixmap.scaled(64, 64, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+            # High-DPI support
+            screen = QApplication.primaryScreen()
+            dpr = screen.devicePixelRatio() if screen else 1.0
+            target_size = int(64 * dpr)
+            scaled_pixmap = pixmap.scaled(target_size, target_size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            scaled_pixmap.setDevicePixelRatio(dpr)
+            logo_label.setPixmap(scaled_pixmap)
+            logo_label.setFixedSize(64, 64)
         else:
             logo_label.setText("ANPE")
             logo_label.setStyleSheet("font-size: 20px; font-weight: 500; font-family: 'SF Pro Display', 'Helvetica Neue', Arial, sans-serif;")
@@ -353,32 +361,70 @@ class ProgressViewWidget(QWidget):
             return full_model_name.split('.', 1)[0]
         return full_model_name
 
-    def _clean_model_status(self, status: str) -> Optional[str]:
+    def _friendly_status_message(self, status: str) -> Optional[str]:
         """
-        Cleans model-related status messages to be more user-friendly.
-        Returns a cleaned string if a model pattern is matched, otherwise None.
+        Robust mapping for status messages: only show known user-friendly messages,
+        map/suppress technical/log messages, and always map errors.
         """
-        # Pattern for "Downloading model file en_core_web_sm-3.7.1.tar.gz ..."
-        match_specific_model_download = re.search(r'Downloading model file ([^/\s]+)', status, re.IGNORECASE)
-        if match_specific_model_download:
-            full_model_name = match_specific_model_download.group(1)
-            simplified_name = self._simplify_model_name(full_model_name)
-            progress_match = re.search(r'(\d+%?)', status) # Capture progress percentage
-            progress_str = f" ({progress_match.group(1)})" if progress_match else ""
-            return f"Downloading language model: {simplified_name}{progress_str}"
+        s = status.strip()
+        s_lower = s.lower()
 
-        # Pattern for generic model download messages like "Downloading [url] to [path]"
-        # Ensure "model" is present to be more specific
-        if "downloading" in status.lower() and "model" in status.lower():
-            progress_match = re.search(r'(\d+%?)', status)
-            progress_str = f" ({progress_match.group(1)})" if progress_match else ""
-            return f"Downloading language models{progress_str}"
+        # 1. Error messages
+        if s_lower.startswith("error") or any(x in s_lower for x in ["failed", "exception", "traceback"]):
+            return "An error occurred during setup. See details."
 
-        # Pattern for "Extracting archive" or "Extracting model"
-        if "extracting" in status.lower() and ("archive" in status.lower() or "model" in status.lower()):
-            return "Extracting language models"
+        # 2. Downloading models
+        if s_lower.startswith("downloading language model") or "downloading required models" in s_lower:
+            return "Downloading language models..."
 
-        return None # No model-specific pattern matched
+        # 3. Extracting models
+        if s_lower.startswith("extracting language models"):
+            return "Extracting language models..."
+
+        # 4. Suppress technical/log messages
+        technical_patterns = [
+            r"^running command:",
+            r"^executing command:",
+            r"^attempting to download",
+            r"^from alias",
+            r"^/.*",  # absolute file paths
+            r"^found python executable:",
+            r"^standalone python unpacked to:",
+            r"^target installation path:",
+            r"^pip bootstrap check",
+            r"^sync pip command finished",
+            r"^--- stdout ---",
+            r"^--- stderr ---",
+            r"requirements file",
+            r"\.py", r"\.so", r"\.dylib", r"site-packages"
+        ]
+        for pattern in technical_patterns:
+            if re.search(pattern, s_lower):
+                return None
+
+        # 5. Whitelist of known user-friendly messages
+        whitelist = {
+            "validated installation path.",
+            "unpacking python environment...",
+            "locating python executable...",
+            "ensuring pip is available...",
+            "installing required build tools...",
+            "locating requirements file...",
+            "environment setup complete.",
+            "starting language model check...",
+            "checking language models...",
+            "language model setup complete.",
+            "all language models ready.",
+            "installing application dependencies from macos_requirements.txt...",
+            "installing application dependencies...",
+            "pip is ready.",
+            "setup complete.",
+        }
+        if s_lower in whitelist:
+            return s
+
+        # 6. Fallback: suppress anything else
+        return None
 
     def handle_status_update(self, status: str):
         """Handle a status update by making it more user-friendly."""
@@ -488,3 +534,30 @@ class ProgressViewWidget(QWidget):
     def set_status_text(self, text):
         """Set the status text (compatibility)."""
         self.update_status(text) 
+
+    def _clean_model_status(self, status: str) -> Optional[str]:
+        """
+        Cleans model-related status messages to be more user-friendly.
+        Returns a cleaned string if a model pattern is matched, otherwise None.
+        """
+        # Pattern for "Downloading model file en_core_web_sm-3.7.1.tar.gz ..."
+        match_specific_model_download = re.search(r'Downloading model file ([^/\s]+)', status, re.IGNORECASE)
+        if match_specific_model_download:
+            full_model_name = match_specific_model_download.group(1)
+            simplified_name = self._simplify_model_name(full_model_name)
+            progress_match = re.search(r'(\d+%?)', status) # Capture progress percentage
+            progress_str = f" ({progress_match.group(1)})" if progress_match else ""
+            return f"Downloading language model: {simplified_name}{progress_str}"
+
+        # Pattern for generic model download messages like "Downloading [url] to [path]"
+        # Ensure "model" is present to be more specific
+        if "downloading" in status.lower() and "model" in status.lower():
+            progress_match = re.search(r'(\d+%?)', status)
+            progress_str = f" ({progress_match.group(1)})" if progress_match else ""
+            return f"Downloading language models{progress_str}"
+
+        # Pattern for "Extracting archive" or "Extracting model"
+        if "extracting" in status.lower() and ("archive" in status.lower() or "model" in status.lower()):
+            return "Extracting language models"
+
+        return None # No model-specific pattern matched 

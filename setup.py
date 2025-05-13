@@ -15,7 +15,7 @@ if platform.system() != "Darwin":
     raise RuntimeError("This setup script is for macOS only")
 
 # Application name
-APP_NAME = "ANPE"
+APP_NAME = "ANPE Studio"
 APP_SCRIPT = 'main_macos.py'
 
 # Define required Python archives (match constants in installer_core_macos.py)
@@ -60,9 +60,9 @@ OPTIONS = {
         'CFBundleName': APP_NAME,
         'CFBundleDisplayName': APP_NAME,
         'CFBundleGetInfoString': f"{APP_NAME}: The user-friendly way to extract noun phrases!",
-        'CFBundleIdentifier': "com.rcverse.anpe-gui",
-        'CFBundleVersion': "0.1.0",
-        'CFBundleShortVersionString': "0.1.0",
+        'CFBundleIdentifier': "com.rcverse.anpe-studio",
+        'CFBundleVersion': "1.0.0",
+        'CFBundleShortVersionString': "1.0.0",
         'NSHumanReadableCopyright': u"Copyright © 2024, Richard Chen. All rights reserved.",
         'LSMinimumSystemVersion': '11.0',
         'NSPrincipalClass': 'NSApplication',

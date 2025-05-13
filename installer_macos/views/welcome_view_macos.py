@@ -80,11 +80,18 @@ class WelcomeViewWidget(QWidget):
         logo_layout = QHBoxLayout()
         logo_layout.addStretch(1)
         logo_label = QLabel()
-        # Pass only filename
         logo_path_obj = _get_bundled_resource_path_macos('app_icon_logo.png') 
         if logo_path_obj and logo_path_obj.is_file():
             pixmap = QPixmap(str(logo_path_obj))
-            logo_label.setPixmap(pixmap.scaled(80, 80, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+            # High-DPI support
+            from PyQt6.QtWidgets import QApplication
+            screen = QApplication.primaryScreen()
+            dpr = screen.devicePixelRatio() if screen else 1.0
+            target_size = int(80 * dpr)
+            scaled_pixmap = pixmap.scaled(target_size, target_size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            scaled_pixmap.setDevicePixelRatio(dpr)
+            logo_label.setPixmap(scaled_pixmap)
+            logo_label.setFixedSize(80, 80)
         else: logo_label.setText("[Logo]")
         logo_layout.addWidget(logo_label)
         logo_layout.addStretch(1)

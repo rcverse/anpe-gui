@@ -6,7 +6,7 @@ PyQt6==6.9.0
 # Core NLP / ANPE packages (Match macOS versions for consistency)
 spacy==3.8.5
 benepar==0.2.0
-anpe>=1.0.1
+anpe
 nltk==3.9.1
 
 # Utilities

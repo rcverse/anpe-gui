@@ -392,8 +392,14 @@ class MainWindow(QMainWindow):
         # Icon Label (Added)
         icon_label = QLabel()
         pixmap = ResourceManager.get_pixmap("app_icon_logo_transparent.png")
-        pixmap = pixmap.scaled(60, 60, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation) # Scaled icon
-        icon_label.setPixmap(pixmap)
+        # Get device pixel ratio for high-DPI screens
+        screen = QApplication.primaryScreen()
+        dpr = screen.devicePixelRatio() if screen else 1.0
+        target_size = int(60 * dpr)
+        # Scale the pixmap to the correct size for the display
+        scaled_pixmap = pixmap.scaled(target_size, target_size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+        scaled_pixmap.setDevicePixelRatio(dpr)
+        icon_label.setPixmap(scaled_pixmap)
         icon_label.setFixedSize(60, 60) # Set fixed size for alignment
         title_layout.addWidget(icon_label)
         
