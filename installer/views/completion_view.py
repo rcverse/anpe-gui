@@ -157,7 +157,7 @@ class CompletionViewWidget(QWidget):
         # Put reporting links and note on the same line
         links_layout = QHBoxLayout()
         
-        github_link = QLabel('<a href="https://github.com/rcverse/Another-Noun-Phrase-Extractor/issues">GitHub Issue</a>')
+        github_link = QLabel('<a href="https://github.com/rcverse/anpe-studio/issues">GitHub Issue</a>')
         github_link.setOpenExternalLinks(True)
         github_link.setStyleSheet("font-size: 13px; font-family: 'Segoe UI', Arial, sans-serif;")
         links_layout.addWidget(github_link)

@@ -16,7 +16,8 @@ from PyQt6.QtWidgets import (
     QSizePolicy,
     QMainWindow,
     QDialog,
-    QToolButton
+    QToolButton,
+    QLabel
 )
 from PyQt6.QtGui import QColor, QFont, QStandardItemModel, QStandardItem, QIcon, QKeySequence, QShortcut
 from PyQt6.QtCore import Qt, QAbstractItemModel, QModelIndex, QVariant, QSortFilterProxyModel, QRegularExpression, QSize
@@ -337,6 +338,16 @@ class DetachedResultWindow(QMainWindow):
         self.tree_view.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         layout.addWidget(self.tree_view)
         
+        # Add shortcut tip label
+        self.shortcut_tip_label = QLabel("Shortcuts: Expand All (Ctrl + =), Collapse All (Ctrl + -), Focus Search (Ctrl + F)")
+        font = self.shortcut_tip_label.font()
+        font.setPointSize(font.pointSize() - 1) # Slightly smaller font
+        font.setItalic(True)
+        self.shortcut_tip_label.setFont(font)
+        self.shortcut_tip_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        self.shortcut_tip_label.setStyleSheet("color: #555; margin-top: 3px;") # Dim color
+        layout.addWidget(self.shortcut_tip_label)
+        
         # Apply the same styling as the embedded view
         expand_open_url = ResourceManager.get_style_url("expand_open.svg")
         expand_close_url = ResourceManager.get_style_url("expand_close.svg")
@@ -392,11 +403,11 @@ class DetachedResultWindow(QMainWindow):
     def setup_shortcuts(self):
         """Setup keyboard shortcuts for the detached window."""
         # Add keyboard shortcut for expanding all items
-        expand_shortcut = QShortcut(QKeySequence("Ctrl+E"), self)
+        expand_shortcut = QShortcut(QKeySequence(Qt.KeyboardModifier.ControlModifier | Qt.Key.Key_Equal), self)
         expand_shortcut.activated.connect(self.tree_view.expandAll)
         
         # Add keyboard shortcut for collapsing all items
-        collapse_shortcut = QShortcut(QKeySequence("Ctrl+C"), self)
+        collapse_shortcut = QShortcut(QKeySequence(Qt.KeyboardModifier.ControlModifier | Qt.Key.Key_Minus), self)
         collapse_shortcut.activated.connect(self.tree_view.collapseAll)
         
         # Add keyboard shortcut for search focus

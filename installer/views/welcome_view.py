@@ -53,7 +53,7 @@ class WelcomeViewWidget(QWidget):
             "<b>Environment:</b> This installer creates a dedicated, isolated Python environment for ANPE. "
             "This prevents conflicts with other Python installations you might have. "
             "Advanced users comfortable with Python can alternatively clone the "
-            "<a href='https://github.com/rcverse/anpe-gui'>GitHub repository</a> and run "
+            "<a href='https://github.com/rcverse/anpe-studio'>GitHub repository</a> and run "
             "<code>pip install -r requirements.txt</code> in their own environment, potentially saving disk space."
         )
         self._internet_text = (
@@ -228,7 +228,7 @@ class WelcomeViewWidget(QWidget):
         
         env_details = QLabel(
             "• This installer will create a self-contained Python environment and will not interfere with existing Python installations.<br>"
-            "• For those who know Python: You can clone the <a href='https://github.com/rcverse/anpe-gui'>GitHub repository</a> and use it with your own Python installation"
+            "• For those who know Python: You can clone the <a href='https://github.com/rcverse/anpe-studio'>GitHub repository</a> and use it with your own Python installation"
         )
         env_details.setStyleSheet("font-size: 13px; color: #555555; font-family: 'Segoe UI', Arial, sans-serif; line-height: 140%;")
         env_details.setWordWrap(True)

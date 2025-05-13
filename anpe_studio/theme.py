@@ -22,6 +22,7 @@ SUCCESS_COLOR = "#28A745"     # Green for success
 WARNING_COLOR = "#FFC107"     # Yellow for warnings
 INFO_COLOR = "#17A2B8"        # Teal for info
 LIGHT_HOVER_BLUE = "#D6EAF8" # Light blue for hover effects (updated)
+LIGHT_GREY_BACKGROUND = "#f0f0f0" # Light grey for code blocks and other subtle backgrounds
 
 def get_scroll_bar_style(vertical_width=8, horizontal_height=8, handle_min_size=20, border_radius=4):
     """

@@ -2191,7 +2191,7 @@ class AboutPage(QWidget):
         """Open project page in browser."""
         from PyQt6.QtGui import QDesktopServices # Import locally for clarity
         from PyQt6.QtCore import QUrl # Import locally for clarity
-        QDesktopServices.openUrl(QUrl("https://github.com/rcverse/Another-Noun-Phrase-Extractor"))
+        QDesktopServices.openUrl(QUrl("https://github.com/rcverse/anpe-studio"))
 
 
 # --- Main Dialog Class ---

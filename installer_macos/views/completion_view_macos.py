@@ -191,7 +191,7 @@ class CompletionViewWidget(QWidget):
         # --- Feedback Section (Always Visible) ---
         feedback_layout = QHBoxLayout()
         feedback_layout.addStretch(1)
-        feedback_label = ClickableLabel("Feedback is welcome! Report issues or suggest features on <a href=\"https://github.com/rcverse/anpe-gui/issues\">GitHub</a>.")
+        feedback_label = ClickableLabel("Feedback is welcome! Report issues or suggest features on <a href=\"https://github.com/rcverse/anpe-studio/issues\">GitHub</a>.")
         feedback_label.setStyleSheet("font-size: 12px; color: #6c6c6c; font-family: 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;")
         feedback_label.setOpenExternalLinks(True)
         feedback_layout.addWidget(feedback_label)

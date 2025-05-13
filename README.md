@@ -1,36 +1,36 @@
 <div align="center">
-  <img src="./banner.png" alt="ANPE GUI Banner" width="700"/>
+  <img src="./banner.png" alt="ANPE Studio Banner" width="700"/>
 </div>
 
-<h1 align="center">ANPE GUI - Another Noun Phrase Extractor</h1>
+<h1 align="center">ANPE Studio - Another Noun Phrase Extractor</h1>
 
 <p align="center">
   <strong>One-click solution to extract complete English noun phrases</strong>
 </p>
 
 <p align="center">
-  <a href="https://github.com/rcverse/anpe-gui/releases/latest">
+  <a href="https://github.com/rcverse/anpe-studio/releases/latest">
     <img src="https://img.shields.io/badge/Download-Latest-brightgreen.svg" alt="Download Latest Release">
   </a>
   <a href="https://www.gnu.org/licenses/gpl-3.0.en.html">
     <img src="https://img.shields.io/badge/License-GPLv3-blue.svg" alt="License: GPL v3">
   </a>
-  <a href="https://github.com/rcverse/anpe-gui/releases/latest">
-    <img src="https://img.shields.io/github/v/release/rcverse/anpe-gui?label=Release&color=blue" alt="Current Release Version">
+  <a href="https://github.com/rcverse/anpe-studio/releases/latest">
+    <img src="https://img.shields.io/github/v/release/rcverse/anpe-studio?label=Release&color=blue" alt="Current Release Version">
   </a>
   <img src="https://img.shields.io/badge/Python-3.8+-blue.svg" alt="Python 3.9+">
   <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20macOS-lightgrey.svg" alt="Platform: Windows | macOS">
 </p>
 
 <p align="center">
-  No code? No problem. ANPE GUI provides an intuitive graphical interface for the <a href="https://github.com/rcverse/another-noun-phrase-extractor">ANPE (Another Noun Phrase Extractor)</a> Python library. It provides a user-friendly way to extract noun phrases from text—<strong>no coding required</strong>.
+  No code? No problem. ANPE Studio provides an intuitive graphical interface for the <a href="https://github.com/rcverse/another-noun-phrase-extractor">ANPE (Another Noun Phrase Extractor)</a> Python library. It provides a user-friendly way to extract noun phrases from text—<strong>no coding required</strong>.
 </p>
 
 
 
 ## ✨ Features
 
-ANPE GUI packs a range of features:
+ANPE Studio packs a range of features:
 
 * **✍️ Flexible Input:** Paste text directly or process single/multiple `.txt` files.
 * **⚙️ Granular Control:** Configure extraction options like including nested phrases, adding metadata (source filename), and handling sentence boundaries.
@@ -75,31 +75,31 @@ ANPE GUI packs a range of features:
 
 **Important Note on Installation Size:**
 
-ANPE GUI is designed to be a **self-contained** application, meaning it includes its own Python environment and all necessary (and sometimes large) libraries like spaCy, Benepar, and their associated language models (which can involve PyTorch). This ensures that the application works out-of-the-box for everyone, especially users who may not have Python installed or are not familiar with managing Python packages.
+ANPE Studio is designed to be a **self-contained** application, meaning it includes its own Python environment and all necessary (and sometimes large) libraries like spaCy, Benepar, and their associated language models (which can involve PyTorch). This ensures that the application works out-of-the-box for everyone, especially users who may not have Python installed or are not familiar with managing Python packages.
 
 *   **Approximate Size:** Due to these bundled components, the installed application can take up a significant amount of disk space:
     *   **Windows:** Around 1.8 GB
     *   **macOS:** Around 1 GB
-*   **Alternative for Python Users:** If you are comfortable with Python environments and package management, you can avoid this large installation. Instead, clone the [ANPE GUI repository](https://github.com/rcverse/anpe-gui) and run the application directly using `python -m anpe_gui` from the repository's root directory after creating a virtual environment and installing dependencies listed in `requirements.txt` into your own Python environment.
+*   **Alternative for Python Users:** If you are comfortable with Python environments and package management, you can avoid this large installation. Instead, clone the [ANPE Studio repository](https://github.com/rcverse/anpe-studio) and run the application directly using `python -m anpe_studio` from the repository's root directory after creating a virtual environment and installing dependencies listed in `requirements.txt` into your own Python environment.
 
 
-### Download ANPE GUI
-Visit the **[Releases Page](https://github.com/rcverse/anpe-gui/releases)** and download the latest installer for your operating system.
+### Download ANPE Studio
+Visit the **[Releases Page](https://github.com/rcverse/anpe-studio/releases)** and download the latest installer for your operating system.
 
-### Install ANPE GUI
+### Install ANPE Studio
 #### For Windows
    * Run the downloaded `.exe` setup file.
-   * Follow the on-screen prompts. The installer creates a self-contained folder for ANPE GUI (preventing conflicts with other Python tools you might have) and downloads the necessary base language models.
+   * Follow the on-screen prompts. The installer creates a self-contained folder for ANPE Studio (preventing conflicts with other Python tools you might have) and downloads the necessary base language models.
    
 #### For MacOS
    * Run the downloaded `.dmg` file.
-   * Drag the ANPE GUI icon into the application folder.
-   * **Running for the First Time (Unnotarized App):** Since ANPE GUI is not yet notarized by Apple, you will need to grant it permission to run.
+   * Drag the ANPE Studio icon into the application folder.
+   * **Running for the First Time (Unnotarized App):** Since ANPE Studio is not yet notarized by Apple, you will need to grant it permission to run.
       > ⚠️ Note that currently the setup wizard's UI is not compatible with dark mode. Please disable dark mode when running the setup wizard.
-     * After dragging the app to your Applications folder, **right-click (or Ctrl-click)** the ANPE GUI icon and select **'Open'**.
+     * After dragging the app to your Applications folder, **right-click (or Ctrl-click)** the ANPE Studio icon and select **'Open'**.
      * You will likely see a warning message. Click **'Open'** again in the warning dialog to confirm you want to run the application.
-     * *Alternatively, if the above doesn't work, you might need to go to Apple menu > 'System Settings' (or 'System Preferences' on older macOS versions), then 'Privacy & Security'. Scroll down and you should see a message about "ANPE GUI" being blocked. Click the 'Open Anyway' button.*
-   * Start ANPE GUI from Applications. On the first launch, it will guide you through setting up its necessary environment and downloading base models.
+     * *Alternatively, if the above doesn't work, you might need to go to Apple menu > 'System Settings' (or 'System Preferences' on older macOS versions), then 'Privacy & Security'. Scroll down and you should see a message about "ANPE Studio" being blocked. Click the 'Open Anyway' button.*
+   * Start ANPE Studio from Applications. On the first launch, it will guide you through setting up its necessary environment and downloading base models.
 
 ### Uninstall
 #### For Windows
@@ -115,7 +115,7 @@ Visit the **[Releases Page](https://github.com/rcverse/anpe-gui/releases)** and 
 
 ## 💡 Basic Usage Guide
 
-1. Open ANPE GUI and go to the **Input** tab.
+1. Open ANPE Studio and go to the **Input** tab.
 2. Choose how to add your text:
    * **Add Files:** Click "Add Files..." or "Add Directory..." to select one or more `.txt` files.
    * **Paste Text:** Copy your text and paste it into the large text area.
@@ -135,7 +135,7 @@ Encountering issues? Here are a few common solutions:
 * **Model Downloads:** Ensure you have a stable **internet connection** when installing/updating models (during setup or via Settings). Firewalls might sometimes block downloads.
 * **Model Errors:** If extraction fails with model-related errors, try the **Settings > Models > Clean Models** tool to reset them, then try installing again.
 * **Check Logs:** Click the Status Bar at the bottom of the main window to toggle the **Log Panel**. It often contains detailed error messages.
-* **Report Bugs:** If problems persist, please check existing [issues](https://github.com/rcverse/anpe-gui/issues) or [report a new one](https://github.com/rcverse/anpe-gui/issues/new). Include details from the Log Panel if possible!
+* **Report Bugs:** If problems persist, please check existing [issues](https://github.com/rcverse/anpe-studio/issues) or [report a new one](https://github.com/rcverse/anpe-studio/issues/new). Include details from the Log Panel if possible!
 
 
 
@@ -147,7 +147,7 @@ This project is distributed under the GNU General Public License v3.0. See the [
 
 ## 🙌 Acknowledgements
 
-ANPE GUI is made possible by the excellent work of the developers and communities behind the following open-source projects and tools:
+ANPE Studio is made possible by the excellent work of the developers and communities behind the following open-source projects and tools:
 
 ### 🛠️ Core Runtime Libraries
 
@@ -168,14 +168,14 @@ Creating a user-friendly, distributable application relies on these powerful too
 * **[python-build-standalone](https://github.com/astral-sh/python-build-standalone)**: This project by Astral SH provides pre-built, distributable Python versions. I leverage these builds to create a consistent Python environment, particularly for my macOS distributions, simplifying the packaging process.
 * **[create-dmg](https://github.com/create-dmg/create-dmg)**: A shell script to build customizable `.dmg` files for macOS distribution.
 
-I am immensely grateful for the contributions of all these projects to the open-source ecosystem, enabling me to build and share ANPE GUI.
+I am immensely grateful for the contributions of all these projects to the open-source ecosystem, enabling me to build and share ANPE Studio.
 
 
 ## 🎓 Citation
 
-If ANPE GUI aids your research or project work, I kindly request that you cite the core **[ANPE library](https://github.com/rcverse/another-noun-phrase-extractor#citation)** that performs the extraction. Citation details can be found on the ANPE library's repository page.
+If ANPE Studio aids your research or project work, I kindly request that you cite the core **[ANPE library](https://github.com/rcverse/another-noun-phrase-extractor#citation)** that performs the extraction. Citation details can be found on the ANPE library's repository page.
 
 
 ## 💻 Development
 
-* Please see the [**Developer README (docs/DEV_README.md)**](docs/DEV_README.md) for detailed developing-related information.
+* Please see the [**Developer README (/DEV_README.md)**](/DEV_README.md) for detailed developing-related information.

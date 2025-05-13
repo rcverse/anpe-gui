@@ -15,7 +15,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QUrl, QSize, QCoreApplication
 from PyQt6.QtGui import QDesktopServices, QIcon, QPixmap, QFont, QColor, QTextDocument, QGuiApplication # For opening URLs and painting
 from PyQt6.QtWidgets import QMessageBox # For About box
-from anpe_studio.theme import PRIMARY_COLOR, get_scroll_bar_style, LIGHT_HOVER_BLUE  # Import theme colors and scroll bar style
+from anpe_studio.theme import PRIMARY_COLOR, get_scroll_bar_style, LIGHT_HOVER_BLUE, LIGHT_GREY_BACKGROUND  # Import theme colors and scroll bar style
 from anpe_studio.resource_manager import ResourceManager
 
 class HelpDialog(QDialog):
@@ -361,7 +361,7 @@ class HelpDialog(QDialog):
 
     def go_to_project_page(self):
         """Open the project page in a browser."""
-        QDesktopServices.openUrl(QUrl("https://github.com/rcverse/Another-Noun-Phrase-Extractor"))
+        QDesktopServices.openUrl(QUrl("https://github.com/rcverse/anpe-studio"))
 
     def preprocess_markdown(self, content):
         """Pre-process markdown content to improve readability."""
@@ -396,6 +396,11 @@ class HelpDialog(QDialog):
         html = re.sub(r'<button>(.*?)</button>', r'<span class="custom-button">\1</span>', html)
         html = re.sub(r'<option>(.*?)</option>', r'<span class="custom-option">\1</span>', html)
         html = re.sub(r'<format>(.*?)</format>', r'<span class="custom-format">\1</span>', html)
+        
+        # Add similar handling for <q> and <kbd> tags to parse them into spans
+        # This will also respect the spaces inside them as per the markdown file
+        html = re.sub(r'<q>(.*?)</q>', r'<span class="custom-q">\1</span>', html)
+        html = re.sub(r'<kbd>(.*?)</kbd>', r'<span class="custom-kbd">\1</span>', html)
 
         # Convert standard markdown headings (e.g., # Heading -> <h1>Heading</h1>)
         for i in range(6, 0, -1):
@@ -438,98 +443,133 @@ class HelpDialog(QDialog):
 
     def apply_styling(self, html_content):
         """Apply custom styling to HTML content."""
-        # Add CSS styles
-        css = """
+        # Get the primary color from the theme
+        from anpe_studio.theme import PRIMARY_COLOR, LIGHT_HOVER_BLUE, LIGHT_GREY_BACKGROUND
+        
+        # Add CSS styles (restored to full version, with correct single braces for CSS syntax)
+        css = f"""
         <style>
-            body {
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
-                line-height: 1.6;
+            body {{
+                font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+                line-height: 1.6; /* Slightly reduced line height */
                 margin: 0;
                 padding: 0;
                 color: #333; /* Default text color */
-            }
-            h1, h2, h3, h4, h5, h6 {
-                color: #005A9C; /* Heading color */
-                margin-top: 1.2em;
-                margin-bottom: 0.6em;
-                line-height: 1.3;
-                font-weight: bold;
-            }
-            h1 { font-size: 1.8em; }
-            h2 { font-size: 1.5em; border-bottom: 1px solid #eaecef; padding-bottom: 0.3em; }
-            h3 { font-size: 1.3em; }
-            h4 { font-size: 1.1em; margin-top: 1em; margin-bottom: 0.4em; }
-            p { margin: 0.6em 0 0.8em 0; }
-            ul, ol {
-                margin: 0.6em 0;
-                padding-left: 1.5em;  /* Standard list indentation */
-            }
-            li {
-                margin: 0.3em 0;
+                background-color: white; /* Ensure background is white */
+                font-size: 15px; /* Slightly increased base font size */
+            }}
+            h1, h2, h3, h4, h5, h6 {{
+                color: {PRIMARY_COLOR}; /* Use theme primary color for headings */
+                margin-top: 1.5em; /* More space above headings */
+                margin-bottom: 0.7em; /* Space below headings */
+                line-height: 1.4; /* Tighter line height for headings */
+                font-weight: bold; /* Changed from 600 to bold for stronger emphasis */
+            }}
+            h1 {{ font-size: 2.2em; border-bottom: 2px solid #eee; padding-bottom: 0.3em; }}
+            h2 {{ font-size: 1.8em; border-bottom: 1px solid #eee; padding-bottom: 0.3em; }}
+            h3 {{ font-size: 1.5em; }}
+            h4 {{ font-size: 1.2em; color: #444; margin-top: 1.2em; margin-bottom: 0.5em; }}
+            h5, h6 {{ font-size: 1.1em; color: #555; }}
+
+            p {{ 
+                margin: 0.8em 0 1em 0; /* Adjusted paragraph margins */
+                font-size: 15px; /* Ensure paragraphs use the new larger size */
+            }}
+            ul, ol {{
+                margin: 0.8em 0;
+                padding-left: 1.8em; /* Slightly increased list indentation */
+                font-size: 15px; /* Consistent with new paragraph size */
+            }}
+            li {{
+                margin: 0.4em 0; /* More space between list items */
                 list-style-position: outside;
-            }
-            hr {
-                height: 0.15em;
+            }}
+            hr {{
+                height: 1px; /* Thinner horizontal rule */
                 padding: 0;
-                margin: 1.5em 0; /* Increased margin for visual separation */
-                background-color: #e1e4e8;
+                margin: 2em 0; /* More vertical space around hr */
+                background-color: #ddd; /* Lighter color for hr */
                 border: 0;
-            }
-            code {
+            }}
+            code {{
                 font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
-                background-color: #f5f5f5; /* Light grey background for code */
-                color: #333;
-                padding: 2px 5px;
-                border-radius: 4px;
-                font-size: 0.95em;
-            }
-            strong {
-                font-weight: bold;
-            }
-            a {
-                color: #005A9C; /* Link color */
+                background-color: {LIGHT_GREY_BACKGROUND};
+                color: #2d2d2d;
+                padding: 3px 6px;
+                border-radius: 5px;
+                font-size: 0.9em;
+                border: 1px solid #e0e0e0;
+            }}
+            strong {{
+                font-weight: 600;
+            }}
+            a {{
+                color: {PRIMARY_COLOR};
                 text-decoration: none;
-            }
-            a:hover {
+                font-weight: 500;
+            }}
+            a:hover {{
                 text-decoration: underline;
-            }
-            /* Custom tag styles */
-            .custom-button {
+                color: #003f7f;
+            }}
+            
+            .custom-button, .custom-option, .custom-format {{
                 display: inline-block;
-                background-color: #e7f3ff; /* Light blue background */
-                color: #005A9C; /* Dark blue text */
-                font-weight: bold;
-                padding: 4px 10px; /* Further Increased padding */
-                border-radius: 12px; /* Further Rounded corners */
+                padding: 3px 10px;
+                border-radius: 12px;
                 white-space: nowrap;
                 font-style: normal;
-                font-size: 0.95em;
-                line-height: 1.3; /* Ensure line-height doesn't interfere */
-            }
-            .custom-option {
-                display: inline-block;
-                background-color: #f0f0f0; /* Light grey background */
-                color: #333; /* Dark text */
-                font-weight: normal;
-                padding: 4px 10px; /* Further Increased padding */
-                border-radius: 12px; /* Further Rounded corners */
-                white-space: nowrap;
-                font-style: normal;
-                font-size: 0.95em;
-                line-height: 1.3; /* Ensure line-height doesn't interfere */
-            }
-            .custom-format {
-                display: inline-block;
-                background-color: #f0f0f0; /* Light grey background */
-                color: #333; /* Dark text */
-                font-weight: normal;
-                padding: 4px 10px; /* Further Increased padding */
-                border-radius: 12px; /* Further Rounded corners */
-                white-space: nowrap;
+                font-size: 0.92em;
+                line-height: 1.4;
+                margin: 0 2px;
+                vertical-align: baseline;
+                border: 1px solid transparent;
+            }}
+
+            .custom-button {{
+                background-color: #e7f3ff;
+                color: {PRIMARY_COLOR};
+                font-weight: 500;
+                border-color: #cce4ff;
+                font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            }}
+
+            .custom-option {{
+                background-color: #f5f5f5;
+                color: #333;
+                font-weight: 500;
+                border-color: #e0e0e0;
+                font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            }}
+
+            .custom-format {{
+                background-color: #f0f0f0;
+                color: #555;
                 font-style: italic;
-                font-size: 0.95em;
-                line-height: 1.3; /* Ensure line-height doesn't interfere */
-            }
+                font-weight: normal;
+                border-color: #e5e5e5;
+                font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            }}
+
+            .custom-q {{
+                /* Inherits body font and styles by default */
+            }}
+
+            .custom-kbd {{
+                display: inline-block;
+                padding: 2px 6px;
+                border-radius: 4px;
+                white-space: nowrap;
+                font-style: normal;
+                font-size: 0.9em;
+                line-height: 1.4;
+                margin: 0 2px;
+                vertical-align: baseline;
+                background-color: {LIGHT_GREY_BACKGROUND};
+                color: #2d2d2d;
+                border: 1px solid #e0e0e0;
+                font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
+            }}
         </style>
         """
 
