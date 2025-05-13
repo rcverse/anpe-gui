@@ -24,7 +24,7 @@ APP_SOURCE_DIR = 'anpe_studio'
 DOCS_SOURCE_DIR = 'docs'
 REQUIREMENTS_SOURCE = 'requirements.txt'
 INSTALLER_ASSETS_SOURCE = 'installer/assets'
-PREBUILT_LAUNCHER_SOURCE = 'dist/ANPE.exe' # Assumes built ANPE.exe is here
+PREBUILT_LAUNCHER_SOURCE = 'dist/ANPE Studio.exe' # Assumes built ANPE.exe is here
 PREBUILT_UNINSTALLER_SOURCE = 'dist/uninstall.exe' # Assumes built uninstall.exe is here
 
 # --- Target paths within the bundle ---

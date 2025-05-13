@@ -2,23 +2,19 @@
   <img src="./banner.png" alt="ANPE Studio Banner" width="700"/>
 </div>
 
-<h1 align="center">ANPE Studio - Another Noun Phrase Extractor</h1>
+<h1 align="center">ANPE Studio - Another Noun Phrase Extractor Studio</h1>
 
 <p align="center">
   <strong>One-click solution to extract complete English noun phrases</strong>
 </p>
 
 <p align="center">
-  <a href="https://github.com/rcverse/anpe-studio/releases/latest">
-    <img src="https://img.shields.io/badge/Download-Latest-brightgreen.svg" alt="Download Latest Release">
-  </a>
   <a href="https://www.gnu.org/licenses/gpl-3.0.en.html">
     <img src="https://img.shields.io/badge/License-GPLv3-blue.svg" alt="License: GPL v3">
   </a>
   <a href="https://github.com/rcverse/anpe-studio/releases/latest">
     <img src="https://img.shields.io/github/v/release/rcverse/anpe-studio?label=Release&color=blue" alt="Current Release Version">
   </a>
-  <img src="https://img.shields.io/badge/Python-3.8+-blue.svg" alt="Python 3.9+">
   <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20macOS-lightgrey.svg" alt="Platform: Windows | macOS">
 </p>
 
@@ -26,7 +22,15 @@
   No code? No problem. ANPE Studio provides an intuitive graphical interface for the <a href="https://github.com/rcverse/another-noun-phrase-extractor">ANPE (Another Noun Phrase Extractor)</a> Python library. It provides a user-friendly way to extract noun phrases from text—<strong>no coding required</strong>.
 </p>
 
-
+<p align="center">
+  <strong>Ready to get started? Download ANPE Studio here:</strong><br/>
+  <a href="https://github.com/rcverse/anpe-studio/releases/latest" title="Download Latest Release for Windows">
+    <img src="https://img.shields.io/badge/Windows-0078D6?style=flat&logo=windows&logoColor=white" alt="Download for Windows">
+  </a>
+  <a href="https://github.com/rcverse/anpe-studio/releases/latest" title="Download Latest Release for macOS">
+    <img src="https://img.shields.io/badge/macOS-000000?style=flat&logo=apple&logoColor=white" alt="Download for macOS">
+  </a>
+</p>
 
 ## ✨ Features
 
@@ -40,7 +44,6 @@ ANPE Studio packs a range of features:
 * **📚 Easy Model Management:** Install, uninstall, and manage required spaCy and Benepar language models directly within the app via Settings (internet connection needed).
 * **🔄 Core Library Updates:** Check for and install updates to the underlying ANPE extraction engine with a single click in Settings.
 * **📜 Detailed Logging:** A toggleable log panel (accessible from the status bar) provides insights into the extraction process and aids in troubleshooting.
-
 
 ## 📸 Screenshots
 
@@ -69,49 +72,52 @@ ANPE Studio packs a range of features:
 ![Log Panel Toggled](./software_screenshots/log_toggled.png)
 *Caption: The application's log panel, useful for debugging and monitoring processes.*
 
-
-
 ## 🚀 Getting Started
 
 **Important Note on Installation Size:**
 
 ANPE Studio is designed to be a **self-contained** application, meaning it includes its own Python environment and all necessary (and sometimes large) libraries like spaCy, Benepar, and their associated language models (which can involve PyTorch). This ensures that the application works out-of-the-box for everyone, especially users who may not have Python installed or are not familiar with managing Python packages.
 
-*   **Approximate Size:** Due to these bundled components, the installed application can take up a significant amount of disk space:
-    *   **Windows:** Around 1.8 GB
-    *   **macOS:** Around 1 GB
-*   **Alternative for Python Users:** If you are comfortable with Python environments and package management, you can avoid this large installation. Instead, clone the [ANPE Studio repository](https://github.com/rcverse/anpe-studio) and run the application directly using `python -m anpe_studio` from the repository's root directory after creating a virtual environment and installing dependencies listed in `requirements.txt` into your own Python environment.
-
+* **Approximate Size:** Due to these bundled components, the installed application can take up a significant amount of disk space:
+  * **Windows:** Around 1.8 GB
+  * **macOS:** Around 1 GB
+* **Alternative for Python Users:** If you are comfortable with Python environments and package management, you can avoid this large installation. Instead, clone the [ANPE Studio repository](https://github.com/rcverse/anpe-studio) and run the application directly using `python -m anpe_studio` from the repository's root directory after creating a virtual environment and installing dependencies listed in `requirements.txt` into your own Python environment.
 
 ### Download ANPE Studio
+
 Visit the **[Releases Page](https://github.com/rcverse/anpe-studio/releases)** and download the latest installer for your operating system.
 
 ### Install ANPE Studio
+
 #### For Windows
-   * Run the downloaded `.exe` setup file.
-   * Follow the on-screen prompts. The installer creates a self-contained folder for ANPE Studio (preventing conflicts with other Python tools you might have) and downloads the necessary base language models.
-   
+
+* Run the downloaded `.exe` setup file.
+* Follow the on-screen prompts. The installer creates a self-contained folder for ANPE Studio (preventing conflicts with other Python tools you might have) and downloads the necessary base language models.
+
 #### For MacOS
-   * Run the downloaded `.dmg` file.
-   * Drag the ANPE Studio icon into the application folder.
-   * **Running for the First Time (Unnotarized App):** Since ANPE Studio is not yet notarized by Apple, you will need to grant it permission to run.
-      > ⚠️ Note that currently the setup wizard's UI is not compatible with dark mode. Please disable dark mode when running the setup wizard.
-     * After dragging the app to your Applications folder, **right-click (or Ctrl-click)** the ANPE Studio icon and select **'Open'**.
-     * You will likely see a warning message. Click **'Open'** again in the warning dialog to confirm you want to run the application.
-     * *Alternatively, if the above doesn't work, you might need to go to Apple menu > 'System Settings' (or 'System Preferences' on older macOS versions), then 'Privacy & Security'. Scroll down and you should see a message about "ANPE Studio" being blocked. Click the 'Open Anyway' button.*
-   * Start ANPE Studio from Applications. On the first launch, it will guide you through setting up its necessary environment and downloading base models.
+
+* Run the downloaded `.dmg` file.
+* Drag the ANPE Studio icon into the application folder.
+* **Running for the First Time (Unnotarized App):** Since ANPE Studio is not yet notarized by Apple, you will need to grant it permission to run.
+  > ⚠️ Note that currently the setup wizard's UI is not compatible with dark mode. Please disable dark mode when running the setup wizard.
+  >
+
+  * After dragging the app to your Applications folder, **right-click (or Ctrl-click)** the ANPE Studio icon and select **'Open'**.
+  * You will likely see a warning message. Click **'Open'** again in the warning dialog to confirm you want to run the application.
+  * *Alternatively, if the above doesn't work, you might need to go to Apple menu > 'System Settings' (or 'System Preferences' on older macOS versions), then 'Privacy & Security'. Scroll down and you should see a message about "ANPE Studio" being blocked. Click the 'Open Anyway' button.*
+* Start ANPE Studio from Applications. On the first launch, it will guide you through setting up its necessary environment and downloading base models.
 
 ### Uninstall
+
 #### For Windows
+
    You can directly uninstall by using the Application management in the control panel or setting.
 
 #### For MacOS
+
    A utility script named `clean_anpe.sh` is available in the `/Extras` folder inside the downloaded `.dmg` file. You can access this by opening the `.dmg` again and navigating to this folder (scroll down). This script helps remove the application and its related data if you choose to uninstall it.
 
-   >To run this script, open your Terminal ⌨️, input "sh", drag the .sh file into the terminal window, and press enter to run.
-
-
-
+> To run this script, open your Terminal ⌨️, input "sh", drag the .sh file into the terminal window, and press enter to run.
 
 ## 💡 Basic Usage Guide
 
@@ -137,13 +143,9 @@ Encountering issues? Here are a few common solutions:
 * **Check Logs:** Click the Status Bar at the bottom of the main window to toggle the **Log Panel**. It often contains detailed error messages.
 * **Report Bugs:** If problems persist, please check existing [issues](https://github.com/rcverse/anpe-studio/issues) or [report a new one](https://github.com/rcverse/anpe-studio/issues/new). Include details from the Log Panel if possible!
 
-
-
 ## 📄 License
 
 This project is distributed under the GNU General Public License v3.0. See the [LICENSE](LICENSE) file for full details.
-
-
 
 ## 🙌 Acknowledgements
 
@@ -170,11 +172,9 @@ Creating a user-friendly, distributable application relies on these powerful too
 
 I am immensely grateful for the contributions of all these projects to the open-source ecosystem, enabling me to build and share ANPE Studio.
 
-
 ## 🎓 Citation
 
 If ANPE Studio aids your research or project work, I kindly request that you cite the core **[ANPE library](https://github.com/rcverse/another-noun-phrase-extractor#citation)** that performs the extraction. Citation details can be found on the ANPE library's repository page.
-
 
 ## 💻 Development
 

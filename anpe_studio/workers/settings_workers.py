@@ -444,30 +444,70 @@ class StatusCheckWorker(QObject):
 
     @pyqtSlot()
     def run(self):
-        """Check for installed models."""
-        logging.debug("StatusCheckWorker run method started.")
-        status_update = {
-            'spacy_models': [],
-            'benepar_models': [],
-            'error': None
-        }
+        """Checks for installed models and emits the result."""
+        logging.debug("StatusCheckWorker: Starting model status check.")
+        status_data = {'spacy_models': [], 'benepar_models': [], 'error': None}
         try:
-            # Assuming these imports are valid in this context
-            from anpe.utils.model_finder import find_installed_spacy_models, find_installed_benepar_models
-            status_update['spacy_models'] = find_installed_spacy_models()
-            status_update['benepar_models'] = find_installed_benepar_models()
-            logging.debug(f"StatusCheckWorker found models: SpaCy={status_update['spacy_models']}, Benepar={status_update['benepar_models']}")
-        except ImportError as e:
-            error_msg = f"Core ANPE components not found for status check: {e}"
-            logging.error(error_msg)
-            status_update['error'] = error_msg
+            status_data['spacy_models'] = find_installed_spacy_models()
+            status_data['benepar_models'] = find_installed_benepar_models()
+            logging.debug(f"StatusCheckWorker: Found spaCy: {status_data['spacy_models']}, Benepar: {status_data['benepar_models']}")
         except Exception as e:
             error_msg = f"Error during model status check: {e}"
             logging.error(error_msg, exc_info=True)
-            status_update['error'] = error_msg
-
-        logging.debug(f"StatusCheckWorker emitting finished signal with data: {status_update}")
-        self.finished.emit(status_update)
-        logging.debug("StatusCheckWorker run method finished.")
+            status_data['error'] = str(e) # Add error message to status data
+        
+        self.finished.emit(status_data)
+        logging.debug("StatusCheckWorker: Finished model status check and emitted result.")
 
 # --- END NEW WORKER --- 
+
+# --- Worker for GUI Update Check ---
+class GuiUpdateCheckWorker(QObject):
+    """Worker to check for GUI updates from GitHub."""
+    finished = pyqtSignal(dict, str)  # Emits result dict and error string (if any)
+
+    # Corrected REPO_URL to fetch all releases, we'll take the first one.
+    REPO_URL = "https://api.github.com/repos/rcverse/anpe-studio/releases"
+
+    def __init__(self):
+        super().__init__()
+
+    @pyqtSlot()
+    def run_check(self):
+        logging.info("GuiUpdateCheckWorker: Starting GitHub release check.")
+        try:
+            headers = {'Accept': 'application/vnd.github.v3+json'}
+            req = urllib.request.Request(self.REPO_URL, headers=headers)
+            with urllib.request.urlopen(req, timeout=10) as response:
+                if response.status == 200:
+                    releases_data = json.loads(response.read().decode())
+                    if releases_data: # Check if the list is not empty
+                        latest_release_data = releases_data[0] # Get the first release (latest by default)
+                        logging.info(f"GuiUpdateCheckWorker: Successfully fetched latest release data: {latest_release_data.get('tag_name')}")
+                        self.finished.emit(latest_release_data, "")
+                    else:
+                        # No releases found
+                        logging.info("GuiUpdateCheckWorker: No releases found for the repository.")
+                        self.finished.emit({}, "No releases found.") # Emit empty dict and a message
+                else:
+                    error_msg = f"GitHub API request failed with status: {response.status}"
+                    logging.error(f"GuiUpdateCheckWorker: {error_msg}")
+                    self.finished.emit({}, error_msg)
+        except urllib.error.HTTPError as e:
+            # Handle HTTP errors more specifically, e.g., 404 might mean no releases or wrong repo
+            error_msg = f"HTTP error {e.code} fetching releases: {e.reason}"
+            logging.error(f"GuiUpdateCheckWorker: {error_msg}", exc_info=True)
+            self.finished.emit({}, error_msg)            
+        except urllib.error.URLError as e:
+            error_msg = f"Network error checking for GUI updates: {e.reason}"
+            logging.error(f"GuiUpdateCheckWorker: {error_msg}", exc_info=True)
+            self.finished.emit({}, error_msg)
+        except json.JSONDecodeError as e:
+            error_msg = f"Error decoding JSON response from GitHub: {e}"
+            logging.error(f"GuiUpdateCheckWorker: {error_msg}", exc_info=True)
+            self.finished.emit({}, error_msg)
+        except Exception as e:
+            error_msg = f"An unexpected error occurred: {e}"
+            logging.error(f"GuiUpdateCheckWorker: {error_msg}", exc_info=True)
+            self.finished.emit({}, error_msg)
+# --- End Worker for GUI Update Check ---

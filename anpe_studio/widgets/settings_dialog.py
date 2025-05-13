@@ -21,11 +21,14 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtGui import QIcon, QPixmap, QTextCursor, QColor, QTransform, QDesktopServices # <<< Added QDesktopServices
 
-from anpe_studio.theme import ERROR_COLOR, PRIMARY_COLOR, get_scroll_bar_style, LIGHT_HOVER_BLUE # Import theme elements
+from anpe_studio.theme import ERROR_COLOR, PRIMARY_COLOR, SUCCESS_COLOR, get_scroll_bar_style, LIGHT_HOVER_BLUE # Import theme elements
 from anpe_studio.resource_manager import ResourceManager # ADDED THIS IMPORT
 from anpe_studio.widgets.activity_indicator import PulsingActivityIndicator # IMPORT THE INDICATOR
 # Import the worker classes from their new location
-from anpe_studio.workers.settings_workers import CoreUpdateWorker, CleanWorker, InstallDefaultsWorker, ModelActionWorker, StatusCheckWorker # <<< ADDED StatusCheckWorker
+from anpe_studio.workers.settings_workers import (
+    CoreUpdateWorker, CleanWorker, InstallDefaultsWorker, 
+    ModelActionWorker, StatusCheckWorker, GuiUpdateCheckWorker # <<< ADDED GuiUpdateCheckWorker
+)
 
 # Assuming these utilities exist and work as expected
 try:
@@ -61,7 +64,6 @@ except ImportError as e:
         def find(self, path): raise LookupError()
     class DummyNLTK: data = DummyNLTKData()
     nltk = DummyNLTK()
-
 
 # --- Page Widgets Implementation ---
 
@@ -1978,136 +1980,151 @@ class AboutPage(QWidget):
     def __init__(self, gui_version: str, core_version: str, parent=None):
         super().__init__(parent)
         self.gui_version = gui_version
-        # Ensure core_version is displayed correctly even if passed as N/A
-        self.core_version = core_version 
+        self.core_version = core_version
         self.setObjectName("AboutPage")
+
+        self.gui_update_worker_thread = None
+        self.gui_update_worker = None
+        self.gui_version_value_label = None       
+        self.update_now_button = None           
+        self.latest_gui_version_info = None     
+        self._first_show = True                 
+
+        # Dedicated status elements
+        self.gui_update_status_label = None
+        self.gui_update_indicator = None
+
         self.setup_ui()
-        
+        self.connect_signals()
+
     def setup_ui(self):
-        # Replicate layout from help_dialog.AboutDialog
         main_layout = QVBoxLayout(self)
         main_layout.setSpacing(15)
-        # Add margins to simulate dialog padding within the page
-        main_layout.setContentsMargins(30, 20, 30, 20) 
+        main_layout.setContentsMargins(30, 20, 30, 20)
 
-        # --- Header Section ---
+        # --- Header Section (remains the same) ---
         header_widget = QWidget()
         header_layout = QHBoxLayout(header_widget)
-        header_layout.setSpacing(15) # Reduced spacing
+        header_layout.setSpacing(15)
         header_layout.setContentsMargins(0, 0, 0, 10)
-
-        # Icon (left)
         icon_label = QLabel()
         icon_label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
-        # Need ResourceManager - assume it's importable or handle import error
         try:
-             from anpe_studio.resource_manager import ResourceManager
              pixmap = ResourceManager.get_pixmap("app_icon_logo_transparent.png")
         except ImportError:
              logging.warning("ResourceManager not found, using placeholder icon.")
              pixmap = QPixmap(100, 100)
              pixmap.fill(Qt.GlobalColor.gray)
-             
         pixmap = pixmap.scaled(100, 100, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
         icon_label.setPixmap(pixmap)
         icon_label.setFixedSize(100, 100)
         header_layout.addWidget(icon_label, 0, Qt.AlignmentFlag.AlignTop)
-
-        # Title/Subtitle (right)
         title_container = QWidget()
         title_layout = QVBoxLayout(title_container)
-        title_layout.setContentsMargins(0, 0, 0, 0) # Reset margins
-        title_layout.setSpacing(2) # Reduced spacing between title and subtitle
-        # REMOVED: title_layout.addStretch(1) # Let alignment handle vertical position
-
+        title_layout.setContentsMargins(0, 0, 0, 0)
+        title_layout.setSpacing(2)
         title_label = QLabel("ANPE Studio")
         title_label.setStyleSheet(f"font-size: 24px; font-weight: bold; color: {PRIMARY_COLOR};")
-        # title_label.setAlignment(Qt.AlignmentFlag.AlignBottom) # Let default alignment handle
         title_layout.addWidget(title_label)
-
         subtitle_label = QLabel(" Another Noun Phrase Extractor Studio")
         subtitle_label.setStyleSheet("font-size: 16px; color: #666666;")
-        # subtitle_label.setAlignment(Qt.AlignmentFlag.AlignTop) # Let default alignment handle
         title_layout.addWidget(subtitle_label)
-        # REMOVED: title_layout.addStretch(1)
-
-        # Add the title container to the header layout
-        header_layout.addWidget(title_container, 1) # Give it stretch factor 1
-        # Align the whole title container vertically slightly above center? Or keep center?
-        header_layout.setAlignment(title_container, Qt.AlignmentFlag.AlignVCenter) # Keep VCenter for now
-
+        header_layout.addWidget(title_container, 1)
+        header_layout.setAlignment(title_container, Qt.AlignmentFlag.AlignVCenter)
         main_layout.addWidget(header_widget)
 
         # --- Info Grid ---
         info_widget = QWidget()
-        info_layout = QGridLayout(info_widget)
+        info_layout = QGridLayout(info_widget) 
         info_layout.setContentsMargins(10, 0, 10, 10)
         info_layout.setSpacing(8)
-        info_layout.setColumnStretch(1, 1)
-
+        info_layout.setColumnStretch(1, 1) 
         label_width = 110
 
-        # GUI Version
-        gui_label = QLabel("GUI Version:")
-        gui_label.setStyleSheet("font-weight: bold;")
-        gui_label.setFixedWidth(label_width)
-        gui_value = QLabel(self.gui_version)
-        info_layout.addWidget(gui_label, 0, 0, Qt.AlignmentFlag.AlignLeft)
-        info_layout.addWidget(gui_value, 0, 1, Qt.AlignmentFlag.AlignLeft)
+        # GUI Version with inline status and update button
+        gui_label_title = QLabel("GUI Version:")
+        gui_label_title.setStyleSheet("font-weight: bold;")
+        gui_label_title.setFixedWidth(label_width)
+        info_layout.addWidget(gui_label_title, 0, 0, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop) 
+
+        gui_version_container = QWidget()
+        gui_version_layout = QHBoxLayout(gui_version_container)
+        gui_version_layout.setContentsMargins(0,0,0,0)
+        gui_version_layout.setSpacing(5) # Reduced spacing for a tighter look
+
+        self.gui_version_value_label = QLabel(self.gui_version) 
+        self.gui_version_value_label.setTextFormat(Qt.TextFormat.RichText) 
+        gui_version_layout.addWidget(self.gui_version_value_label)
+
+        # Removed self.gui_version_status_indicator from here
+
+        self.update_now_button = QToolButton() 
+        try:
+            update_icon = ResourceManager.get_icon("external-link.svg")
+            if not update_icon.isNull():
+                self.update_now_button.setIcon(update_icon)
+                self.update_now_button.setIconSize(QSize(16,16)) 
+            else:
+                logging.warning("Could not load external-link.svg for update_now_button, using text.")
+                self.update_now_button.setText("↪") 
+        except Exception as e:
+            logging.warning(f"Could not load icon for update_now_button: {e}. Using text.")
+            self.update_now_button.setText("↪") 
+        self.update_now_button.setFixedSize(22, 22) 
+        self.update_now_button.setToolTip("Go to download page")
+        self.update_now_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.update_now_button.setStyleSheet("""
+            QToolButton { background-color: transparent; border: none; border-radius: 4px; padding: 2px; }
+            QToolButton:hover { background-color: #e0e0e0; }
+            QToolButton:pressed { background-color: #cccccc; }
+        """)
+        self.update_now_button.setVisible(False) 
+        gui_version_layout.addWidget(self.update_now_button)
+        gui_version_layout.addStretch(1) 
+        info_layout.addWidget(gui_version_container, 0, 1)
 
         # Core Version
-        core_label = QLabel("Core Version:")
-        core_label.setStyleSheet("font-weight: bold;")
-        core_label.setFixedWidth(label_width)
-        core_value = QLabel(self.core_version)
-        info_layout.addWidget(core_label, 1, 0, Qt.AlignmentFlag.AlignLeft)
-        info_layout.addWidget(core_value, 1, 1, Qt.AlignmentFlag.AlignLeft)
-
-        # Author
-        author_label = QLabel("Author:")
-        author_label.setStyleSheet("font-weight: bold;")
-        author_label.setFixedWidth(label_width)
-        author_value = QLabel("Richard Chen (@rcverse)")
-        info_layout.addWidget(author_label, 2, 0, Qt.AlignmentFlag.AlignLeft)
-        info_layout.addWidget(author_value, 2, 1, Qt.AlignmentFlag.AlignLeft)
-
-        # License
-        license_label = QLabel("License:")
-        license_label.setStyleSheet("font-weight: bold;")
-        license_label.setFixedWidth(label_width)
-        license_value = QLabel("GNU General Public License v3") # Button handled below
-        info_layout.addWidget(license_label, 3, 0, Qt.AlignmentFlag.AlignLeft)
-        info_layout.addWidget(license_value, 3, 1, Qt.AlignmentFlag.AlignLeft)
-
-        # Contact
-        email_label = QLabel("Contact:")
-        email_label.setStyleSheet("font-weight: bold;")
-        email_label.setFixedWidth(label_width)
-        email_value = QLabel('<a href="mailto:rcverse6@gmail.com">rcverse6@gmail.com</a>')
-        email_value.setTextFormat(Qt.TextFormat.RichText)
-        email_value.setOpenExternalLinks(True)
-        info_layout.addWidget(email_label, 4, 0, Qt.AlignmentFlag.AlignLeft)
-        info_layout.addWidget(email_value, 4, 1, Qt.AlignmentFlag.AlignLeft)
-
+        core_label_title = QLabel("Core Version:")
+        core_label_title.setStyleSheet("font-weight: bold;")
+        core_label_title.setFixedWidth(label_width)
+        core_value_label = QLabel(self.core_version)
+        info_layout.addWidget(core_label_title, 1, 0, Qt.AlignmentFlag.AlignLeft)
+        info_layout.addWidget(core_value_label, 1, 1, Qt.AlignmentFlag.AlignLeft)
+        author_label_title = QLabel("Author:")
+        author_label_title.setStyleSheet("font-weight: bold;")
+        author_label_title.setFixedWidth(label_width)
+        author_value_label = QLabel("Richard Chen (@rcverse)")
+        info_layout.addWidget(author_label_title, 2, 0, Qt.AlignmentFlag.AlignLeft)
+        info_layout.addWidget(author_value_label, 2, 1, Qt.AlignmentFlag.AlignLeft)
+        license_label_title = QLabel("License:")
+        license_label_title.setStyleSheet("font-weight: bold;")
+        license_label_title.setFixedWidth(label_width)
+        license_value_label = QLabel("GNU General Public License v3")
+        info_layout.addWidget(license_label_title, 3, 0, Qt.AlignmentFlag.AlignLeft)
+        info_layout.addWidget(license_value_label, 3, 1, Qt.AlignmentFlag.AlignLeft)
+        email_label_title = QLabel("Contact:")
+        email_label_title.setStyleSheet("font-weight: bold;")
+        email_label_title.setFixedWidth(label_width)
+        email_value_label = QLabel('<a href="mailto:rcverse6@gmail.com">rcverse6@gmail.com</a>')
+        email_value_label.setTextFormat(Qt.TextFormat.RichText)
+        email_value_label.setOpenExternalLinks(True)
+        info_layout.addWidget(email_label_title, 4, 0, Qt.AlignmentFlag.AlignLeft)
+        info_layout.addWidget(email_value_label, 4, 1, Qt.AlignmentFlag.AlignLeft)
         main_layout.addWidget(info_widget)
 
-        # --- Separator ---
+        # --- Separator & Acknowledgements (remains mostly the same) ---
         separator = QFrame()
         separator.setFrameShape(QFrame.Shape.HLine)
         separator.setFrameShadow(QFrame.Shadow.Sunken)
         separator.setStyleSheet("background-color: #e0e0e0;")
         main_layout.addWidget(separator)
-
-        # --- Acknowledgements Section ---
         ack_widget = QWidget()
         ack_layout = QVBoxLayout(ack_widget)
         ack_layout.setContentsMargins(10, 5, 10, 5)
         ack_layout.setSpacing(5)
-
         ack_title = QLabel("Acknowledgements")
         ack_title.setStyleSheet("font-size: 14px; font-weight: bold; color: #333; margin-bottom: 5px;")
         ack_layout.addWidget(ack_title)
-
         ack_text = (
             "This application uses the following open-source libraries:<br>"
             "• <b>PyQt6</b> (GPLv3 / Commercial)<br>"
@@ -2122,41 +2139,209 @@ class AboutPage(QWidget):
         ack_label.setTextFormat(Qt.TextFormat.RichText)
         ack_label.setStyleSheet("font-size: 11px; color: #555;")
         ack_layout.addWidget(ack_label)
-
         main_layout.addWidget(ack_widget)
-        main_layout.addStretch(1) # Push buttons to the bottom
 
-        # --- Button Bar --- 
-        # Add buttons relevant to this page (links)
+        # --- Button Bar (Project Page & License only) ---
         button_widget = QWidget()
         button_layout = QHBoxLayout(button_widget)
         button_layout.setContentsMargins(10, 10, 10, 0)
         button_layout.setSpacing(10)
-
         project_page_button = QPushButton("Visit Project Page")
-        # Add GitHub icon to the button
         try:
-             # Apply stylesheet for spacing BEFORE setting icon
-             project_page_button.setStyleSheet("padding-left: 5px; text-align: left;") # Add left padding to text
-
+             project_page_button.setStyleSheet("padding-left: 5px; text-align: left;")
              github_icon = ResourceManager.get_icon("github-mark.svg")
              if not github_icon.isNull():
                   project_page_button.setIcon(github_icon)
-                  project_page_button.setIconSize(QSize(16, 16)) # Adjust size as needed
+                  project_page_button.setIconSize(QSize(16, 16))
              else:
                   logging.warning("Could not load github-mark.svg for About page.")
         except Exception as e:
              logging.error(f"Error loading GitHub icon for About page: {e}")
-
         project_page_button.clicked.connect(self._visit_project_page)
         button_layout.addWidget(project_page_button)
-        
         license_view_button = QPushButton("View License")
         license_view_button.clicked.connect(self._show_license)
         button_layout.addWidget(license_view_button)
-        
         button_layout.addStretch(1)
         main_layout.addWidget(button_widget)
+        
+        # --- Dedicated GUI Update Status Area ---
+        update_status_area_layout = QHBoxLayout()
+        update_status_area_layout.setContentsMargins(10, 10, 10, 5) # Added some margins
+        update_status_area_layout.setSpacing(8)
+
+        self.gui_update_indicator = PulsingActivityIndicator()
+        self.gui_update_indicator.setFixedSize(18, 18) # Standard size
+        self.gui_update_indicator.set_color(PRIMARY_COLOR) # Default blue
+        self.gui_update_indicator.idle() # Start idle
+        update_status_area_layout.addWidget(self.gui_update_indicator)
+
+        self.gui_update_status_label = QLabel("Click icon or text to check for ANPE Studio updates.")
+        self.gui_update_status_label.setStyleSheet("font-size: 9pt; color: #555;")
+        self.gui_update_status_label.setCursor(Qt.CursorShape.PointingHandCursor)
+        update_status_area_layout.addWidget(self.gui_update_status_label, 1) # Stretch factor for label
+        main_layout.addLayout(update_status_area_layout) # Add this to main layout
+        
+        main_layout.addStretch(1) 
+
+    def connect_signals(self):
+        if self.update_now_button:
+            self.update_now_button.clicked.connect(self._go_to_release_page)
+        
+        # Make status label and indicator clickable for manual recheck
+        if self.gui_update_status_label:
+            self.gui_update_status_label.mousePressEvent = lambda event: self.run_gui_update_check(manual_check=True)
+        if self.gui_update_indicator:
+            self.gui_update_indicator.mousePressEvent = lambda event: self.run_gui_update_check(manual_check=True)
+            self.gui_update_indicator.setCursor(Qt.CursorShape.PointingHandCursor) # Make indicator also look clickable
+
+    def showEvent(self, event):
+        super().showEvent(event) 
+        if self._first_show:
+            logging.debug("AboutPage: showEvent - first show, triggering automatic update check.")
+            # Initial state for dedicated status area
+            if self.gui_update_status_label: self.gui_update_status_label.setText("Checking for updates...")
+            if self.gui_update_indicator: self.gui_update_indicator.checking()
+            QTimer.singleShot(200, lambda: self.run_gui_update_check(manual_check=False))
+            self._first_show = False
+
+    def run_gui_update_check(self, manual_check=True):
+        logging.debug(f"AboutPage: run_gui_update_check called. manual_check={manual_check}")
+
+        if self.gui_update_worker_thread and self.gui_update_worker_thread.isRunning():
+            logging.warning("AboutPage: GUI update check already in progress.")
+            if self.gui_update_status_label: self.gui_update_status_label.setText("Update check already in progress...")
+            if self.gui_update_indicator: self.gui_update_indicator.checking()
+            return
+
+        # Reset UI elements related to update status
+        self.gui_version_value_label.setText(self.gui_version) # Reset version label text
+        if self.update_now_button: self.update_now_button.setVisible(False)
+        if self.gui_update_status_label: self.gui_update_status_label.setText("Checking for updates...")
+        if self.gui_update_indicator: 
+            self.gui_update_indicator.set_color(PRIMARY_COLOR) # Ensure blue for checking
+            self.gui_update_indicator.checking()
+        
+        if self.gui_update_worker:
+            self.gui_update_worker.deleteLater()
+        if self.gui_update_worker_thread:
+            self.gui_update_worker_thread.quit()
+            self.gui_update_worker_thread.wait()
+            self.gui_update_worker_thread.deleteLater()
+
+        self.gui_update_worker = GuiUpdateCheckWorker()
+        self.gui_update_worker_thread = QThread(self)
+        self.gui_update_worker.moveToThread(self.gui_update_worker_thread)
+
+        self.gui_update_worker.finished.connect(self.on_gui_update_check_finished)
+        self.gui_update_worker_thread.started.connect(self.gui_update_worker.run_check)
+        self.gui_update_worker.finished.connect(self.gui_update_worker_thread.quit)
+        self.gui_update_worker.finished.connect(self.gui_update_worker.deleteLater)
+        self.gui_update_worker_thread.finished.connect(self.gui_update_worker_thread.deleteLater)
+        self.gui_update_worker.finished.connect(lambda: setattr(self, 'gui_update_worker', None))
+        self.gui_update_worker_thread.finished.connect(lambda: setattr(self, 'gui_update_worker_thread', None))
+
+        self.gui_update_worker_thread.start()
+
+    @pyqtSlot(dict, str)
+    def on_gui_update_check_finished(self, result: dict, error_string: str):
+        logging.debug(f"AboutPage: on_gui_update_check_finished. Result: {result}, Error: '{error_string}'")
+        self.gui_version_value_label.setText(self.gui_version)
+        if self.update_now_button: self.update_now_button.setVisible(False) 
+
+        if error_string:
+            if error_string == "No releases found.":
+                if self.gui_update_status_label: self.gui_update_status_label.setText("No releases published on GitHub yet.")
+                if self.gui_update_indicator: 
+                    self.gui_update_indicator.set_color(PRIMARY_COLOR) # Blue
+                    self.gui_update_indicator.idle()
+                logging.info("AboutPage: No releases found.")
+                self.latest_gui_version_info = {} 
+            else:
+                if self.gui_update_status_label: self.gui_update_status_label.setText(f"<span style='color:{ERROR_COLOR};'>Error checking for updates.</span> Click to retry.")
+                if self.gui_update_indicator: 
+                    self.gui_update_indicator.set_color(ERROR_COLOR) # Red
+                    self.gui_update_indicator.warn() # Pulsing red/orange
+                logging.error(f"AboutPage: Update check failed: {error_string}")
+            return
+
+        if not result or 'tag_name' not in result:
+            if self.gui_update_status_label: self.gui_update_status_label.setText("Could not retrieve valid update information. Click to retry.")
+            if self.gui_update_indicator: 
+                self.gui_update_indicator.set_color(ERROR_COLOR) # Red
+                self.gui_update_indicator.warn()
+            logging.warning("AboutPage: No valid update information in result.")
+            self.latest_gui_version_info = {}
+            return
+
+        self.latest_gui_version_info = result 
+        latest_version_tag = result.get('tag_name', 'N/A')
+        current_version_str = str(self.gui_version).lstrip('v')
+        latest_version_str = latest_version_tag.lstrip('v')
+        is_update_available = False
+
+        if latest_version_str != 'N/A' and current_version_str != 'N/A':
+            try:
+                from packaging.version import parse as parse_version
+                is_update_available = parse_version(latest_version_str) > parse_version(current_version_str)
+            except ImportError:
+                is_update_available = latest_version_str > current_version_str
+            except Exception as e: 
+                logging.error(f"Error comparing versions: {e}")
+                if self.gui_update_status_label: self.gui_update_status_label.setText(f"<span style='color:{ERROR_COLOR};'>Version comparison error.</span> Click to retry.")
+                if self.gui_update_indicator: 
+                    self.gui_update_indicator.set_color(ERROR_COLOR)
+                    self.gui_update_indicator.warn()
+                return
+
+        if is_update_available:
+            release_name = result.get('name', latest_version_tag)
+            if self.gui_update_status_label: 
+                self.gui_update_status_label.setText(f"<span style='color:{PRIMARY_COLOR};'>Update available: {release_name}.</span> Click icon above to download.")
+            if self.gui_update_indicator: 
+                self.gui_update_indicator.set_color(PRIMARY_COLOR) # Blue
+                self.gui_update_indicator.start() # Pulsing blue (active state)
+            self.gui_version_value_label.setText(f"{self.gui_version} <font color='{PRIMARY_COLOR}'>(Update: {release_name} available!)</font>")
+            if self.update_now_button: self.update_now_button.setVisible(True)
+            logging.info(f"AboutPage: Update available - {release_name}")
+        else:
+            if self.gui_update_status_label: self.gui_update_status_label.setText("ANPE Studio is up to date.")
+            if self.gui_update_indicator: 
+                self.gui_update_indicator.set_color(PRIMARY_COLOR) # Blue
+                self.gui_update_indicator.idle()
+            logging.info(f"AboutPage: ANPE Studio is up to date.")
+            
+    # ... (_go_to_release_page, is_worker_running, _show_license, _visit_project_page) ...
+
+    def _go_to_release_page(self):
+        """Opens the GitHub release page for the latest update."""
+        if self.latest_gui_version_info and isinstance(self.latest_gui_version_info, dict):
+            release_url = self.latest_gui_version_info.get('html_url')
+            if release_url:
+                release_name = self.latest_gui_version_info.get('name', self.latest_gui_version_info.get('tag_name', 'N/A'))
+                reply = QMessageBox.information(
+                    self.window(),
+                    "Go to Download Page",
+                    f"You are about to visit the download page for ANPE Studio <b>{release_name}</b>.<br><br>"
+                    "Do you want to continue?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.Yes
+                )
+                if reply == QMessageBox.StandardButton.Yes:
+                    QDesktopServices.openUrl(QUrl(release_url))
+            else:
+                logging.warning("AboutPage: _go_to_release_page called but no html_url in latest_gui_version_info.")
+                QMessageBox.warning(self.window(), "Error", "Could not find the download page URL.")
+        else:
+            logging.warning("AboutPage: _go_to_release_page called but no update info available.")
+            # This case should ideally not happen if the button is only visible when info is present.
+            # Might re-trigger a check or show an error.
+            self.run_gui_update_check(manual_check=True) # Re-check if button was clicked inappropriately
+
+    def is_worker_running(self) -> bool:
+        """Check if the GUI update worker thread is active."""
+        # Check if thread object exists and then if it's running
+        return bool(self.gui_update_worker_thread and self.gui_update_worker_thread.isRunning())
 
     def _show_license(self):
         """Show the license dialog."""
@@ -2388,31 +2573,36 @@ class SettingsDialog(QDialog):
         """Prevent closing the dialog if a background task is running."""
         model_worker_active = False
         core_worker_active = False
+        about_page_worker_active = False
 
-        # Check ModelsPage worker status
-        if self.models_page:
+        if self.models_page and hasattr(self.models_page, 'is_worker_running') and callable(self.models_page.is_worker_running):
             try:
                 model_worker_active = self.models_page.is_worker_running()
             except Exception as e:
                 logging.error(f"Error checking ModelsPage worker status: {e}")
-                # Assume active on error to be safe? Or ignore?
-                # Let's log and assume inactive to avoid blocking closure indefinitely on error.
-                model_worker_active = False 
+                model_worker_active = False
 
-        # Check CorePage worker status
-        if self.core_page:
+        if self.core_page and hasattr(self.core_page, 'is_worker_running') and callable(self.core_page.is_worker_running):
             try:
                 core_worker_active = self.core_page.is_worker_running()
             except Exception as e:
                 logging.error(f"Error checking CorePage worker status: {e}")
                 core_worker_active = False
+        
+        if self.about_page and hasattr(self.about_page, 'is_worker_running') and callable(self.about_page.is_worker_running):
+            try:
+                about_page_worker_active = self.about_page.is_worker_running()
+            except Exception as e:
+                # Log the error but don't assume worker is active, to prevent blocking close indefinitely
+                logging.error(f"Error checking AboutPage worker status in closeEvent: {e}")
+                about_page_worker_active = False # Default to false on error here
 
-        if model_worker_active or core_worker_active:
+        if model_worker_active or core_worker_active or about_page_worker_active:
             logging.warning("Attempted to close SettingsDialog while worker thread is running.")
             QMessageBox.warning(
                 self,
                 "Operation in Progress",
-                "A background operation (model install/update/clean) is currently running.\n"
+                "A background operation (model install/update/clean or GUI update check) is currently running.\n"
                 "Please wait for it to complete before closing this window.",
                 QMessageBox.StandardButton.Ok
             )

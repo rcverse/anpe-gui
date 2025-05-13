@@ -166,9 +166,12 @@ Click the gear icon (`<q>` ⚙️ `</q>`) in the top-right corner to open the Se
 
 #### About Page
 
-* Displays version information for the ANPE GUI and the core `anpe` library.
-* Provides links to the project's GitHub repository and contact information.
-* Includes license details for the GUI and its dependencies.
+* Displays version information for the ANPE GUI and the core `anpe` library, provides links to the project's GitHub repository and contact information, and includes license details for the GUI and its dependencies.
+* **GUI Update Check**:
+    * When you open the About page, it automatically checks for newer versions of ANPE Studio on GitHub.
+    * You can click the status icon or text to manually trigger a new check at any time.
+    * If an update is found, an update icon will appear next to the version. Clicking this icon will take you to the GitHub releases page to download the new version.
+
 
 ## Tips
 
@@ -213,8 +216,3 @@ The ANPE GUI relies on several open-source libraries:
 * **NLTK** (Apache License 2.0): Used by Benepar for model management
 
 We are grateful for the developers of these packages that make ANPE and ANPE GUI possible. You can find more detailed license information in the application's About dialog.
-
-## Contact
-
-* **Project Page**: Visit the [ANPE GitHub Repository](https://github.com/rcverse/another-noun-phrase-extractor) for source code and documentation
-* **Email**: For questions or feedback, contact rcverse6@gmail.com

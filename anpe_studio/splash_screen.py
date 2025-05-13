@@ -163,6 +163,8 @@ class SplashScreen(QWidget): # Changed from QSplashScreen to QWidget for custom 
             self.logo_label.setPixmap(final_pixmap)
             self.logo_label.setFixedSize(self.LOGO_SIZE, self.LOGO_SIZE)
             self.logo_label.setScaledContents(True)
+            # Add a left margin to shift the logo visually to the right
+            self.logo_label.setContentsMargins(15, 0, 0, 0) # 10px left margin
 
         except Exception as e:
             logging.error(f"Error loading/setting PNG logo: {e}", exc_info=True)
