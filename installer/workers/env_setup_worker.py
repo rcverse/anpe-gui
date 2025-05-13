@@ -122,7 +122,7 @@ class EnvironmentSetupWorker(QObject):
             copy_app_code(self._install_path) # Use the function from installer_core
             self.log_update.emit("Application code copied.")
 
-            # 4.2 Copy bundled executables (ANPE.exe, uninstall.exe)
+            # 4.2 Copy bundled executables (ANPE Studio.exe, uninstall.exe)
             self.status_update.emit("Copying executables...")
             copy_bundled_executables(self._install_path) # Use the function from installer_core
             self.log_update.emit("Bundled executables copied.")

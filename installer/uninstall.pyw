@@ -105,7 +105,7 @@ ANPE_INSTALLED_DIRS = [
 ]
 
 ANPE_INSTALLED_FILES = [
-    "ANPE.exe",      # Main executable
+    "ANPE Studio.exe",      # Main executable
     "uninstall.exe", # Uninstaller executable
     "app_icon_logo.ico",
 ]
@@ -1051,7 +1051,7 @@ class WelcomeFrame(ttk.Frame):
             return (False, [])
             
         expected_anpe_files = [
-            "ANPE.exe", 
+            "ANPE Studio.exe", 
             "uninstall.exe"
         ]
         expected_anpe_dirs = [

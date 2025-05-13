@@ -339,10 +339,10 @@ def copy_app_code(target_install_path: str):
         print_failure(f"An unexpected error occurred while copying application source code: {e}")
 
 def copy_bundled_executables(target_install_path: str):
-    """Copies the bundled ANPE.exe and uninstall.exe to the target dir."""
+    """Copies the bundled ANPE Studio.exe and uninstall.exe to the target dir."""
     executables_to_copy = {
         # Paths relative to _MEIPASS root, need .. from installer dir base
-        "ANPE.exe": "../assets/ANPE.exe",
+        "ANPE Studio.exe": "../assets/ANPE Studio.exe",
         "uninstall.exe": "../assets/uninstall.exe" 
     }
     
@@ -432,7 +432,7 @@ def main(install_path: str):
     # 7. Copy application code (anpe_studio source)
     copy_app_code(str(install_path_abs))
 
-    # 8. Copy bundled executables (ANPE.exe, uninstall.exe)
+    # 8. Copy bundled executables (ANPE Studio.exe, uninstall.exe)
     copy_bundled_executables(str(install_path_abs))
 
     # 9. Copy the application icon file

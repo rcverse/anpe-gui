@@ -89,7 +89,7 @@ class SetupMainWindow(QMainWindow):
             logger.warning(f"Window icon not found at expected path: {icon_path}")
         # --- End Set Window Icon ---
 
-        window_title = "ANPE Setup Wizard"
+        window_title = "ANPE Studio Setup Wizard"
         self.setWindowTitle(window_title)
         # Fixed size might conflict slightly with exact border/radius look
         # Consider setting minimum size and letting layout manage?
@@ -402,19 +402,19 @@ class SetupMainWindow(QMainWindow):
             logger.debug("Skipping shortcut creation (create=False).")
             return
 
-        # Need install_path to locate the installed ANPE.exe
+        # Need install_path to locate the installed ANPE Studio.exe
         if not self._install_path:
             QMessageBox.warning(self, "Cannot Create Shortcut", "Internal error: Missing installation path.")
             return
 
-        print("Creating shortcut(s) pointing to ANPE.exe...")
+        print("Creating shortcut(s) pointing to ANPE Studio.exe...")
 
         # --- Define Shortcut Parameters & Paths ---
         shortcut_name = "ANPE"
         # Installation root directory
         install_root_abs = os.path.abspath(self._install_path)
         # Path to the installed launcher executable
-        launcher_exe_abs = os.path.join(install_root_abs, "ANPE.exe")
+        launcher_exe_abs = os.path.join(install_root_abs, "ANPE Studio.exe")
         # Path to the copied icon file in the install root
         icon_path_abs = os.path.join(install_root_abs, "app_icon_logo.ico")
 
@@ -520,22 +520,22 @@ class SetupMainWindow(QMainWindow):
             # Continue without failing - this is an optional part of the installation
 
     def _launch_anpe(self, launch: bool):
-        """Handle the request to launch ANPE by running ANPE.exe."""
+        """Handle the request to launch ANPE by running ANPE Studio.exe."""
         logger.debug(f"Entering _launch_anpe with launch={launch}")
         if not launch:
             print("Skipping ANPE launch.")
             logger.debug("Skipping ANPE launch (launch=False).")
             return
         
-        # Need install_path to locate ANPE.exe
+        # Need install_path to locate ANPE Studio.exe
         if not self._install_path:
             QMessageBox.warning(self, "Cannot Launch ANPE", "Internal error: Missing installation path.")
             return
             
-        print("Launching ANPE via ANPE.exe...")
+        print("Launching ANPE via ANPE Studio.exe...")
         # --- Set the working directory and launch command --- 
         install_root_abs = os.path.abspath(self._install_path)
-        launcher_exe_abs = os.path.join(install_root_abs, "ANPE.exe")
+        launcher_exe_abs = os.path.join(install_root_abs, "ANPE Studio.exe")
         
         print(f"Target executable: {launcher_exe_abs}")
         print(f"Working directory: {install_root_abs}")
@@ -548,8 +548,8 @@ class SetupMainWindow(QMainWindow):
              return
 
         try:
-            # Launch ANPE.exe directly, setting the CWD to the install root
-            # Use CREATE_NO_WINDOW if available to prevent potential console flash (though ANPE.exe is windowed)
+            # Launch ANPE Studio.exe directly, setting the CWD to the install root
+            # Use CREATE_NO_WINDOW if available to prevent potential console flash (though ANPE Studio.exe is windowed)
             creationflags = 0
             if platform.system() == "Windows":
                 creationflags = subprocess.CREATE_NO_WINDOW

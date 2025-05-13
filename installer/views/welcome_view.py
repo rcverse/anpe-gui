@@ -45,7 +45,7 @@ class WelcomeViewWidget(QWidget):
         self._license_dialog = None # Hold reference to dialog
         # Store notes text for reuse in the popup
         self._storage_text = (
-            "<b>Storage (~1.8 GB):</b> ANPE uses powerful NLP libraries like spaCy and Benepar. "
+            "<b>Storage (~1.8 GB):</b> ANPE Studio uses powerful NLP libraries like spaCy and Benepar. "
             "These require large pre-trained models (data files) and depend on frameworks like PyTorch, "
             "which are also substantial in size, leading to the large total footprint."
         )
@@ -102,7 +102,7 @@ class WelcomeViewWidget(QWidget):
         layout.addWidget(logo_label)
 
         # --- Welcome Text ---
-        title_label = QLabel("Welcome to ANPE Setup")
+        title_label = QLabel("Welcome to ANPE Studio Setup")
         title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title_label.setStyleSheet("font-size: 26px; font-weight: bold; color: #0078D7; font-family: 'Segoe UI', Arial, sans-serif;")
         layout.addWidget(title_label)

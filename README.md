@@ -9,13 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://www.gnu.org/licenses/gpl-3.0.en.html">
-    <img src="https://img.shields.io/badge/License-GPLv3-blue.svg" alt="License: GPL v3">
-  </a>
-  <a href="https://github.com/rcverse/anpe-studio/releases/latest">
-    <img src="https://img.shields.io/github/v/release/rcverse/anpe-studio?label=Release&color=blue" alt="Current Release Version">
-  </a>
-  <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20macOS-lightgrey.svg" alt="Platform: Windows | macOS">
+  <a href="https://www.gnu.org/licenses/gpl-3.0.en.html"><img src="https://img.shields.io/badge/License-GPLv3-blue.svg" alt="License: GPL v3"></a><a href="https://github.com/rcverse/anpe-studio/releases/latest"><img src="https://img.shields.io/github/v/release/rcverse/anpe-studio?label=Release&color=blue" alt="Current Release Version"></a><img src="https://img.shields.io/badge/Platform-Windows%20%7C%20macOS-lightgrey.svg" alt="Platform: Windows | macOS">
 </p>
 
 <p align="center">
@@ -60,7 +54,7 @@ ANPE Studio packs a range of features:
 ### Application Settings
 
 ![Settings Page](./software_screenshots/setting_page.png)
-*Caption: The settings page, likely showing model management or other configuration options.*
+*Caption: The settings page, likely showing model management or other configuration options.*![1747127693336](image/README/1747127693336.png)![1747127694607](image/README/1747127694607.png)![1747127695776](image/README/1747127695776.png)![1747127696314](image/README/1747127696314.png)
 
 ### Detached Result Viewer
 
