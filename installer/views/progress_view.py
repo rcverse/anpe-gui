@@ -59,16 +59,17 @@ class ProgressViewWidget(QWidget):
         header_layout.addSpacing(20)
         
         title_layout = QVBoxLayout()
+        title_layout.setSpacing(1)  # Set smaller spacing between title and explanatory text
         stage_label = QLabel(self._title)
         stage_label.setStyleSheet("font-size: 26px; font-weight: bold; color: #0078D7; font-family: 'Segoe UI', Arial, sans-serif;")
         title_layout.addWidget(stage_label)
         
         # Add explanation text based on the title
         explanation_text = ""
-        if "Environment" in self._title:
-            explanation_text = "Setting up a dedicated Python environment with required dependencies for ANPE. Depending on your network speed, this could take a while."
+        if "Installing" in self._title:
+            explanation_text = "Setting up a dedicated Python environment with required dependencies for ANPE Studio. Depending on your network speed, this could take a while."
         elif "Language Models" in self._title:
-            explanation_text = "Downloading and installing the language processing models needed for ANPE to function."
+            explanation_text = "Downloading and installing the language processing models needed for ANPE Studio to function."
         
         if explanation_text:
             explanation_label = QLabel(explanation_text)

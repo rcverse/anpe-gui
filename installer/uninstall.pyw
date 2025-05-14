@@ -919,11 +919,11 @@ class UninstallMainWindow(tk.Tk):
                         
                         if should_keep_logs:
                             # Just delete the uninstaller executable, keep the logs
-                            cmd = f'cmd.exe /c "timeout /t 2 /nobreak > nul && del /f /q "{uninstaller_exe_path}""'
+                            cmd = f'cmd.exe /c "timeout /t 1 /nobreak > nul && del /f /q "{uninstaller_exe_path}""'
                             print("Keeping logs, only deleting uninstaller executable.")
                         else:
                             # Delete uninstaller and remove the entire directory
-                            cmd = f'cmd.exe /c "timeout /t 2 /nobreak > nul && del /f /q "{uninstaller_exe_path}" && rmdir /s /q "{install_dir_path}""'
+                            cmd = f'cmd.exe /c "timeout /t 1 /nobreak > nul && del /f /q "{uninstaller_exe_path}" && rmdir /s /q "{install_dir_path}""'
                             print("Not keeping logs, removing entire installation directory.")
                         
                         # DETACHED_PROCESS allows the parent (uninstaller) to exit immediately
@@ -936,7 +936,7 @@ class UninstallMainWindow(tk.Tk):
                         
                         # If uninstaller.exe not found but we still want to delete the directory
                         if not should_keep_logs and os.path.exists(install_dir_path):
-                            cmd = f'cmd.exe /c "timeout /t 2 /nobreak > nul && rmdir /s /q "{install_dir_path}""'
+                            cmd = f'cmd.exe /c "timeout /t 1 /nobreak > nul && rmdir /s /q "{install_dir_path}""'
                             creation_flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NO_WINDOW
                             subprocess.Popen(cmd, creationflags=creation_flags, shell=False)
                             print("Removing installation directory.")

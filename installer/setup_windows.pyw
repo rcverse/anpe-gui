@@ -219,13 +219,13 @@ class SetupMainWindow(QMainWindow):
 
         # Environment Progress View
         self.env_progress_view = ProgressViewWidget(
-            "Creating Environment"
+            "Installing ANPE Studio"
         )
         self.stacked_widget.addWidget(self.env_progress_view)
 
         # Model Progress View
         self.model_progress_view = ProgressViewWidget(
-            "Downloading Models"
+            "Downloading Language Models"
         )
         self.stacked_widget.addWidget(self.model_progress_view)
 
