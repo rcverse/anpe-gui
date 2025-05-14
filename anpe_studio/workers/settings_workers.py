@@ -474,7 +474,7 @@ class GuiUpdateCheckWorker(QObject):
 
     @pyqtSlot()
     def run_check(self):
-        logging.info("GuiUpdateCheckWorker: Starting GitHub release check.")
+        logging.debug("Starting GitHub release check.")
         try:
             headers = {'Accept': 'application/vnd.github.v3+json'}
             req = urllib.request.Request(self.REPO_URL, headers=headers)
@@ -483,11 +483,11 @@ class GuiUpdateCheckWorker(QObject):
                     releases_data = json.loads(response.read().decode())
                     if releases_data: # Check if the list is not empty
                         latest_release_data = releases_data[0] # Get the first release (latest by default)
-                        logging.info(f"GuiUpdateCheckWorker: Successfully fetched latest release data: {latest_release_data.get('tag_name')}")
+                        logging.info(f"Successfully fetched latest release data: {latest_release_data.get('tag_name')}")
                         self.finished.emit(latest_release_data, "")
                     else:
                         # No releases found
-                        logging.info("GuiUpdateCheckWorker: No releases found for the repository.")
+                        logging.debug("No releases found.")
                         self.finished.emit({}, "No releases found.") # Emit empty dict and a message
                 else:
                     error_msg = f"GitHub API request failed with status: {response.status}"

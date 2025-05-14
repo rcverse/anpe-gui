@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://www.gnu.org/licenses/gpl-3.0.en.html"><img src="https://img.shields.io/badge/License-GPLv3-blue.svg" alt="License: GPL v3"></a><a href="https://github.com/rcverse/anpe-studio/releases/latest"><img src="https://img.shields.io/github/v/release/rcverse/anpe-studio?label=Release&color=blue" alt="Current Release Version"></a><img src="https://img.shields.io/badge/Platform-Windows%20%7C%20macOS-lightgrey.svg" alt="Platform: Windows | macOS">
+  <a href="https://www.gnu.org/licenses/gpl-3.0.en.html"><img src="https://img.shields.io/badge/License-GPLv3-blue.svg" alt="License: GPL v3"></a>   <a href="https://github.com/rcverse/anpe-studio/releases/latest"><img src="https://img.shields.io/github/v/release/rcverse/anpe-studio?label=Release&color=blue" alt="Current Release Version"></a>   <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20macOS-lightgrey.svg" alt="Platform: Windows | macOS">
 </p>
 
 <p align="center">
@@ -18,17 +18,10 @@
 
 <p align="center">
   <strong>Ready to get started? Download ANPE Studio here:</strong><br/>
-  <a href="https://github.com/rcverse/anpe-studio/releases/latest" title="Download Latest Release for Windows">
-    <img src="https://img.shields.io/badge/Windows-0078D6?style=flat&logo=windows&logoColor=white" alt="Download for Windows">
-  </a>
-  <a href="https://github.com/rcverse/anpe-studio/releases/latest" title="Download Latest Release for macOS">
-    <img src="https://img.shields.io/badge/macOS-000000?style=flat&logo=apple&logoColor=white" alt="Download for macOS">
-  </a>
+  <a href="https://github.com/rcverse/anpe-studio/releases/latest" title="Download Latest Release for Windows"><img src="https://img.shields.io/badge/Windows-0078D6?style=flat&logo=windows&logoColor=white" alt="Download for Windows"></a>   <a href="https://github.com/rcverse/anpe-studio/releases/latest" title="Download Latest Release for macOS"><img src="https://img.shields.io/badge/macOS-000000?style=flat&logo=apple&logoColor=white" alt="Download for macOS"></a>
 </p>
 
 ## ✨ Features
-
-ANPE Studio packs a range of features:
 
 * **✍️ Flexible Input:** Paste text directly or process single/multiple `.txt` files.
 * **⚙️ Granular Control:** Configure extraction options like including nested phrases, adding metadata (source filename), and handling sentence boundaries.
@@ -44,27 +37,22 @@ ANPE Studio packs a range of features:
 ### Main Input Area
 
 ![Main Input Tab](./software_screenshots/input_tab.png)
-*Caption: The main input tab where users can paste or type their text for analysis.*
 
 ### Analysis Output Display
 
 ![Output Tab with Results](./software_screenshots/output_tab.png)
-*Caption: The output tab showcasing the structured results of the NLP analysis.*
 
 ### Application Settings
 
 ![Settings Page](./software_screenshots/setting_page.png)
-*Caption: The settings page, likely showing model management or other configuration options.*![1747127693336](image/README/1747127693336.png)![1747127694607](image/README/1747127694607.png)![1747127695776](image/README/1747127695776.png)![1747127696314](image/README/1747127696314.png)
 
 ### Detached Result Viewer
 
 ![Detached Result Viewer](./software_screenshots/detached_result_viewer.png)
-*Caption: A detached window for viewing detailed analysis results, allowing for a flexible workspace.*
 
 ### Log Panel
 
 ![Log Panel Toggled](./software_screenshots/log_toggled.png)
-*Caption: The application's log panel, useful for debugging and monitoring processes.*
 
 ## 🚀 Getting Started
 
@@ -93,6 +81,7 @@ Visit the **[Releases Page](https://github.com/rcverse/anpe-studio/releases)** a
 * Run the downloaded `.dmg` file.
 * Drag the ANPE Studio icon into the application folder.
 * **Running for the First Time (Unnotarized App):** Since ANPE Studio is not yet notarized by Apple, you will need to grant it permission to run.
+
   > ⚠️ Note that currently the setup wizard's UI is not compatible with dark mode. Please disable dark mode when running the setup wizard.
   >
 

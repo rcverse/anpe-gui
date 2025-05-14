@@ -8,6 +8,7 @@ class ModelStatusChecker(QObject):
     """
     status_checked = pyqtSignal(dict)  # Emits dict with model status on success
     error_occurred = pyqtSignal(str)   # Emits error message string on failure
+    progress_update = pyqtSignal(str)  # Emits progress step name
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -16,6 +17,9 @@ class ModelStatusChecker(QObject):
     def run(self):
         """Checks for required models and emits the result or error."""
         logging.info("ModelStatusChecker: Starting model status check...")
+        # Emit initial progress
+        self.progress_update.emit('start')
+        
         status = {
             'spacy_models': [],
             'benepar_models': [],
@@ -24,15 +28,18 @@ class ModelStatusChecker(QObject):
         try:
             # Import necessary functions within the run method
             # This isolates potential ImportErrors if anpe is not fully installed
+            self.progress_update.emit('check_models')
             from anpe.utils.model_finder import find_installed_spacy_models, find_installed_benepar_models
             logging.debug("ModelStatusChecker: ANPE utilities imported successfully.")
 
             # --- Perform Checks ---
             logging.debug("ModelStatusChecker: Checking spaCy models...")
+            self.progress_update.emit('spacy_model')
             status['spacy_models'] = find_installed_spacy_models()
             logging.debug(f"ModelStatusChecker: Found spaCy models: {status['spacy_models']}")
 
             logging.debug("ModelStatusChecker: Checking Benepar models...")
+            self.progress_update.emit('benepar_model')
             status['benepar_models'] = find_installed_benepar_models()
             logging.debug(f"ModelStatusChecker: Found Benepar models: {status['benepar_models']}")
 
@@ -49,9 +56,11 @@ class ModelStatusChecker(QObject):
                 status['error'] = warning_msg
                 logging.warning(f"ModelStatusChecker: {warning_msg}")
                 # Emit status_checked even with missing models, let receiver decide how to handle
+                self.progress_update.emit('complete')
                 self.status_checked.emit(status)
             else:
                 logging.info("ModelStatusChecker: All required models/data found.")
+                self.progress_update.emit('complete')
                 self.status_checked.emit(status) # Emit successful status
 
         except ImportError as ie:
@@ -67,4 +76,4 @@ class ModelStatusChecker(QObject):
             # Emit error_occurred for other unexpected errors
             self.error_occurred.emit(error_msg)
 
-        logging.info("ModelStatusChecker: run() method finished.") 
+        logging.debug("ModelStatusChecker: run() method finished.") 

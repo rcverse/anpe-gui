@@ -2255,7 +2255,7 @@ class AboutPage(QWidget):
                 if self.gui_update_indicator: 
                     self.gui_update_indicator.set_color(PRIMARY_COLOR) # Blue
                     self.gui_update_indicator.idle()
-                logging.info("AboutPage: No releases found.")
+                logging.debug("AboutPage: No releases found.")
                 self.latest_gui_version_info = {} 
             else:
                 if self.gui_update_status_label: self.gui_update_status_label.setText(f"<span style='color:{ERROR_COLOR};'>Error checking for updates.</span> Click to retry.")

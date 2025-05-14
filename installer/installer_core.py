@@ -34,6 +34,9 @@ APP_SOURCE_FOLDER_NAME = "../assets/anpe_studio"  # Changed to match actual MEIP
 GET_PIP_URL = "https://bootstrap.pypa.io/get-pip.py"
 # Add constant for docs directory
 DOCS_DIR_NAME = "docs"
+# Constants for executable names
+LAUNCHER_EXE_NAME = "anpe.exe"
+UNINSTALLER_EXE_NAME = "uninstall.exe"
 
 # --- Logging Setup (basic if run standalone) ---
 if __name__ == "__main__":
@@ -150,6 +153,40 @@ def find_python_executable(python_extract_path: str) -> str:
     abs_path_str = str(expected_path.resolve())
     print_python_path(abs_path_str) # CRITICAL: Print path for the GUI worker
     return abs_path_str
+
+def is_existing_installation_valid(install_base_path: Path) -> bool:
+    """
+    Checks if a valid, complete ANPE Studio installation already exists
+    at the given path.
+    """
+    logger.info(f"Checking for existing valid installation at: {install_base_path}")
+
+    python_exe_path = install_base_path / PYTHON_DIR_NAME / "python.exe"
+    app_code_dir = install_base_path / APP_CODE_DIR_NAME
+    launcher_exe_path = install_base_path / LAUNCHER_EXE_NAME
+    uninstaller_exe_path = install_base_path / UNINSTALLER_EXE_NAME
+
+    checks = {
+        "Python executable": python_exe_path.is_file(),
+        "Application code directory": app_code_dir.is_dir(),
+        f"{LAUNCHER_EXE_NAME}": launcher_exe_path.is_file(),
+        f"{UNINSTALLER_EXE_NAME}": uninstaller_exe_path.is_file(),
+    }
+
+    all_checks_pass = True
+    for item, present in checks.items():
+        if present:
+            logger.info(f"Found: {item}")
+        else:
+            logger.warning(f"Missing: {item} at expected location.")
+            all_checks_pass = False
+
+    if all_checks_pass:
+        logger.info("All components for a valid existing installation found.")
+        return True
+    else:
+        logger.info("Existing installation is incomplete or not found.")
+        return False
 
 def enable_site_packages(python_extract_path: str):
     """Find the ._pth file and uncomment 'import site' to enable site-packages."""
@@ -339,11 +376,11 @@ def copy_app_code(target_install_path: str):
         print_failure(f"An unexpected error occurred while copying application source code: {e}")
 
 def copy_bundled_executables(target_install_path: str):
-    """Copies the bundled ANPE Studio.exe and uninstall.exe to the target dir."""
+    """Copies the bundled anpe.exe and uninstall.exe to the target dir."""
     executables_to_copy = {
         # Paths relative to _MEIPASS root, need .. from installer dir base
-        "ANPE Studio.exe": "../assets/ANPE Studio.exe",
-        "uninstall.exe": "../assets/uninstall.exe" 
+        LAUNCHER_EXE_NAME: f"../assets/{LAUNCHER_EXE_NAME}",
+        UNINSTALLER_EXE_NAME: f"../assets/{UNINSTALLER_EXE_NAME}"
     }
     
     for exe_name, source_rel_path in executables_to_copy.items():
@@ -394,6 +431,7 @@ def copy_icon_file(target_install_path: str):
 def main(install_path: str):
     """Main logic for Stage 1 setup."""
     logger.info(f"Starting ANPE Environment Setup in {install_path}")
+    was_upgrade = False # Flag to track if this was an upgrade
 
     # 1. Validate install path (Basic checks, more robust validation in GUI)
     print_step("Validating installation path permissions...")
@@ -413,32 +451,55 @@ def main(install_path: str):
         print_failure(f"Installation path is invalid or not writable: {install_path_abs}. Error: {e}")
     print_step("Installation path is valid and writable.")
 
-    # 2. Unpack Python
-    python_extract_path = unpack_python(str(install_path_abs))
+    # Check for existing valid installation
+    if is_existing_installation_valid(install_path_abs):
+        print_step("Valid existing installation detected. Preparing for upgrade...")
+        logger.info("Performing an upgrade. Environment setup will be skipped.")
+        was_upgrade = True
 
-    # 3. Find Python executable AND enable site-packages
-    python_exe = find_python_executable(python_extract_path)
-    enable_site_packages(python_extract_path)
+        # Crucially, we still need to find and print the python_exe path
+        # as the GUI worker might need it for subsequent model download steps,
+        # even if we skip the environment setup.
+        # The python_extract_path for an existing installation is install_path_abs / PYTHON_DIR_NAME
+        existing_python_dir = install_path_abs / PYTHON_DIR_NAME
+        python_exe = find_python_executable(str(existing_python_dir))
+        # We can assume site-packages and pip are already handled from previous install.
+        # No need to call enable_site_packages, bootstrap_pip, or install_required_packages.
+        print_step("Skipping Python unpacking, pip bootstrap, and dependency installation.")
+    else:
+        print_step("No valid existing installation found. Performing fresh installation...")
+        logger.info("Performing a fresh installation.")
+        was_upgrade = False
 
-    # 4. Bootstrap Pip
-    bootstrap_pip(python_exe)
+        # 2. Unpack Python
+        python_extract_path = unpack_python(str(install_path_abs))
 
-    # 5. Upgrade pip
-    run_pip_install(python_exe, "--upgrade pip")
+        # 3. Find Python executable AND enable site-packages
+        python_exe = find_python_executable(python_extract_path)
+        enable_site_packages(python_extract_path)
 
-    # 6. Install packages from requirements file
-    install_required_packages(python_exe, str(install_path_abs))
+        # 4. Bootstrap Pip
+        bootstrap_pip(python_exe)
+
+        # 5. Upgrade pip
+        run_pip_install(python_exe, "--upgrade pip")
+
+        # 6. Install packages from requirements file
+        install_required_packages(python_exe, str(install_path_abs))
 
     # 7. Copy application code (anpe_studio source)
     copy_app_code(str(install_path_abs))
 
-    # 8. Copy bundled executables (ANPE Studio.exe, uninstall.exe)
+    # 8. Copy bundled executables (anpe.exe, uninstall.exe)
     copy_bundled_executables(str(install_path_abs))
 
     # 9. Copy the application icon file
     copy_icon_file(str(install_path_abs))
 
-    print_success("Environment setup complete.")
+    if was_upgrade:
+        print_success("ANPE Studio upgrade complete.")
+    else:
+        print_success("ANPE Studio environment setup complete.")
 
 # --- Standalone Execution Guard ---
 if __name__ == "__main__":

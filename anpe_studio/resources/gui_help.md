@@ -11,7 +11,6 @@ If any essential model are missing, the status bar will display a warning (e.g.,
 Model installation and management are handled through the `<button>` Settings `</button>` dialog, accessible via the gear icon (`<q>` ⚙️ `</q>`) in the top-right corner. This dialog requires an internet connection for downloading models.
 
 ## Usage
-
 The application is organized into two main tabs: `<option>` Input `</option>` and `<option>` Output `</option>`. A toggleable log panel is also available at the bottom (click on colored status label to toggle), showing detailed processing messages.
 
 ### Input Tab
@@ -31,8 +30,7 @@ You can choose between two ways to provide text using the toggle buttons at the 
 * `<button>` Remove Selected `</button>` / `<button>` Clear All `</button>`: Manage the list of files to process.
   **Text Input**
 
-   This mode allows you to type or paste text directly into the editor for quick analysis.
-
+  This mode allows you to type or paste text directly into the editor for quick analysis.
 * `<button>` Paste `</button>`: Insert text from your clipboard.
 * `<button>` Clear `</button>`: Empty the text input area.
 
@@ -53,22 +51,23 @@ Fine-tune the extraction process using the options on the right side:
 
 **Structure Filtering**:
 
-* Enable the main toggle (`<option>` Filter by Structure `</option>`) to activate structure filtering. Then, select specific structures from the list to *include* in the output. Only phrases matching at least one selected structure will be kept.
-  * **`<option>` Determiner `</option>`**: Phrases starting with articles or determiners (e.g., 'the cat', 'a house').
-  * **`<option>` Adjectival Modifier `</option>`**: Phrases containing adjectives that describe the noun (e.g., 'red car', 'beautiful day').
-  * **`<option>` Prepositional Modifier `</option>`**: Phrases where a prepositional phrase follows the noun (e.g., 'book on the table').
-  * **`<option>` Compound `</option>`**: Phrases made of multiple nouns acting as one unit (e.g., 'noun phrase extractor', 'apple pie').
-  * **`<option>` Possessive `</option>`**: Phrases showing ownership (e.g., "John's book", 'her bag').
-  * **`<option>` Quantified `</option>`**: Phrases indicating quantity or number (e.g., 'two dogs', 'many people').
-  * **`<option>` Coordinated `</option>`**: Phrases linking items with 'and' or 'or' (e.g., 'cats and dogs').
-  * **`<option>` Appositive `</option>`**: Phrases where one noun phrase renames another, often set off by commas (e.g., 'Bob, my friend').
-  * **`<option>` Relative Clause `</option>`**: Phrases containing a clause that modifies the noun (e.g., 'the man who called').
-  * **`<option>` Reduced Relative Clause `</option>`**: A relative clause modifying a noun, but without the relative pronoun (e.g., 'the book *written by him*').
-  * **`<option>` Nonfinite Complement `</option>`**: A phrase (often starting with 'to' or ending in '-ing') that completes the meaning of a noun (e.g., 'the *decision to leave*').
-  * **`<option>` Finite Complement `</option>`**: A full clause (often starting with 'that' or 'whether') that completes the meaning of a noun (e.g., 'the *idea that he left*').
-  * **`<option>` Pronoun `</option>`**: Phrases consisting only of a pronoun (e.g., 'he', 'it', 'they'). Note: Use the "Do not accept Pronouns" filter option to exclude these if needed, regardless of structure filtering.
-  * **`<option>` Standalone Noun `</option>`**: Phrases consisting only of a single noun or proper noun (e.g., 'book', 'John').
-  * **`<option>` Others `</option>`**: Any other identified noun phrase structures not fitting the above categories.
+Enable the main toggle (`<option>` Filter by Structure `</option>`) to activate structure filtering. Then, select specific structures from the list to *include* in the output. Only phrases matching at least one selected structure will be kept.
+
+* **`<option>` Determiner `</option>`**: Phrases starting with articles or determiners (e.g., 'the cat', 'a house').
+* **`<option>` Adjectival Modifier `</option>`**: Phrases containing adjectives that describe the noun (e.g., 'red car', 'beautiful day').
+* **`<option>` Prepositional Modifier `</option>`**: Phrases where a prepositional phrase follows the noun (e.g., 'book on the table').
+* **`<option>` Compound `</option>`**: Phrases made of multiple nouns acting as one unit (e.g., 'noun phrase extractor', 'apple pie').
+* **`<option>` Possessive `</option>`**: Phrases showing ownership (e.g., "John's book", 'her bag').
+* **`<option>` Quantified `</option>`**: Phrases indicating quantity or number (e.g., 'two dogs', 'many people').
+* **`<option>` Coordinated `</option>`**: Phrases linking items with 'and' or 'or' (e.g., 'cats and dogs').
+* **`<option>` Appositive `</option>`**: Phrases where one noun phrase renames another, often set off by commas (e.g., 'Bob, my friend').
+* **`<option>` Relative Clause `</option>`**: Phrases containing a clause that modifies the noun (e.g., 'the man who called').
+* **`<option>` Reduced Relative Clause `</option>`**: A relative clause modifying a noun, but without the relative pronoun (e.g., 'the book *written by him*').
+* **`<option>` Nonfinite Complement `</option>`**: A phrase (often starting with 'to' or ending in '-ing') that completes the meaning of a noun (e.g., 'the *decision to leave*').
+* **`<option>` Finite Complement `</option>`**: A full clause (often starting with 'that' or 'whether') that completes the meaning of a noun (e.g., 'the *idea that he left*').
+* **`<option>` Pronoun `</option>`**: Phrases consisting only of a pronoun (e.g., 'he', 'it', 'they'). Note: Use the "Do not accept Pronouns" filter option to exclude these if needed, regardless of structure filtering.
+* **`<option>` Standalone Noun `</option>`**: Phrases consisting only of a single noun or proper noun (e.g., 'book', 'John').
+* **`<option>` Others `</option>`**: Any other identified noun phrase structures not fitting the above categories.
 
 #### Control Buttons
 
@@ -168,10 +167,9 @@ Click the gear icon (`<q>` ⚙️ `</q>`) in the top-right corner to open the Se
 
 * Displays version information for the ANPE GUI and the core `anpe` library, provides links to the project's GitHub repository and contact information, and includes license details for the GUI and its dependencies.
 * **GUI Update Check**:
-    * When you open the About page, it automatically checks for newer versions of ANPE Studio on GitHub.
-    * You can click the status icon or text to manually trigger a new check at any time.
-    * If an update is found, an update icon will appear next to the version. Clicking this icon will take you to the GitHub releases page to download the new version.
-
+  * When you open the About page, it automatically checks for newer versions of ANPE Studio on GitHub.
+  * You can click the status icon or text to manually trigger a new check at any time.
+  * If an update is found, an update icon will appear next to the version. Clicking this icon will take you to the GitHub releases page to download the new version.
 
 ## Tips
 

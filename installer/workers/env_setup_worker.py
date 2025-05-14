@@ -23,18 +23,35 @@ class EnvironmentSetupWorker(QObject):
     # Signal for task status updates
     task_status_update = pyqtSignal(str, int)  # task_id, status
 
-    def __init__(self, install_path: str, parent=None):
-        """Initialize the worker."""
+    def __init__(self, install_path: str, is_upgrade: bool = False, parent=None):
+        """Initialize the worker.
+        
+        Args:
+            install_path: Path where ANPE Studio will be installed
+            is_upgrade: Whether this is an upgrade of existing installation
+            parent: Parent QObject
+        """
         super().__init__(parent)
         self._install_path = install_path
         self._python_exe_path = None # Store the found python path
+        self._is_upgrade = is_upgrade
         
-        self._tasks = {
-            "validate_path": "Validate installation path",
-            "setup_python": "Set up Python environment", 
-            "install_packages": "Install required packages",
-            "copy_files": "Copy application files"
-        }
+        # Adjust tasks based on whether this is an upgrade
+        if self._is_upgrade:
+            self._tasks = {
+                "validate_path": "Validate installation path",
+                "install_packages": "Upgrade packages",  # Added package installation for upgrades
+                "copy_files": "Update application files"
+            }
+        else:
+            # Full installation tasks
+            self._tasks = {
+                "validate_path": "Validate installation path",
+                "setup_python": "Set up Python environment", 
+                "install_packages": "Install required packages",
+                "copy_files": "Copy application files"
+            }
+        
         self._current_task = None
         self._completed_tasks = set()
 
@@ -50,8 +67,10 @@ class EnvironmentSetupWorker(QObject):
             from installer.installer_core import (
                 unpack_python, find_python_executable, enable_site_packages,
                 bootstrap_pip, run_pip_install, copy_app_code, 
-                copy_bundled_executables, copy_icon_file, install_required_packages # Added install_required_packages
+                copy_bundled_executables, copy_icon_file, install_required_packages,
+                is_existing_installation_valid  # Added for validation
             )
+            from pathlib import Path
 
             # Set all tasks to pending initially
             for task_id in self._tasks:
@@ -65,78 +84,128 @@ class EnvironmentSetupWorker(QObject):
             self.task_status_update.emit(self._current_task, TaskStatus.COMPLETED)
             self._completed_tasks.add(self._current_task)
 
-            # --- Stage 2: Setup Python Environment ---
-            self._current_task = "setup_python"
-            self.task_status_update.emit(self._current_task, TaskStatus.PROCESSING)
+            # Log whether this is an upgrade
+            if self._is_upgrade:
+                upgrade_msg = "Performing an UPGRADE installation"
+                self.log_update.emit(upgrade_msg)
+                logger.info(upgrade_msg)
+                
+                # Double-check that this is actually a valid installation
+                install_path_path = Path(self._install_path)
+                if not is_existing_installation_valid(install_path_path):
+                    warning_msg = "WARNING: Upgrade requested but no valid existing installation found!"
+                    self.log_update.emit(warning_msg)
+                    logger.warning(warning_msg)
+                
+                # For upgrades, we need to know the Python path
+                python_exe_path = install_path_path / "python" / "python.exe"
+                if python_exe_path.exists():
+                    python_exe = str(python_exe_path)
+                    self._python_exe_path = python_exe
+                    python_path_msg = f"Using existing Python from: {python_exe}"
+                    self.log_update.emit(python_path_msg)
+                    logger.info(python_path_msg)
+                else:
+                    error_msg = f"Python executable not found at expected path: {python_exe_path}"
+                    logger.error(error_msg)
+                    raise FileNotFoundError(error_msg)
+                    
+                # --- Stage 3: Install Packages (Added for upgrades) ---
+                self._current_task = "install_packages"
+                self.task_status_update.emit(self._current_task, TaskStatus.PROCESSING)
+                self.status_update.emit("Upgrading required packages...")
 
-            self.log_update.emit(f"Target installation path: {self._install_path}")
+                # Call the package installation with upgrade flag
+                self.log_update.emit("Upgrading all packages to latest versions...")
+                install_required_packages(python_exe, self._install_path)
+                self.log_update.emit("Package upgrade completed.")
 
-            # 2.1 Unpack Python
-            self.status_update.emit("Unpacking Python environment...")
-            python_dir = unpack_python(self._install_path)
-            self.log_update.emit(f"Python unpacked to: {python_dir}")
+                self.task_status_update.emit(self._current_task, TaskStatus.COMPLETED)
+                self._completed_tasks.add(self._current_task)
+            else:
+                fresh_install_msg = "Performing a FRESH installation"
+                self.log_update.emit(fresh_install_msg)
+                logger.info(fresh_install_msg)
+                
+                # --- Stage 2: Setup Python Environment --- (Skip if upgrading)
+                self._current_task = "setup_python"
+                self.task_status_update.emit(self._current_task, TaskStatus.PROCESSING)
 
-            # 2.2 Find Python Executable
-            self.status_update.emit("Locating Python executable...")
-            python_exe = find_python_executable(python_dir) 
-            self.log_update.emit(f"Found Python executable: {python_exe}")
-            self._python_exe_path = python_exe # Store for finish signal
+                self.log_update.emit(f"Target installation path: {self._install_path}")
 
-            # 2.3 Enable site-packages
-            self.status_update.emit("Enabling site-packages...")
-            enable_site_packages(python_dir)
-            self.log_update.emit("site-packages enabled.")
+                # 2.1 Unpack Python
+                self.status_update.emit("Unpacking Python environment...")
+                python_dir = unpack_python(self._install_path)
+                self.log_update.emit(f"Python unpacked to: {python_dir}")
 
-            # 2.4 Bootstrap Pip
-            self.status_update.emit("Installing pip...")
-            bootstrap_pip(python_exe)
-            self.log_update.emit("pip installed.")
+                # 2.2 Find Python Executable
+                self.status_update.emit("Locating Python executable...")
+                python_exe = find_python_executable(python_dir) 
+                self.log_update.emit(f"Found Python executable: {python_exe}")
+                self._python_exe_path = python_exe # Store for finish signal
 
-            # 2.5 Upgrade Pip
-            self.status_update.emit("Upgrading pip...")
-            run_pip_install(python_exe, "--upgrade pip")
-            self.log_update.emit("pip upgraded.")
+                # 2.3 Enable site-packages
+                self.status_update.emit("Enabling site-packages...")
+                enable_site_packages(python_dir)
+                self.log_update.emit("site-packages enabled.")
 
-            self.task_status_update.emit(self._current_task, TaskStatus.COMPLETED)
-            self._completed_tasks.add(self._current_task)
+                # 2.4 Bootstrap Pip
+                self.status_update.emit("Installing pip...")
+                bootstrap_pip(python_exe)
+                self.log_update.emit("pip installed.")
 
-            # --- Stage 3: Install Packages ---
-            self._current_task = "install_packages"
-            self.task_status_update.emit(self._current_task, TaskStatus.PROCESSING)
-            self.status_update.emit("Installing required packages...")
+                # 2.5 Upgrade Pip
+                self.status_update.emit("Upgrading pip...")
+                run_pip_install(python_exe, "--upgrade pip")
+                self.log_update.emit("pip upgraded.")
 
-            # Call the new function from installer_core to handle package installation
-            install_required_packages(python_exe, self._install_path)
-            self.log_update.emit("Required packages installed via installer_core.")
+                self.task_status_update.emit(self._current_task, TaskStatus.COMPLETED)
+                self._completed_tasks.add(self._current_task)
 
-            self.task_status_update.emit(self._current_task, TaskStatus.COMPLETED)
-            self._completed_tasks.add(self._current_task)
+                # --- Stage 3: Install Packages --- (Skip if upgrading)
+                self._current_task = "install_packages"
+                self.task_status_update.emit(self._current_task, TaskStatus.PROCESSING)
+                self.status_update.emit("Installing required packages...")
 
-            # --- Stage 4: Copy Application Files ---
+                # Call the new function from installer_core to handle package installation
+                install_required_packages(python_exe, self._install_path)
+                self.log_update.emit("Required packages installed via installer_core.")
+
+                self.task_status_update.emit(self._current_task, TaskStatus.COMPLETED)
+                self._completed_tasks.add(self._current_task)
+
+            # --- Stage 4: Copy Application Files --- (Always do this)
             self._current_task = "copy_files"
             self.task_status_update.emit(self._current_task, TaskStatus.PROCESSING)
-            self.status_update.emit("Deploying application components...") # General status
+            
+            if self._is_upgrade:
+                self.status_update.emit("Updating application components...") # Changed wording for upgrade
+            else:
+                self.status_update.emit("Deploying application components...") # Original wording
 
             # 4.1 Copy application code
             self.status_update.emit("Copying application code...")
             copy_app_code(self._install_path) # Use the function from installer_core
             self.log_update.emit("Application code copied.")
 
-            # 4.2 Copy bundled executables (ANPE Studio.exe, uninstall.exe)
+            # 4.2 Copy bundled executables (anpe.exe, uninstall.exe)
             self.status_update.emit("Copying executables...")
             copy_bundled_executables(self._install_path) # Use the function from installer_core
             self.log_update.emit("Bundled executables copied.")
 
             # 4.3 Copy the application icon file
             self.status_update.emit("Copying application icon...")
-            copy_icon_file(self._install_path) # <<< ADDED THIS CALL
+            copy_icon_file(self._install_path)
             self.log_update.emit("Application icon copied.")
 
             self.task_status_update.emit(self._current_task, TaskStatus.COMPLETED)
             self._completed_tasks.add(self._current_task)
 
             # --- All Done --- 
-            self.status_update.emit("Environment setup complete.")
+            if self._is_upgrade:
+                self.status_update.emit("Application upgrade complete.")
+            else:
+                self.status_update.emit("Environment setup complete.")
             success = True
 
         except Exception as e:

@@ -4,6 +4,9 @@ Centralized styles for the installer application.
 This module provides consistent styling across all views in the application.
 """
 
+# Common colors
+BACKGROUND_COLOR = "#f5f5f5"  # Subtle light grey for backgrounds
+
 # Button Styles
 PRIMARY_BUTTON_STYLE = """
     QPushButton {

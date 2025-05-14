@@ -6,6 +6,7 @@ import shutil
 import winreg  # For Windows registry operations
 import logging # Added for logging
 import re # ADDED: For regex parsing of version file
+import winshell # ADDED for retrieving standard folder paths
 from PyQt6.QtWidgets import QApplication, QMainWindow, QStackedWidget, QWidget, QMessageBox, QVBoxLayout, QFrame
 from PyQt6.QtCore import Qt, QThread, QProcess # Added QThread and QProcess
 from PyQt6.QtGui import QPalette, QColor, QIcon # Added QIcon for window icon
@@ -25,6 +26,7 @@ from installer.widgets.custom_title_bar import CustomTitleBar
 
 # Import utility - CHANGED FROM RELATIVE TO ABSOLUTE IMPORTS
 from installer.utils import get_resource_path, log_filename # Import log_filename
+from installer.styles import BACKGROUND_COLOR, PRIMARY_COLOR  # Import background color
 
 from pyshortcuts import make_shortcut
 
@@ -141,14 +143,14 @@ class SetupMainWindow(QMainWindow):
         # --- Apply Styles --- 
         self.setStyleSheet(f"""
             #MainFrame {{ 
-                background-color: white; 
+                background-color: {BACKGROUND_COLOR}; /* Using imported background color */
                 border: {BORDER_THICKNESS}px solid {PRIMARY_COLOR}; 
                 border-radius: {BORDER_RADIUS}px; 
             }}
             /* Ensure child widgets don't draw over the rounded corners */
             /* This might need refinement based on specific widgets used */
             #MainFrame QStackedWidget > QWidget {{ 
-                background-color: white; 
+                background-color: {BACKGROUND_COLOR}; /* Using imported background color */
                 border-radius: 0px; /* Prevent children from having radius */
             }}
             /* Style title bar slightly */
@@ -203,8 +205,11 @@ class SetupMainWindow(QMainWindow):
         self._fade_in_animation.start()
 
     def _print_log_message(self, message: str):
-        """Helper slot to print log messages directly to the console."""
-        print(f"WORKER LOG: {message}")
+        """Helper slot to print log messages to the console AND to the file logger."""
+        # Keep console print for immediate feedback during development/debugging if desired
+        print(f"WORKER LOG: {message}") 
+        # Route the message to the configured Python logger
+        logger.info(message)
 
     def _create_views(self):
         """Create and add view widgets to the stacked widget."""
@@ -233,6 +238,34 @@ class SetupMainWindow(QMainWindow):
         self.completion_view.launch_requested.connect(self._launch_anpe)
         self.completion_view.preserve_log_requested.connect(self._handle_preserve_log_request)
         self.completion_view.close_requested.connect(self.close)
+
+    def _check_for_existing_installation(self, install_path: str) -> bool:
+        """Check if a valid installation already exists at the given path."""
+        logger.info(f"Checking for existing installation at '{install_path}'...")
+        print(f"Checking for existing installation at '{install_path}'...")
+        
+        # Import the function from installer_core
+        try:
+            from installer.installer_core import is_existing_installation_valid
+            from pathlib import Path
+            
+            # Use the same function installer_core uses
+            abs_path = Path(install_path).resolve()
+            logger.info(f"Resolved absolute path for check: {abs_path}")
+            
+            is_upgrade = is_existing_installation_valid(abs_path)
+            if is_upgrade:
+                logger.info(f"Valid existing installation detected at '{abs_path}'. This will be an upgrade.")
+                print(f"Valid existing installation detected at '{install_path}'. This will be an upgrade.")
+            else:
+                logger.info(f"No valid existing installation found at '{abs_path}'. This will be a fresh install.")
+                print(f"No valid existing installation found at '{install_path}'. This will be a fresh install.")
+            return is_upgrade
+        except Exception as e:
+            logger.error(f"Error checking for existing installation: {e}", exc_info=True)
+            print(f"Failed to check for existing installation: {e}")
+            # Default to fresh install in case of error
+            return False
 
     def _handle_setup_request(self, install_path: str):
         """Slot to handle the setup request from the Welcome view."""
@@ -271,8 +304,58 @@ class SetupMainWindow(QMainWindow):
             return
         # --- End Path Validation ---
 
-        # Start Stage 1
-        self._start_environment_setup()
+        # Check if this is an upgrade
+        is_upgrade = self._check_for_existing_installation(install_path)
+        
+        # Start the appropriate setup flow
+        if is_upgrade:
+            # For upgrade, get Python path from existing installation
+            try:
+                # Construct the expected Python path
+                from pathlib import Path
+                python_dir = Path(abs_install_path) / "python"
+                python_exe = python_dir / "python.exe"
+                
+                if python_exe.exists():
+                    self._python_exe_path = str(python_exe)
+                    print(f"Using existing Python from: {self._python_exe_path}")
+                    
+                    # Skip directly to app code update
+                    self.env_progress_view.clear_log()
+                    self.env_progress_view.update_status("Upgrading application files...")
+                    self.stacked_widget.setCurrentIndex(VIEW_ENV_PROGRESS)
+                    
+                    # Create a worker that only updates app files
+                    self._env_worker = EnvironmentSetupWorker(self._install_path, is_upgrade=True)
+                    
+                    # Set up task list based on worker's tasks
+                    self.env_progress_view.setup_tasks_from_worker(self._env_worker)
+                    
+                    self._env_thread = QThread()
+                    self._env_worker.moveToThread(self._env_thread)
+
+                    # Connect signals
+                    self._env_worker.log_update.connect(self.env_progress_view.append_log)
+                    self._env_worker.log_update.connect(self._print_log_message)
+                    self._env_worker.status_update.connect(self.env_progress_view.update_status)
+                    self._env_worker.task_status_update.connect(self.env_progress_view.update_task_status)
+                    self._env_worker.finished.connect(self._environment_setup_finished)
+                    self._env_thread.started.connect(self._env_worker.run)
+                    self._env_worker.finished.connect(self._env_thread.quit)
+                    self._env_worker.finished.connect(self._env_worker.deleteLater)
+                    self._env_thread.finished.connect(self._env_thread.deleteLater)
+
+                    self._env_thread.start()
+                else:
+                    logger.warning(f"Expected Python executable not found at {python_exe}. Falling back to full setup.")
+                    self._start_environment_setup()
+            except Exception as e:
+                logger.error(f"Error during upgrade setup: {e}", exc_info=True)
+                # Fall back to normal setup
+                self._start_environment_setup()
+        else:
+            # For fresh install, do the normal setup
+            self._start_environment_setup()
 
     def _start_environment_setup(self):
         """Instantiate and start the EnvironmentSetupWorker in a QThread."""
@@ -315,6 +398,12 @@ class SetupMainWindow(QMainWindow):
         
         logger.info(f"Environment setup finished. Success: {success}, Python Path: {python_exe_path_str}, Error: '{error_message}'")
         
+        # Determine if this was an upgrade
+        is_upgrade = False
+        if hasattr(self._env_worker, '_is_upgrade'):
+            is_upgrade = self._env_worker._is_upgrade
+            logger.info(f"Environment setup was running in upgrade mode: {is_upgrade}")
+        
         # No longer need these as deleteLater handles cleanup
         # self._env_thread = None 
         # self._env_worker = None 
@@ -322,7 +411,7 @@ class SetupMainWindow(QMainWindow):
         if success and python_exe_path_str:
             self._python_exe_path = python_exe_path_str # Store the validated path
             # Start Stage 2: Model Setup
-            self._start_model_setup()
+            self._start_model_setup(is_upgrade)
         else:
             # Setup failed, show completion view in failure state
             self._is_running = False
@@ -330,7 +419,7 @@ class SetupMainWindow(QMainWindow):
             # Pass the specific error message to the completion view
             self._show_completion_view(success=False, error_message=error_message)
 
-    def _start_model_setup(self):
+    def _start_model_setup(self, is_upgrade: bool = False):
         """Instantiate and start the ModelSetupWorker in a QThread."""
         print("Starting model setup thread...")
         self._is_running = True # Still running
@@ -338,12 +427,17 @@ class SetupMainWindow(QMainWindow):
         
         # Prepare progress view
         self.model_progress_view.clear_log()
-        self.model_progress_view.update_status("Initializing language model setup...")
+        
+        if is_upgrade:
+            self.model_progress_view.update_status("Checking existing language models...")
+        else:
+            self.model_progress_view.update_status("Initializing language model setup...")
+            
         self.model_progress_view.set_progress_range(0, 0) # Indeterminate
         self.stacked_widget.setCurrentIndex(VIEW_MODEL_PROGRESS)
 
         # Create worker and thread
-        self._model_worker = ModelSetupWorker(self._python_exe_path)
+        self._model_worker = ModelSetupWorker(self._python_exe_path, is_upgrade=is_upgrade)
         
         # Set up task list based on worker's tasks
         self.model_progress_view.setup_tasks_from_worker(self._model_worker)
@@ -402,19 +496,19 @@ class SetupMainWindow(QMainWindow):
             logger.debug("Skipping shortcut creation (create=False).")
             return
 
-        # Need install_path to locate the installed ANPE Studio.exe
+        # Need install_path to locate the installed anpe.exe
         if not self._install_path:
             QMessageBox.warning(self, "Cannot Create Shortcut", "Internal error: Missing installation path.")
             return
 
-        print("Creating shortcut(s) pointing to ANPE Studio.exe...")
+        print("Creating shortcut(s) pointing to anpe.exe...")
 
         # --- Define Shortcut Parameters & Paths ---
-        shortcut_name = "ANPE"
+        shortcut_name = "ANPE Studio"
         # Installation root directory
         install_root_abs = os.path.abspath(self._install_path)
         # Path to the installed launcher executable
-        launcher_exe_abs = os.path.join(install_root_abs, "ANPE Studio.exe")
+        launcher_exe_abs = os.path.join(install_root_abs, "anpe.exe")
         # Path to the copied icon file in the install root
         icon_path_abs = os.path.join(install_root_abs, "app_icon_logo.ico")
 
@@ -432,7 +526,37 @@ class SetupMainWindow(QMainWindow):
             icon_path_abs = None # Fallback to default
 
         try:
-            # Create shortcut explicitly using the copied icon file
+            # Define shortcut paths before creating them
+            desktop_folder = winshell.desktop()
+            startmenu_folder = winshell.programs() # Start Menu/Programs folder
+            
+            # Expected underscore version (created by pyshortcuts)
+            desktop_lnk_path_underscore = os.path.join(desktop_folder, f"ANPE_Studio.lnk")
+            startmenu_lnk_path_underscore = os.path.join(startmenu_folder, f"ANPE_Studio.lnk")
+            
+            # Correctly named versions
+            desktop_lnk_path = os.path.join(desktop_folder, f"{shortcut_name}.lnk")
+            startmenu_lnk_path = os.path.join(startmenu_folder, f"{shortcut_name}.lnk")
+            
+            # Log all paths
+            logger.info(f"Desktop shortcut paths: {desktop_lnk_path_underscore} and {desktop_lnk_path}")
+            logger.info(f"Start menu shortcut paths: {startmenu_lnk_path_underscore} and {startmenu_lnk_path}")
+            
+            # STEP 1: Remove any existing shortcuts FIRST
+            for path in [desktop_lnk_path, desktop_lnk_path_underscore, 
+                         startmenu_lnk_path, startmenu_lnk_path_underscore]:
+                try:
+                    if os.path.exists(path):
+                        os.remove(path)
+                        logger.info(f"Removed existing shortcut: {path}")
+                        print(f"Removed existing shortcut: {path}")
+                except Exception as e:
+                    logger.warning(f"Could not remove existing shortcut at {path}: {e}")
+                    print(f"WARNING: Could not remove existing shortcut at {path}: {e}")
+                    # Continue anyway - we'll try to create it
+            
+            # STEP 2: Now create the shortcut using the library
+            logger.info(f"Creating shortcuts using make_shortcut: script='{launcher_exe_abs}', name='{shortcut_name}'")
             print(f"Calling make_shortcut: script='{launcher_exe_abs}', name='{shortcut_name}', icon='{icon_path_abs}', working_dir='{install_root_abs}'")
             make_shortcut(
                 script=launcher_exe_abs,  # Target is the launcher executable
@@ -444,23 +568,74 @@ class SetupMainWindow(QMainWindow):
                 startmenu=True,
                 working_dir=install_root_abs # Launcher expects to run from install root
             )
+            print("Desktop and Start Menu shortcuts created by make_shortcut.")
+            logger.info("Desktop and Start Menu shortcuts created by make_shortcut.")
+            
+            # STEP 3: Rename the shortcuts (if the library created them with underscores)
+            # Wait a brief moment to ensure files are created
+            import time
+            time.sleep(0.5)
+            
+            # Function to handle shortcut renaming with retries
+            def rename_shortcut_with_retry(src, dest, max_retries=3):
+                """Rename a shortcut with multiple retries if it fails."""
+                if not os.path.exists(src):
+                    logger.info(f"Source shortcut to rename not found: {src}")
+                    return False
+                
+                if os.path.exists(dest):
+                    logger.info(f"Destination shortcut already exists: {dest}")
+                    return True
+                    
+                for attempt in range(max_retries):
+                    try:
+                        os.rename(src, dest)
+                        logger.info(f"Successfully renamed shortcut from {src} to {dest}")
+                        print(f"Renamed shortcut to use spaces instead of underscores.")
+                        return True
+                    except Exception as e:
+                        logger.warning(f"Attempt {attempt+1}/{max_retries} to rename {src} failed: {e}")
+                        time.sleep(0.5)  # Wait a moment before retrying
+                
+                logger.error(f"Failed to rename shortcut after {max_retries} attempts: {src}")
+                return False
+                
+            # Rename desktop shortcut if needed
+            if os.path.exists(desktop_lnk_path_underscore):
+                rename_shortcut_with_retry(desktop_lnk_path_underscore, desktop_lnk_path)
+            
+            # Rename start menu shortcut if needed
+            if os.path.exists(startmenu_lnk_path_underscore):
+                rename_shortcut_with_retry(startmenu_lnk_path_underscore, startmenu_lnk_path)
+                
+            # STEP 4: Verify shortcuts exist
+            desktop_exists = os.path.exists(desktop_lnk_path) or os.path.exists(desktop_lnk_path_underscore)
+            startmenu_exists = os.path.exists(startmenu_lnk_path) or os.path.exists(startmenu_lnk_path_underscore)
+            
+            if desktop_exists and startmenu_exists:
+                logger.info("Successfully verified both shortcuts exist")
+            else:
+                logger.warning(f"Not all shortcuts were created/verified. Desktop: {desktop_exists}, Start Menu: {startmenu_exists}")
+            
+            # Use the best available paths we have
+            final_desktop_path = desktop_lnk_path if os.path.exists(desktop_lnk_path) else desktop_lnk_path_underscore
+            final_startmenu_path = startmenu_lnk_path if os.path.exists(startmenu_lnk_path) else startmenu_lnk_path_underscore
 
-            # Register application and uninstaller link
-            # Pass the explicit icon path for DisplayIcon
-            self._register_app_and_create_uninstaller(install_root_abs, icon_path_abs)
+            # Register application and uninstaller link, passing the verified shortcut paths
+            self._register_app_and_create_uninstaller(install_root_abs, icon_path_abs, final_desktop_path, final_startmenu_path)
 
-            print("Desktop and Start Menu shortcuts created successfully.")
-            logger.debug("make_shortcut and registry calls completed successfully.")
+            print("Shortcut creation, renaming, and registration process completed.")
+            logger.debug("make_shortcut, rename operations, and registry calls completed successfully.")
         except Exception as e:
-            print(f"make_shortcut failed: {e}")
+            print(f"make_shortcut or subsequent operations failed: {e}")
             import traceback
             traceback.print_exc()
-            logger.error(f"Shortcut creation failed: {e}", exc_info=True)
-            QMessageBox.critical(self, "Shortcut Failed", f"Failed to create shortcuts using make_shortcut.\nError: {e}")
+            logger.error(f"Shortcut creation or post-creation operations failed: {e}", exc_info=True)
+            QMessageBox.critical(self, "Shortcut Failed", f"Failed to create or properly name shortcuts.\nError: {e}")
         logger.debug("Leaving _create_shortcut")
 
-    def _register_app_and_create_uninstaller(self, install_root_abs, icon_path):
-        """Register the application in Windows Add/Remove Programs and point to uninstall.exe."""
+    def _register_app_and_create_uninstaller(self, install_root_abs, icon_path, desktop_shortcut_path, start_menu_shortcut_path):
+        """Register the application in Windows Add/Remove Programs, point to uninstall.exe, and store shortcut paths."""
         try:
             # 1. Define path to the installed uninstaller executable
             uninstaller_exe_abs = os.path.join(install_root_abs, "uninstall.exe")
@@ -470,47 +645,44 @@ class SetupMainWindow(QMainWindow):
             if not os.path.isfile(uninstaller_exe_abs):
                 error_msg = f"Cannot register uninstaller. Executable not found after installation at:\n{uninstaller_exe_abs}"
                 print(error_msg, file=sys.stderr)
-                # Don't make registration fail completely, maybe just warn?
                 QMessageBox.warning(self, "Registration Warning", error_msg)
-                # Fallback or skip registration?
-                # For now, proceed without setting UninstallString if not found.
-                uninstall_string = "" # Set empty if not found
+                uninstall_string = ""  # Set empty if not found
             else:
-                uninstall_string = f'"{uninstaller_exe_abs}"' # Properly quote the path
+                uninstall_string = f"{uninstaller_exe_abs}" # Properly quote the path
 
-            # 2. Create registry entries
-            app_name = "ANPE" # Consistent name
-            # --- Get version dynamically ---
-            app_version = get_bundled_app_version()
-            if not app_version:
-                app_version = "UNKNOWN" # Fallback if reading fails
-                logger.warning("Using fallback version 'UNKNOWN' for registry.")
-            # -----------------------------
-            publisher = "Richard Chen" 
-
-            reg_path = rf"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{app_name}" # Use app_name in key
+            app_name = "ANPE Studio"
+            app_version = get_bundled_app_version() or "UNKNOWN"
+            publisher = "Richard Chen"
+            reg_path = rf"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{app_name}"
 
             print(f"Writing registry entries to: HKCU {reg_path}")
-            reg_key = winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, reg_path, 0, winreg.KEY_WRITE)
+            with winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, reg_path, 0, winreg.KEY_WRITE) as reg_key:
+                winreg.SetValueEx(reg_key, "DisplayName", 0, winreg.REG_SZ, app_name)
+                winreg.SetValueEx(reg_key, "DisplayVersion", 0, winreg.REG_SZ, app_version)
+                winreg.SetValueEx(reg_key, "Publisher", 0, winreg.REG_SZ, publisher)
+                winreg.SetValueEx(reg_key, "InstallLocation", 0, winreg.REG_SZ, install_root_abs)
+                if uninstall_string:
+                    winreg.SetValueEx(reg_key, "UninstallString", 0, winreg.REG_SZ, uninstall_string)
+                winreg.SetValueEx(reg_key, "DisplayIcon", 0, winreg.REG_SZ, icon_path if icon_path else "")
+                winreg.SetValueEx(reg_key, "NoModify", 0, winreg.REG_DWORD, 1)
+                winreg.SetValueEx(reg_key, "NoRepair", 0, winreg.REG_DWORD, 1)
 
-            winreg.SetValueEx(reg_key, "DisplayName", 0, winreg.REG_SZ, app_name)
-            winreg.SetValueEx(reg_key, "DisplayVersion", 0, winreg.REG_SZ, app_version)
-            winreg.SetValueEx(reg_key, "Publisher", 0, winreg.REG_SZ, publisher)
-            winreg.SetValueEx(reg_key, "InstallLocation", 0, winreg.REG_SZ, install_root_abs)
-            # --- Update UninstallString to point directly to uninstall.exe --- 
-            if uninstall_string: # Only write if uninstaller was found
-                 winreg.SetValueEx(reg_key, "UninstallString", 0, winreg.REG_SZ, uninstall_string)
-            # ------------------------------------------------------------------
-            # Use the provided explicit icon_path for DisplayIcon
-            winreg.SetValueEx(reg_key, "DisplayIcon", 0, winreg.REG_SZ, icon_path if icon_path else "") 
-            winreg.SetValueEx(reg_key, "NoModify", 0, winreg.REG_DWORD, 1)
-            winreg.SetValueEx(reg_key, "NoRepair", 0, winreg.REG_DWORD, 1)
-            # Estimate size? Difficult to calculate accurately here.
-            # winreg.SetValueEx(reg_key, "EstimatedSize", 0, winreg.REG_DWORD, size_in_kb)
+                # Store actual shortcut paths
+                if os.path.exists(desktop_shortcut_path):
+                    winreg.SetValueEx(reg_key, "DesktopShortcutPath", 0, winreg.REG_SZ, desktop_shortcut_path)
+                    logger.info(f"Stored DesktopShortcutPath: {desktop_shortcut_path}")
+                else:
+                    winreg.SetValueEx(reg_key, "DesktopShortcutPath", 0, winreg.REG_SZ, "") # Store empty if not found
+                    logger.warning(f"Desktop shortcut not found at {desktop_shortcut_path}, storing empty path.")
+                
+                if os.path.exists(start_menu_shortcut_path):
+                    winreg.SetValueEx(reg_key, "StartMenuShortcutPath", 0, winreg.REG_SZ, start_menu_shortcut_path)
+                    logger.info(f"Stored StartMenuShortcutPath: {start_menu_shortcut_path}")
+                else:
+                    winreg.SetValueEx(reg_key, "StartMenuShortcutPath", 0, winreg.REG_SZ, "") # Store empty if not found
+                    logger.warning(f"Start Menu shortcut not found at {start_menu_shortcut_path}, storing empty path.")
 
-            winreg.CloseKey(reg_key)
-
-            print("Application registered successfully in Windows Add/Remove Programs.")
+            print("Application registered successfully with shortcut paths.")
 
         except Exception as e:
             print(f"Error during application registration: {e}")
@@ -520,22 +692,22 @@ class SetupMainWindow(QMainWindow):
             # Continue without failing - this is an optional part of the installation
 
     def _launch_anpe(self, launch: bool):
-        """Handle the request to launch ANPE by running ANPE Studio.exe."""
+        """Handle the request to launch ANPE by running anpe.exe."""
         logger.debug(f"Entering _launch_anpe with launch={launch}")
         if not launch:
             print("Skipping ANPE launch.")
             logger.debug("Skipping ANPE launch (launch=False).")
             return
         
-        # Need install_path to locate ANPE Studio.exe
+        # Need install_path to locate anpe.exe
         if not self._install_path:
             QMessageBox.warning(self, "Cannot Launch ANPE", "Internal error: Missing installation path.")
             return
             
-        print("Launching ANPE via ANPE Studio.exe...")
+        print("Launching ANPE via anpe.exe...")
         # --- Set the working directory and launch command --- 
         install_root_abs = os.path.abspath(self._install_path)
-        launcher_exe_abs = os.path.join(install_root_abs, "ANPE Studio.exe")
+        launcher_exe_abs = os.path.join(install_root_abs, "anpe.exe")
         
         print(f"Target executable: {launcher_exe_abs}")
         print(f"Working directory: {install_root_abs}")
@@ -548,8 +720,8 @@ class SetupMainWindow(QMainWindow):
              return
 
         try:
-            # Launch ANPE Studio.exe directly, setting the CWD to the install root
-            # Use CREATE_NO_WINDOW if available to prevent potential console flash (though ANPE Studio.exe is windowed)
+            # Launch anpe.exe directly, setting the CWD to the install root
+            # Use CREATE_NO_WINDOW if available to prevent potential console flash (though anpe.exe is windowed)
             creationflags = 0
             if platform.system() == "Windows":
                 creationflags = subprocess.CREATE_NO_WINDOW

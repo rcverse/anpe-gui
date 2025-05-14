@@ -116,7 +116,7 @@ class LicenseDialog(QDialog):
         # Title and Subtitle
         title_vbox = QVBoxLayout()
         title_vbox.setSpacing(2)
-        title_label = QLabel("ANPE License Information")
+        title_label = QLabel("ANPE Studio License Information")
         title_label.setStyleSheet(f"font-size: 20px; font-weight: bold; color: {TEXT_COLOR};")
         title_vbox.addWidget(title_label)
 
@@ -137,7 +137,7 @@ class LicenseDialog(QDialog):
 
         # --- Description (Added directly to main_layout) ---
         description = QLabel(
-            "ANPE is free software built upon the principles of open collaboration. It is licensed "
+            "ANPE Studio is free software built upon the principles of open collaboration. It is licensed "
             "under the <b>GNU General Public License version 3 (GPLv3)</b> "
         )
         description.setWordWrap(True)

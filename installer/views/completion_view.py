@@ -50,11 +50,11 @@ class CompletionViewWidget(QWidget):
             # High-DPI support
             screen = QApplication.primaryScreen()
             dpr = screen.devicePixelRatio() if screen else 1.0
-            target_size = int(60 * dpr)
+            target_size = int(96 * dpr)
             scaled_pixmap = pixmap.scaled(target_size, target_size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
             scaled_pixmap.setDevicePixelRatio(dpr)
             logo_label.setPixmap(scaled_pixmap)
-            logo_label.setFixedSize(60, 60)
+            logo_label.setFixedSize(96, 96)
         header_layout.addWidget(logo_label)
         
         # Status Title
@@ -293,7 +293,7 @@ class CompletionViewWidget(QWidget):
             self.status_title.setText("Setup Complete!")
             self.status_title.setStyleSheet("font-size: 26px; font-weight: bold; color: #0078D7; font-family: 'Segoe UI', Arial, sans-serif;")
             self.info_text.setText(
-                "ANPE has been successfully installed and is ready to use.\n\n"
+                "ANPE Studio has been successfully installed and is ready to use.\n\n"
                 "Feedbacks are welcome! Please report any issues or suggestions to rcverse6@gmail.com."
             )
             self.options_container.setVisible(True)

@@ -5,6 +5,7 @@ import re
 import logging
 from typing import Dict, List, Optional
 from PyQt6.QtCore import QObject, pyqtSignal, QProcess
+import time
 
 try:
     from ..utils import get_resource_path
@@ -23,15 +24,17 @@ class ModelSetupWorker(QObject):
     task_status_update = pyqtSignal(str, int)  # task_id, status
     finished = pyqtSignal(bool)  # Success/failure signal
 
-    def __init__(self, python_exe_path: str, parent=None):
+    def __init__(self, python_exe_path: str, is_upgrade: bool = False, parent=None):
         """Initialize the worker.
 
         Args:
             python_exe_path: The path to the Python executable to use.
+            is_upgrade: Whether this is an upgrade. If True, skips model download.
             parent: The parent QObject.
         """
         super().__init__(parent)
         self._python_exe_path = python_exe_path
+        self._is_upgrade = is_upgrade
         self._process = None
         self._current_task = None
         self._completed_tasks = set()
@@ -62,9 +65,38 @@ class ModelSetupWorker(QObject):
 
     def run(self):
         """Run the model setup process."""
+        # For upgrades, skip model installation but keep display for 3 seconds
+        if self._is_upgrade:
+            upgrade_msg = "Upgrade detected - skipping model installation"
+            self.log_update.emit(upgrade_msg)
+            logger.info(upgrade_msg)
+            
+            self.status_update.emit("Skipping model installation for upgrade")
+            
+            # Mark all tasks as completed immediately
+            for task_id in self._tasks:
+                self.task_status_update.emit(task_id, TaskStatus.COMPLETED)
+                self._completed_tasks.add(task_id)
+                
+            reuse_msg = "Using existing language models from previous installation"
+            self.log_update.emit(reuse_msg)
+            logger.info(reuse_msg)
+            
+            self.status_update.emit("Using existing language models")
+            logger.info("Model setup skipped for upgrade - successfully completed")
+            
+            # Add a delay to give users time to see the success
+            self.log_update.emit("Pausing for status review...")
+            time.sleep(3)  # 3 second pause
+            self.log_update.emit("Continuing with installation...")
+            
+            self.finished.emit(True)
+            return
+            
         if not self._python_exe_path or not os.path.isfile(self._python_exe_path):
             error_msg = f"Error: Invalid Python executable: {self._python_exe_path}"
             self.log_update.emit(error_msg)
+            logger.error(error_msg)
             self.status_update.emit("Error: Cannot start setup - invalid Python path")
             
             # Mark all tasks as failed
@@ -154,9 +186,18 @@ class ModelSetupWorker(QObject):
         if "spacy model is already present" in line_lower:
             self._set_task_status("install_spacy", TaskStatus.COMPLETED)
             self.status_update.emit("SpaCy model is already installed")
+            self.log_update.emit("SpaCy model found. Installation not required.")
         elif "benepar model is already present" in line_lower:
             self._set_task_status("install_benepar", TaskStatus.COMPLETED)
             self.status_update.emit("Benepar model is already installed")
+            self.log_update.emit("Benepar model found. Installation not required.")
+        # Handle model not found as normal process, not error
+        elif "spacy model not found" in line_lower:
+            # Don't mark as failed, just keep as processing
+            self.status_update.emit("SpaCy model needs to be downloaded")
+        elif "benepar model not found" in line_lower:
+            # Don't mark as failed, just keep as processing
+            self.status_update.emit("Benepar model needs to be downloaded")
             
         # Handle model download start
         if "downloading spacy model" in line_lower:
@@ -285,7 +326,12 @@ class ModelSetupWorker(QObject):
             self._completed_tasks.discard(task_id)
             
             # Update status message for failed tasks
-            self.status_update.emit(f"Error in {self._tasks[task_id].lower()}.")
+            if task_id == "check_models":
+                # Don't report as error for model check, since missing models isn't an error
+                self.status_update.emit("Language models need to be downloaded.")
+            else:
+                # For other tasks, report failure
+                self.status_update.emit(f"Error in {self._tasks[task_id].lower()}.")
 
     def _handle_stderr(self):
         """Process error output from the script."""

@@ -48,11 +48,11 @@ def get_resource_path(relative_path: str) -> str:
         if is_frozen:
             # PyInstaller mode: base_path is the installer dir inside _MEIPASS
             base_path = os.path.join(sys._MEIPASS, 'installer')
-            logging.debug(f"Running Frozen. Base path: {base_path}")
+            #logging.debug(f"Running Frozen. Base path: {base_path}")
         else:
             # Development mode: base_path is the directory containing this script (installer/)
             base_path = os.path.dirname(os.path.abspath(__file__)) # /path/to/project/installer
-            logging.debug(f"Running in Dev mode. Base path: {base_path}")
+            #logging.debug(f"Running in Dev mode. Base path: {base_path}")
 
     except Exception as e:
         logging.error(f"Error determining base path: {e}", exc_info=True)
@@ -63,7 +63,7 @@ def get_resource_path(relative_path: str) -> str:
     resolved_path = os.path.join(base_path, relative_path)
     # Use normpath to handle potential .. segments correctly
     resolved_path = os.path.normpath(resolved_path) 
-    logging.debug(f"Resolving relative_path '{relative_path}' to absolute_path '{resolved_path}'")
+    #logging.debug(f"Resolving relative_path '{relative_path}' to absolute_path '{resolved_path}'")
 
     # Extra check: Log if the final path doesn't exist
     if not os.path.exists(resolved_path):

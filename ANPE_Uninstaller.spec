@@ -7,7 +7,7 @@ block_cipher = None
 # --- Application Configuration ---
 APP_NAME = 'uninstall'
 # --- SCRIPT PATH: Ensure this points to the Tkinter version --- 
-SCRIPT_FILE = 'installer/uninstall.pyw' # Or uninstall_tk.py? Verify filename.
+SCRIPT_FILE = 'installer/uninstall.pyw'
 # --- ICON PATH: Update if needed, using app icon for now --- 
 ICON_FILE = 'installer/assets/app_icon_logo.ico'
 # --- ASSETS: Add logo image for Tkinter UI ---

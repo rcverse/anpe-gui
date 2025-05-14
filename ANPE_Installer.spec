@@ -14,7 +14,7 @@ if spec_dir not in sys.path:
 block_cipher = None
 
 # --- Configuration ---
-APP_NAME = 'ANPE_Installer'
+APP_NAME = 'anpe_studio_installer'
 SCRIPT_FILE = 'installer/setup_windows.pyw'
 INSTALLER_ICON_FILE = 'installer/assets/app_icon_logo.ico' # Reusing app icon
 
@@ -24,7 +24,7 @@ APP_SOURCE_DIR = 'anpe_studio'
 DOCS_SOURCE_DIR = 'docs'
 REQUIREMENTS_SOURCE = 'requirements.txt'
 INSTALLER_ASSETS_SOURCE = 'installer/assets'
-PREBUILT_LAUNCHER_SOURCE = 'dist/ANPE Studio.exe' 
+PREBUILT_LAUNCHER_SOURCE = 'dist/anpe.exe' 
 PREBUILT_UNINSTALLER_SOURCE = 'dist/uninstall.exe' # Assumes built uninstall.exe is here
 
 # --- Target paths within the bundle ---
@@ -34,7 +34,7 @@ APP_TARGET_DIR = 'assets/anpe_studio' # installer_core copies from assets/anpe_s
 DOCS_TARGET_DIR = 'assets/docs' # installer_core copies from assets/docs
 REQUIREMENTS_TARGET = 'assets' # installer_core looks for it in assets
 INSTALLER_ASSETS_TARGET = 'assets' # For installer GUI's own assets (logo, etc.)
-PREBUILT_LAUNCHER_TARGET = 'assets' # installer_core copies ANPE Studio.exe from assets
+PREBUILT_LAUNCHER_TARGET = 'assets' # installer_core copies anpe.exe from assets
 PREBUILT_UNINSTALLER_TARGET = 'assets' # installer_core copies uninstall.exe from assets
 
 
@@ -103,7 +103,7 @@ bundled_data.extend(installer_assets_to_bundle)
 # # bundled_data.extend(installer_assets)
 
 
-# 6. Pre-built Launcher (ANPE Studio.exe)
+# 6. Pre-built Launcher (anpe.exe)
 bundled_data.append((PREBUILT_LAUNCHER_SOURCE, PREBUILT_LAUNCHER_TARGET))
 
 # 7. Pre-built Uninstaller (uninstall.exe)

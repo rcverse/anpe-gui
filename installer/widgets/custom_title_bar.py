@@ -209,7 +209,7 @@ if __name__ == '__main__':
             central_widget.setObjectName("centralWidget")
             central_widget.setStyleSheet("""
                 #centralWidget {
-                    background-color: white;
+                    background-color: #f5f5f5;
                     border-radius: 5px;
                 }
             """)
@@ -224,7 +224,7 @@ if __name__ == '__main__':
             # Add some content below the title bar
             content_widget = QWidget()
             content_widget.setStyleSheet("""
-                background-color: white; 
+                background-color: #f5f5f5; 
                 border: 1px solid #e0e0e0; 
                 border-top: none;
                 border-bottom-left-radius: 5px;

@@ -61,11 +61,11 @@ class ExtractionWorker(QObject):
                 metadata=self.include_metadata,
                 include_nested=self.include_nested
             )
-            logging.info("WORKER (Text): Extraction successful.")
+            logging.info("Extraction successful.")
             self.signals.result.emit(result_data)
         except Exception as e:
             logging.error(f"WORKER (Text): Error during extraction: {e}", exc_info=True)
             self.signals.error.emit(str(e))
         finally:
-            logging.info("WORKER (Text): Finishing.")
+            logging.debug("WORKER (Text): Finishing.")
             self.signals.finished.emit() 

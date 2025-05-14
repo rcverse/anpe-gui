@@ -107,7 +107,7 @@ class WelcomeViewWidget(QWidget):
              print(f"Error resolving logo path: {e}", file=sys.stderr)
 
         logo_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        layout.addWidget(logo_label)
+        layout.addWidget(logo_label, 0, Qt.AlignmentFlag.AlignCenter)
 
         # --- Welcome Text ---
         title_label = QLabel("Welcome to ANPE Studio Setup")
@@ -143,9 +143,9 @@ class WelcomeViewWidget(QWidget):
         # Automatically determine appropriate installation path based on admin privileges
         is_admin = self._is_admin()
         if is_admin:
-            default_path = os.path.join(os.environ.get('ProgramFiles', 'C:\\Program Files'), "ANPE")
+            default_path = os.path.join(os.environ.get('ProgramFiles', 'C:\\Program Files'), "ANPEStudio")
         else:
-            default_path = os.path.join(os.environ.get('LOCALAPPDATA', os.path.expanduser("~\\AppData\\Local")), "ANPE")
+            default_path = os.path.join(os.environ.get('LOCALAPPDATA', os.path.expanduser("~\\AppData\\Local")), "ANPEStudio")
         
         self.path_edit.setText(default_path)
         self.path_edit.textChanged.connect(self._validate_inputs) # Validate on change
@@ -302,29 +302,8 @@ class WelcomeViewWidget(QWidget):
         layout.addSpacing(10)
 
         # --- Debugging: Log MEIPASS structure if frozen ---
-        self._log_meipass_structure()
+        # self._log_meipass_structure()
         # --- End Debugging ---
-
-    # --- Debugging Function ---
-    def _log_meipass_structure(self):
-        """Logs the MEIPASS directory structure if running frozen."""
-        if hasattr(sys, '_MEIPASS'):
-            meipass_path = sys._MEIPASS
-            logger.info(f"--- MEIPASS Directory Structure ({meipass_path}) ---")
-            try:
-                for root, dirs, files in os.walk(meipass_path):
-                    level = root.replace(meipass_path, '').count(os.sep)
-                    indent = ' ' * 4 * (level)
-                    logger.info(f'{indent}{os.path.basename(root)}/')
-                    subindent = ' ' * 4 * (level + 1)
-                    for f in files:
-                        logger.info(f'{subindent}{f}')
-                logger.info("--- End MEIPASS Structure ---")
-            except Exception as e:
-                logger.error(f"Error walking MEIPASS directory: {e}")
-        else:
-            logger.info("Not running frozen, skipping MEIPASS structure log.")
-    # --- End Debugging Function ---
 
     def _browse_directory(self):
         """Open a directory selection dialog."""

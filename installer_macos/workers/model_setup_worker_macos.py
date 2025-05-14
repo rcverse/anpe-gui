@@ -43,32 +43,16 @@ class ModelSetupWorkerMacOS(QObject):
         self._completed_tasks = set() # Tracks completed task IDs
         self._error_message = "" # Store last significant error
         
-        # Define SIMPLIFIED tasks 
+        # Define GRANULAR tasks
         self._tasks = {
-            "check_models": "Check Models",    # Single check task
-            "install_models": "Install Models",  # Single install task
+            "check_spacy": "Check spaCy Model",
+            "install_spacy": "Install spaCy Model",
+            "check_benepar": "Check Benepar Model",
+            "install_benepar": "Install Benepar Model",
         }
+        self._task_order = ["check_spacy", "install_spacy", "check_benepar", "install_benepar"] # For sequential processing
 
-        # Task phase mapping - map relevant keywords to simplified tasks
-        self._phase_patterns = {
-            "check_models": [
-                "checking spacy model", 
-                "checking benepar model",
-                "already present", # If found during check
-            ],
-            "install_models": [
-                "not found. attempting download",
-                "downloading spacy model", 
-                "downloading benepar model", 
-                "installing spacy", 
-                "installing benepar", 
-                "install_spacy_model", 
-                "install_benepar_model", 
-                "en_core_web_", # Part of spacy download
-                "benepar_en",   # Part of benepar download
-                "successfully downloaded and verified"
-            ],
-        }
+        # No longer using _phase_patterns, parsing will be more direct
         
         # Verify the python executable path exists
         if not self._python_exe_path or not os.path.isfile(self._python_exe_path):
@@ -80,15 +64,20 @@ class ModelSetupWorkerMacOS(QObject):
         """Run the anpe.utils.setup_models script. Runs in a separate thread."""
         logger.info("ModelSetupWorkerMacOS thread started.")
         # Initialize tasks as pending
-        for task_id in self._tasks:
-            self.task_status_update.emit(task_id, TaskStatus.PENDING, self._tasks[task_id]) # Emit base name
+        for task_id in self._task_order: # Use task_order for initialization
+            self.task_status_update.emit(task_id, TaskStatus.PENDING, self._tasks[task_id])
 
         self.log_update.emit(f"Starting model setup using standalone Python")
         self.status_update.emit("Starting language model check...")
 
-        # Start with the check phase
-        self._active_task_id = "check_models"
-        self._set_task_status(self._active_task_id, TaskStatus.PROCESSING, "Checking language models...")
+        # Start with the first task in order
+        self._active_task_id = self._task_order[0] if self._task_order else None
+        if self._active_task_id:
+            self._set_task_status(self._active_task_id, TaskStatus.PROCESSING, f"Processing: {self._tasks[self._active_task_id]}")
+        else:
+            logger.error("Task order is empty, cannot start.")
+            self.finished.emit(False, "Internal error: Task order empty.")
+            return
 
         # Setup QProcess (No env setup needed anymore)
         self._setup_process()
@@ -178,9 +167,12 @@ class ModelSetupWorkerMacOS(QObject):
             for line in data.splitlines():
                 if not line.strip(): continue
                 self._update_task_status_from_line(line)
-                clean_status = self._clean_status_message(line)
-                if clean_status:
-                    self.status_update.emit(clean_status)
+                # Clean status message is now primarily handled within _update_task_status_from_line
+                # to provide more context-specific status updates.
+                # General status_update can still be used for broader messages if needed.
+                # clean_status = self._clean_status_message(line) 
+                # if clean_status:
+                #    self.status_update.emit(clean_status)
 
         except Exception as e:
             self.log_update.emit(f"Error processing stdout: {e}")
@@ -191,54 +183,150 @@ class ModelSetupWorkerMacOS(QObject):
         line_lower = line.strip().lower()
         if not line_lower: return
 
-        # Determine if this line relates to checking or installing
-        current_phase = None
-        if any(p in line_lower for p in self._phase_patterns["check_models"]):
-            current_phase = "check_models"
-        elif any(p in line_lower for p in self._phase_patterns["install_models"]):
-            current_phase = "install_models"
+        # --- Global Error/Success Check First ---
+        if any(err in line_lower for err in ["error:", " failed", "exception", "critical", "traceback"]):
+            self._error_message = f"Error during model setup: {line}"
+            self.log_update.emit(f"ERROR DETECTED: {self._error_message}")
+            if self._active_task_id:
+                self._set_task_status(self._active_task_id, TaskStatus.FAILED, f"Failed: {self._tasks[self._active_task_id]}")
+            self._fail_subsequent_tasks(self._active_task_id)
+            return # Stop further processing of this line
+
+        if "model setup process completed successfully" in line_lower:
+            self.log_update.emit("Overall success message detected in logs.")
+            # Mark all remaining PENDING/PROCESSING tasks as COMPLETED
+            for task_id_to_complete in self._task_order:
+                if task_id_to_complete not in self._completed_tasks:
+                    # Check if it's an install task that might have been skipped
+                    if "install" in task_id_to_complete and self._is_model_already_present(task_id_to_complete.split('_')[1]):
+                        self._set_task_status(task_id_to_complete, TaskStatus.COMPLETED, f"{self._tasks[task_id_to_complete]} (already present)")
+                    else:
+                        self._set_task_status(task_id_to_complete, TaskStatus.COMPLETED, f"{self._tasks[task_id_to_complete]}")
+            self._active_task_id = None # No more active tasks
+            self.status_update.emit("Language model setup complete.")
+            return
+
+        # --- Active Task Processing ---
+        if not self._active_task_id:
+            return # No active task to update
+
+        current_task_description = self._tasks[self._active_task_id]
+        status_to_emit = self._clean_status_message(line) # Get a cleaned version for user status
+
+        # --- SpaCy Check ---
+        if self._active_task_id == "check_spacy":
+            if "checking spacy model" in line_lower:
+                self._set_task_status("check_spacy", TaskStatus.PROCESSING, "Checking spaCy model...")
+                if status_to_emit: self.status_update.emit(status_to_emit)
+            elif "spacy model already present" in line_lower or "spacy model is already installed" in line_lower:
+                self._set_task_status("check_spacy", TaskStatus.COMPLETED, "spaCy model already present.")
+                self._set_task_status("install_spacy", TaskStatus.COMPLETED, "spaCy model installation skipped (already present).")
+                self._completed_tasks.add("install_spacy") # Mark as completed for logic
+                self._advance_to_next_task()
+                if status_to_emit: self.status_update.emit(status_to_emit or "spaCy model found.")
+            elif "spacy model not found" in line_lower: # Explicit not found
+                self._set_task_status("check_spacy", TaskStatus.COMPLETED, "spaCy model not found, proceeding to install.")
+                self._advance_to_next_task() # Moves to install_spacy
+                if status_to_emit: self.status_update.emit(status_to_emit or "spaCy model not found, attempting download.")
+            # If "not found" is part of a download attempt, install_spacy will pick it up
+
+        # --- SpaCy Install ---
+        elif self._active_task_id == "install_spacy":
+            if "installing spacy model" in line_lower or "downloading spacy model" in line_lower or "en_core_web_" in line_lower:
+                self._set_task_status("install_spacy", TaskStatus.PROCESSING, "Installing spaCy model...")
+                if status_to_emit: self.status_update.emit(status_to_emit)
+            elif "successfully downloaded and verified spacy model" in line_lower or "spacy model installed successfully" in line_lower:
+                self._set_task_status("install_spacy", TaskStatus.COMPLETED, "spaCy model installed successfully.")
+                self._advance_to_next_task()
+                if status_to_emit: self.status_update.emit(status_to_emit or "spaCy model installed.")
         
-        if not current_phase:
-             return # Ignore lines not matching known phases
+        # --- Benepar Check ---
+        elif self._active_task_id == "check_benepar":
+            if "checking benepar model" in line_lower:
+                self._set_task_status("check_benepar", TaskStatus.PROCESSING, "Checking Benepar model...")
+                if status_to_emit: self.status_update.emit(status_to_emit)
+            elif "benepar model already present" in line_lower or "benepar model is already installed" in line_lower:
+                self._set_task_status("check_benepar", TaskStatus.COMPLETED, "Benepar model already present.")
+                self._set_task_status("install_benepar", TaskStatus.COMPLETED, "Benepar installation skipped (already present).")
+                self._completed_tasks.add("install_benepar")
+                self._advance_to_next_task()
+                if status_to_emit: self.status_update.emit(status_to_emit or "Benepar model found.")
+            elif "benepar model not found" in line_lower: # Explicit not found
+                self._set_task_status("check_benepar", TaskStatus.COMPLETED, "Benepar model not found, proceeding to install.")
+                self._advance_to_next_task() # Moves to install_benepar
+                if status_to_emit: self.status_update.emit(status_to_emit or "Benepar model not found, attempting download.")
 
-        # If moving from checking to installing
-        if self._active_task_id == "check_models" and current_phase == "install_models":
-            self._set_task_status("check_models", TaskStatus.COMPLETED, "Checked language models.")
-            self._active_task_id = "install_models"
-            self._set_task_status(self._active_task_id, TaskStatus.PROCESSING, "Installing missing models...")
+        # --- Benepar Install ---
+        elif self._active_task_id == "install_benepar":
+            if "installing benepar model" in line_lower or "downloading benepar model" in line_lower or "benepar_en" in line_lower:
+                self._set_task_status("install_benepar", TaskStatus.PROCESSING, "Installing Benepar model...")
+                if status_to_emit: self.status_update.emit(status_to_emit)
+            elif "successfully downloaded and verified benepar model" in line_lower or "benepar model installed successfully" in line_lower:
+                self._set_task_status("install_benepar", TaskStatus.COMPLETED, "Benepar model installed successfully.")
+                self._advance_to_next_task() # Should be the end of tasks
+                if status_to_emit: self.status_update.emit(status_to_emit or "Benepar model installed.")
         
-        # Handle specific outcomes within the current phase
-        task_id = self._active_task_id
-        if task_id:
-            # Update status based on parsed line
-            status_text = "" # Start with empty, determine based on line
-            task_status = TaskStatus.PROCESSING # Default to processing
+        # Fallback for general download messages if not caught by specific model install
+        elif "downloading model file" in line_lower and self._active_task_id and "install" in self._active_task_id:
+            self._set_task_status(self._active_task_id, TaskStatus.PROCESSING, f"Downloading: {current_task_description}...")
+            if status_to_emit: self.status_update.emit(status_to_emit)
 
-            # Determine status text and enum based on log content
+    def _is_model_already_present(self, model_type: str) -> bool:
+        """Helper to check if a model type (spacy/benepar) was marked as already present."""
+        # This is a placeholder. In a more robust system, you might check the status of the 'check' task.
+        # For now, we assume if an 'install' task is skipped, it's because the 'check' found it.
+        # This logic is now more integrated into _update_task_status_from_line.
+        check_task_id = f"check_{model_type}"
+        # A more direct way: if install_spacy is completed but was never set to processing, it was skipped.
+        # However, this check isn't easily done without more state.
+        # The current _update_task_status_from_line directly marks install as completed if check says "already present".
+        return f"install_{model_type}" in self._completed_tasks and \
+               not self._was_task_processed(f"install_{model_type}")
 
-            # Errors
-            if any(err in line_lower for err in ["error:", " failed", "exception", "critical"]):
-                failed_text = f"Failed: {self._tasks[task_id]}"
-                self._set_task_status(task_id, TaskStatus.FAILED, failed_text)
-                self._error_message = f"Failed during model setup: {line}"
-                # Mark the other task as failed too if one fails
-                other_task = "install_models" if task_id == "check_models" else "check_models"
-                if other_task not in self._completed_tasks:
-                     self._set_task_status(other_task, TaskStatus.FAILED, f"Failed: {self._tasks[other_task]}")
-                return 
+    def _was_task_processed(self, task_id: str) -> bool:
+        """ Helper to see if a task was ever set to PROCESSING. Needs more state tracking if used. """
+        # This is a conceptual helper. To implement it fully, you'd need to store the history of states.
+        # For now, this isn't strictly necessary with the current refactoring.
+        return True # Placeholder
 
-            # Successful completion of installation
-            if "successfully downloaded and verified" in line_lower or "model setup process completed successfully" in line_lower:
-                 # Mark both as completed if the process finishes
-                 if "check_models" not in self._completed_tasks:
-                      self._set_task_status("check_models", TaskStatus.COMPLETED, "Checked language models.")
-                 if "install_models" not in self._completed_tasks:
-                      self._set_task_status("install_models", TaskStatus.COMPLETED, "Installed language models.")
-            
-            # If checking and model(s) already present (may be inferred if install phase not reached before success msg)
-            elif task_id == "check_models" and "already present" in line_lower:
-                 # Don't change status text yet, wait for overall success or install trigger
-                 pass 
+    def _advance_to_next_task(self):
+        """Advances _active_task_id to the next task in _task_order."""
+        if not self._active_task_id:
+            logger.debug("Cannot advance task, no active task ID.")
+            return
+
+        try:
+            current_index = self._task_order.index(self._active_task_id)
+            if current_index + 1 < len(self._task_order):
+                self._active_task_id = self._task_order[current_index + 1]
+                # Set the new active task to PROCESSING if it's not already completed (e.g. skipped)
+                if self._active_task_id not in self._completed_tasks:
+                    self._set_task_status(self._active_task_id, TaskStatus.PROCESSING, f"Processing: {self._tasks[self._active_task_id]}")
+                logger.info(f"Advanced to next task: {self._active_task_id}")
+            else:
+                logger.info("All tasks processed or current task was the last.")
+                self._active_task_id = None # No more tasks
+        except ValueError:
+            logger.error(f"Could not find active task {self._active_task_id} in task order.")
+            self._active_task_id = None
+
+    def _fail_subsequent_tasks(self, failed_task_id: Optional[str]):
+        """Marks all tasks from the failed_task_id onwards as FAILED."""
+        if not failed_task_id: # If no specific task failed, fail all non-completed.
+            for task_id in self._task_order:
+                if task_id not in self._completed_tasks:
+                    self._set_task_status(task_id, TaskStatus.FAILED, f"Failed: {self._tasks[task_id]}")
+            return
+
+        try:
+            start_index = self._task_order.index(failed_task_id)
+            for i in range(start_index, len(self._task_order)):
+                task_to_fail = self._task_order[i]
+                if task_to_fail not in self._completed_tasks:
+                    self._set_task_status(task_to_fail, TaskStatus.FAILED, f"Failed: {self._tasks[task_to_fail]}")
+        except ValueError:
+            logger.error(f"Failed task {failed_task_id} not found in task order. Marking all remaining as failed.")
+            self._mark_all_tasks_failed()
 
     def _clean_status_message(self, message: str) -> str:
         """Clean up log messages for user-friendly display (similar to Windows worker)."""
@@ -283,13 +371,15 @@ class ModelSetupWorkerMacOS(QObject):
         if "checking benepar model" in cleaned.lower():
             return "Checking required parsing model..."
         if "successfully downloaded and verified" in cleaned.lower():
-            return "Model download verified."
+            # More specific messages are now handled in _update_task_status_from_line
+            return "Model download verified." 
         if "model setup process completed successfully" in cleaned.lower():
             return "Language model setup complete."
         if "already present" in cleaned.lower():
-             # Don't show "already present" as main status, keep previous status
-             return ""
+             # Specific "already present" for spaCy/Benepar handled in _update_task_status_from_line
+             return "" # Avoid generic "already present" status
         if "attempting download" in cleaned.lower():
+             # Specific download messages for spaCy/Benepar handled in _update_task_status_from_line
              return "Downloading required models..."
 
         # --- Keep existing download cleaning --- 
@@ -321,8 +411,8 @@ class ModelSetupWorkerMacOS(QObject):
             self._completed_tasks.discard(task_id) 
 
     def _mark_all_tasks_failed(self):
-        """Mark all simplified tasks as failed."""
-        for task_id in self._tasks:
+        """Mark all defined tasks as failed if they aren't completed."""
+        for task_id in self._task_order: # Iterate through the defined order
             if task_id not in self._completed_tasks:
                 self._set_task_status(task_id, TaskStatus.FAILED, f"Failed: {self._tasks[task_id]}")
 
@@ -347,8 +437,6 @@ class ModelSetupWorkerMacOS(QObject):
                     elif "benepar" in line_lower: failed_task = "benepar_model"
                 if failed_task:
                     self._set_task_status(failed_task, TaskStatus.FAILED, f"Failed: {self._tasks[failed_task]}")
-                else: # Mark all if unsure
-                    self._mark_all_tasks_failed()
             
         except Exception as e:
             self.log_update.emit(f"Error processing stderr: {e}")
@@ -383,15 +471,36 @@ class ModelSetupWorkerMacOS(QObject):
             # Process exited cleanly (Exit Code 0)
             # Aggressively mark all tasks as completed on clean exit, 
             # even if specific log lines weren't caught.
-            all_tasks_completed = True
-            for task_id in self._tasks:
+            all_tasks_completed_or_skipped = True
+            for task_id in self._task_order: # Use task_order
                 if task_id not in self._completed_tasks:
-                    logger.warning(f"Task '{task_id}' not marked complete by logs, but process exited cleanly. Marking complete.")
-                    self._set_task_status(task_id, TaskStatus.COMPLETED, f"{self._tasks[task_id]} installed.")
-                    # Keep track if we had to force-complete any
-                    # all_tasks_completed = False # Optional: Be strict?
+                    # Check if it's an install task that might have been skipped because model was present
+                    model_type = None
+                    if task_id == "install_spacy": model_type = "spacy"
+                    elif task_id == "install_benepar": model_type = "benepar"
 
-            if all_tasks_completed:
+                    is_skipped_install = False
+                    if model_type:
+                        check_task_id = f"check_{model_type}"
+                        # If check task is complete AND this install task is not, assume it was present/skipped
+                        if check_task_id in self._completed_tasks:
+                             # A bit more specific: check if the 'check' task specifically said 'already present'
+                             # This requires storing more detail about the check task's outcome if needed.
+                             # For now, assume if check is done and install isn't, it was due to presence.
+                             # The _update_task_status_from_line should handle this ideally.
+                             self._set_task_status(task_id, TaskStatus.COMPLETED, f"{self._tasks[task_id]} (already present or completed)")
+                             is_skipped_install = True
+
+
+                    if not is_skipped_install:
+                        logger.warning(f"Task '{self._tasks[task_id]}' not marked complete by logs, but process exited cleanly. Marking complete.")
+                        self._set_task_status(task_id, TaskStatus.COMPLETED, f"{self._tasks[task_id]}")
+                    
+            # Re-evaluate all_tasks_completed_or_skipped based on the _completed_tasks set *after* potential updates
+            all_tasks_completed_or_skipped = all(t_id in self._completed_tasks for t_id in self._task_order)
+
+
+            if all_tasks_completed_or_skipped:
                 self.log_update.emit("Model setup process completed successfully.")
                 self.status_update.emit("All language models ready.")
                 final_success = True
@@ -407,15 +516,15 @@ class ModelSetupWorkerMacOS(QObject):
             self.status_update.emit("Error: Model setup failed. Check logs.")
             final_success = False # Ensure failure
 
-        # Ensure any task still marked PROCESSING is marked FAILED if overall failure
+        # Ensure any task still marked PROCESSING or PENDING is marked FAILED if overall failure
         if not final_success:
-            for task_id in self._tasks:
-                # A bit aggressive, but ensures UI doesn't show processing on failure
-                # Need access to current status to check if PROCESSING...
-                # Let's just mark all non-completed as failed on error exit
-                if task_id not in self._completed_tasks:
-                    # Use _set_task_status to ensure signal is emitted correctly
-                    self._set_task_status(task_id, TaskStatus.FAILED, f"Failed: {self._tasks[task_id]}") 
+            self._fail_subsequent_tasks(self._active_task_id) # Fail current and subsequent
+            # Also ensure any earlier PENDING tasks are marked failed if not already handled.
+            for task_id in self._task_order:
+                 if task_id not in self._completed_tasks: # Check all, not just subsequent
+                      # Check if it's already failed by _fail_subsequent_tasks to avoid double signal
+                      # This requires a way to get current status, or trust _set_task_status handles no-op if already failed
+                      self._set_task_status(task_id, TaskStatus.FAILED, f"Failed: {self._tasks[task_id]} (due to overall failure)")
 
         # Log the final outcome before emitting signal
         logger.info(f"ModelWorker determined final_success={final_success}")

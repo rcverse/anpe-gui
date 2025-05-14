@@ -43,11 +43,11 @@ class ProgressViewWidget(QWidget):
             from PyQt6.QtWidgets import QApplication
             screen = QApplication.primaryScreen()
             dpr = screen.devicePixelRatio() if screen else 1.0
-            target_size = int(70 * dpr)
+            target_size = int(96 * dpr)
             scaled_pixmap = logo_pixmap.scaled(target_size, target_size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
             scaled_pixmap.setDevicePixelRatio(dpr)
             logo_label.setPixmap(scaled_pixmap)
-            logo_label.setFixedSize(70, 70)
+            logo_label.setFixedSize(96, 96)
         else:
             # Create a text label as fallback
             logo_label.setText("ANPE")
@@ -66,9 +66,9 @@ class ProgressViewWidget(QWidget):
         # Add explanation text based on the title
         explanation_text = ""
         if "Environment" in self._title:
-            explanation_text = "Setting up a dedicated Python environment with required dependencies for ANPE."
+            explanation_text = "Setting up a dedicated Python environment with required dependencies for ANPE. Depending on your network speed, this could take a while."
         elif "Language Models" in self._title:
-            explanation_text = "Downloading and installing the language processing models needed for text analysis."
+            explanation_text = "Downloading and installing the language processing models needed for ANPE to function."
         
         if explanation_text:
             explanation_label = QLabel(explanation_text)
@@ -76,7 +76,7 @@ class ProgressViewWidget(QWidget):
             explanation_label.setStyleSheet("color: #555555; font-family: 'Segoe UI', Arial, sans-serif; font-size: 13px;")
             title_layout.addWidget(explanation_label)
             
-        header_layout.addLayout(title_layout)
+        header_layout.addLayout(title_layout, 1)
         header_layout.addStretch()
         main_layout.addLayout(header_layout)
         
@@ -183,7 +183,7 @@ class ProgressViewWidget(QWidget):
             selection-background-color: #0078D7;
             selection-color: white;
         """)
-        self._log_area.setMinimumHeight(150)
+        self._log_area.setMinimumHeight(120)
         self._log_area.setVisible(False)
         details_layout.addWidget(self._log_area)
         

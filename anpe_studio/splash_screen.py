@@ -39,6 +39,18 @@ class SplashScreen(QWidget): # Changed from QSplashScreen to QWidget for custom 
     LOGO_SIZE = 280    # Logical size of the logo overlay
     PILLAR_HEIGHT = 40 # New fixed height for capsule shape
     PILLAR_MAX_WIDTH_FACTOR = 0.8 # Pillar width relative to indicator
+    
+    # Progress animation constants
+    PROGRESS_STEP_DURATION = 400  # Duration of animation between steps in ms
+    
+    # Define initialization steps that correspond to progress percentages
+    PROGRESS_STEPS = {
+        'start': 0,           # Starting point
+        'check_models': 20,   # Checking if models exist
+        'spacy_model': 50,    # Loading spaCy model
+        'benepar_model': 80,  # Loading benepar model
+        'complete': 100       # All done
+    }
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -87,7 +99,7 @@ class SplashScreen(QWidget): # Changed from QSplashScreen to QWidget for custom 
         # Policy: Expanding horizontally, fixed height
         self.progress_bar.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.progress_bar.setObjectName("SplashScreenProgressBar") # Assign object name
-
+        
         # Explicitly set the logo label as the current widget to ensure it's on top
         self.stacked_layout.setCurrentWidget(self.logo_label)
 
@@ -124,6 +136,7 @@ class SplashScreen(QWidget): # Changed from QSplashScreen to QWidget for custom 
         self._fade_animation = None
         # --- Animation Setup for Progress Bar ---
         self._progress_animation = None
+        self._current_progress = 0
 
         self.setWindowOpacity(0.0)
 
@@ -234,13 +247,40 @@ class SplashScreen(QWidget): # Changed from QSplashScreen to QWidget for custom 
         self.fade_out_complete.emit()
         self.close() # Close the widget
 
+    # --- Progress Bar Animation ---
+    def update_progress(self, step_name):
+        """Update progress bar to a specific step."""
+        if step_name in self.PROGRESS_STEPS:
+            target_value = self.PROGRESS_STEPS[step_name]
+            self._animate_progress_to(target_value)
+            logging.debug(f"Splash: Progress updated to step '{step_name}' ({target_value}%)")
+        else:
+            logging.warning(f"Unknown progress step: {step_name}")
+
+    def _animate_progress_to(self, target_value):
+        """Animate the progress bar to a specific value."""
+        if self._progress_animation and self._progress_animation.state() == QPropertyAnimation.State.Running:
+            self._progress_animation.stop()
+        
+        current_value = self.progress_bar.value()
+        if current_value == target_value:
+            return  # No need to animate
+            
+        # Create the animation with a shorter duration
+        self._progress_animation = QPropertyAnimation(self.progress_bar, b"value", self)
+        self._progress_animation.setDuration(self.PROGRESS_STEP_DURATION)
+        self._progress_animation.setStartValue(current_value)
+        self._progress_animation.setEndValue(target_value)
+        self._progress_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self._progress_animation.start()
+        self._current_progress = target_value
 
     # --- Initialization Logic (Copied & Adapted) ---
     def start_initialization(self):
         """Start the background model check using ModelStatusChecker."""
-        self.activity_indicator.loading() # USE NEW LOADING STATE
-        self.progress_bar.setValue(0) # Reset progress bar value
-        self._start_progress_animation() # Start the progress animation
+        self.activity_indicator.loading()  # USE NEW LOADING STATE
+        self.progress_bar.setValue(0)  # Reset progress bar value
+        self.update_progress('start')  # Start at 0%
 
         logging.info("Splash: Starting background initialization check...")
         QCoreApplication.processEvents()
@@ -263,6 +303,15 @@ class SplashScreen(QWidget): # Changed from QSplashScreen to QWidget for custom 
         self.init_thread.started.connect(self.init_worker.run)
         self.init_worker.status_checked.connect(self._on_init_success)
         self.init_worker.error_occurred.connect(self._on_init_error)
+        
+        # Connect progress signals if available in ModelStatusChecker
+        if hasattr(self.init_worker, 'progress_update'):
+            self.init_worker.progress_update.connect(self.update_progress)
+        else:
+            # If no progress signal is available, simulate progress based on start/finish
+            self.init_thread.started.connect(lambda: self.update_progress('check_models'))
+            self.init_worker.status_checked.connect(lambda _: self.update_progress('complete'))
+            
         self.init_worker.status_checked.connect(self.init_thread.quit)
         self.init_worker.error_occurred.connect(self.init_thread.quit)
         self.init_thread.finished.connect(self.init_worker.deleteLater)
@@ -281,10 +330,8 @@ class SplashScreen(QWidget): # Changed from QSplashScreen to QWidget for custom 
     def _on_init_success(self, status_dict):
         logging.info(f"Splash: Initialization check successful. Status: {status_dict}")
         self.final_init_status = status_dict
-        # self.activity_indicator.idle() # REMOVED: Keep loading animation running on success
-        # If animation is running, let it complete. If not, set to 100.
-        if not (self._progress_animation and self._progress_animation.state() == QPropertyAnimation.State.Running):
-            self.progress_bar.setValue(100)
+        # Update to complete regardless of previous progress
+        self.update_progress('complete')
         self._emit_completion(self.final_init_status)
 
     @pyqtSlot(str)
@@ -293,8 +340,7 @@ class SplashScreen(QWidget): # Changed from QSplashScreen to QWidget for custom 
         if self._progress_animation and self._progress_animation.state() == QPropertyAnimation.State.Running:
             self._progress_animation.stop()
         self._set_progress_error_style() # Set error style for progress bar
-        # Optionally set value to 100 to fill the bar with error color, or 0, or leave as is.
-        # For now, let's fill it to indicate completion of the (failed) attempt.
+        # Fill the progress bar to indicate completion (with error)
         self.progress_bar.setValue(100)
 
         error_status = {'spacy_models': [], 'benepar_models': [], 'error': error_message}
@@ -317,6 +363,24 @@ class SplashScreen(QWidget): # Changed from QSplashScreen to QWidget for custom 
     # Define the property
     windowOpacity = pyqtProperty(float, getWindowOpacity, setWindowOpacity)
 
+    def _set_progress_default_style(self):
+        """Sets the default style for the progress bar."""
+        radius = self.progress_bar.height() // 2
+        self.progress_bar.setStyleSheet(f"""
+            QProgressBar#SplashScreenProgressBar {{
+                background-color: {DISABLED_COLOR};
+                border: none;
+                border-radius: {radius}px;
+                min-height: 8px;
+                max-height: 8px;
+            }}
+            QProgressBar#SplashScreenProgressBar::chunk {{
+                background-color: {PRIMARY_COLOR};
+                border-radius: {radius}px;
+                margin: 0px;
+            }}
+        """)
+
     def _set_progress_error_style(self):
         """Sets the error style for the progress bar."""
         radius = self.progress_bar.height() // 2 # Or use fixed 4px if height is problematic
@@ -335,18 +399,6 @@ class SplashScreen(QWidget): # Changed from QSplashScreen to QWidget for custom 
             }}
         """)
 
-    def _start_progress_animation(self, duration=2500):
-        """Starts the progress bar animation."""
-        if self._progress_animation and self._progress_animation.state() == QPropertyAnimation.State.Running:
-            self._progress_animation.stop()
-
-        self._progress_animation = QPropertyAnimation(self.progress_bar, b"value", self)
-        self._progress_animation.setDuration(duration)
-        self._progress_animation.setStartValue(0)
-        self._progress_animation.setEndValue(100)
-        self._progress_animation.setEasingCurve(QEasingCurve.Type.InOutCubic)
-        self._progress_animation.start()
-
 # --- Example Usage (for testing standalone) ---
 if __name__ == '__main__':
     import sys
@@ -358,14 +410,21 @@ if __name__ == '__main__':
     class MockModelStatusChecker(QObject):
         status_checked = pyqtSignal(object)
         error_occurred = pyqtSignal(str)
+        progress_update = pyqtSignal(str)  # Add progress signal for testing
         
         def run(self):
             print("Mock checker running...")
-            QTimer.singleShot(2000, self._finish_success) # Simulate success after 2s
-            # QTimer.singleShot(2000, self._finish_error) # Simulate error after 2s
+            # Simulate steps with delays
+            self.progress_update.emit('start')
+            QTimer.singleShot(500, lambda: self.progress_update.emit('check_models'))
+            QTimer.singleShot(1000, lambda: self.progress_update.emit('spacy_model'))
+            QTimer.singleShot(1500, lambda: self.progress_update.emit('benepar_model'))
+            QTimer.singleShot(2000, self._finish_success)  # Success after 2s
+            # QTimer.singleShot(2000, self._finish_error)  # Simulate error after 2s
             
         def _finish_success(self):
             print("Mock checker success.")
+            self.progress_update.emit('complete')
             self.status_checked.emit({'spacy_models': ['en_core_web_sm'], 'benepar_models': ['benepar_en3'], 'error': None})
             
         def _finish_error(self):

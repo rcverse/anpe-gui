@@ -5,7 +5,7 @@ File list widget for selecting and managing files for processing.
 import os
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem,
-    QPushButton, QFileDialog, QLabel, QMessageBox, QApplication
+    QPushButton, QFileDialog, QLabel, QMessageBox, QApplication, QStackedWidget
 )
 from PyQt6.QtCore import pyqtSignal, Qt
 
@@ -49,10 +49,27 @@ class FileListWidget(QWidget):
         # Remove Input Mode Selection Buttons
         # self.input_mode_layout = QHBoxLayout() ... 
         
+        # --- Tip Label (for when no files are loaded) ---
+        self.tip_label = QLabel()
+        self.tip_label.setText(
+            "ANPE Studio only supports .txt files. Please ensure texts are cleaned before processing."
+        )
+        # Align text to top-left
+        self.tip_label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        self.tip_label.setWordWrap(True)
+        # Style to match file_list's border and provide some padding
+        self.tip_label.setStyleSheet(f"""
+            QLabel {{
+                border: 1px solid {BORDER_COLOR}; /* Match theme border */
+                background-color: white; /* Match file_list background */
+                color: grey; /* Changed to grey */
+            }}
+        """)
+
         # --- File List ---
         self.file_list = QListWidget()
         self.file_list.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
-        self.layout.addWidget(self.file_list, 1) # Give list stretch factor
+        # self.layout.addWidget(self.file_list, 1) # Give list stretch factor # This line will be replaced
 
         # Apply custom styling for list items
         self.file_list.setStyleSheet(f"""
@@ -84,6 +101,12 @@ class FileListWidget(QWidget):
                 color: {TEXT_COLOR};
             }} */
         """)
+
+        # --- View Stack (to switch between tip_label and file_list) ---
+        self.view_stack = QStackedWidget()
+        self.view_stack.addWidget(self.tip_label)
+        self.view_stack.addWidget(self.file_list)
+        self.layout.addWidget(self.view_stack, 1) # Add stack to layout with stretch factor
 
         # --- File Action Buttons ---
         self.file_button_layout = QHBoxLayout() 
@@ -214,10 +237,13 @@ class FileListWidget(QWidget):
         
         if count == 0:
             self.status_label.setText("No files imported")
+            self.view_stack.setCurrentWidget(self.tip_label) # Show tip label
         elif count == 1:
             self.status_label.setText("1 file imported")
+            self.view_stack.setCurrentWidget(self.file_list) # Show file list
         else:
             self.status_label.setText(f"{count} files imported")
+            self.view_stack.setCurrentWidget(self.file_list) # Show file list
     
     def get_files(self):
         """

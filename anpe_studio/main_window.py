@@ -154,7 +154,7 @@ class MainWindow(QMainWindow):
         
         # Set window icon
         from anpe_studio.resource_manager import ResourceManager
-        self.setWindowIcon(ResourceManager.get_icon("app_icon.ico"))
+        self.setWindowIcon(ResourceManager.get_icon("app_icon_logo.ico"))
         
         # Apply theme stylesheet
         self.setStyleSheet(get_stylesheet())
@@ -479,7 +479,7 @@ class MainWindow(QMainWindow):
         settings_button.setCursor(Qt.CursorShape.PointingHandCursor)
         settings_button.setFixedSize(30, 30)
         self.model_manage_button = settings_button
-        self.model_manage_button.setToolTip("Open Model Management (Setup/Clean)")
+        self.model_manage_button.setToolTip("Open Settings")
         icon_layout.addWidget(self.model_manage_button)
         self.model_manage_button.clicked.connect(self.open_settings)
         
@@ -1192,8 +1192,7 @@ class MainWindow(QMainWindow):
     @pyqtSlot(str)
     def processing_finished(self, worker_type: str):
         """Handle UI updates when a worker finishes, identified by worker_type."""
-        # Keep INFO for this important event
-        logging.info(f"Worker finished signal received for worker type: {worker_type}")
+        logging.debug(f"Worker finished signal received for worker type: {worker_type}")
         
         worker_cleared = False
 
@@ -1418,7 +1417,7 @@ class MainWindow(QMainWindow):
             if reply == QMessageBox.StandardButton.No:
                 return
 
-        logging.info("Resetting workflow...")
+        logging.debug("Resetting workflow...")
         # Clear input areas
         self.file_list_widget.clear_files()
         self.direct_text_input.clear()
@@ -1533,7 +1532,7 @@ class MainWindow(QMainWindow):
 
     def on_models_changed(self):
         """Slot called when models might have changed via the management dialog."""
-        logging.info("MAIN: Models may have changed via dialog. Re-evaluating state synchronously...")
+        logging.info("Models may have changed via dialog. Re-evaluating state synchronously...")
         self.status_bar.showMessage("Settings updated. Re-evaluating readiness...", 3000, status_type='info')
 
         # --- Perform status check in background --- 
@@ -1717,7 +1716,7 @@ class MainWindow(QMainWindow):
     def on_model_usage_preference_changed(self):
         """Slot called when the model usage preference is changed in the SettingsDialog."""
         # For now, just log this event. The actual preference is read during apply_configuration.
-        logging.info("MAIN: Model usage preference changed signal received.")
+        logging.info("Model usage preference changed signal received.")
 
     def closeEvent(self, event):
         """Handle the main window closing."""
