@@ -16,9 +16,17 @@
   No code? No problem. ANPE Studio provides an intuitive graphical interface for the <a href="https://github.com/rcverse/another-noun-phrase-extractor">ANPE (Another Noun Phrase Extractor)</a> Python library. It provides a user-friendly way to extract noun phrases from text—<strong>no coding required</strong>.
 </p>
 
+<div align="center">
+  <img src="software_screenshots/input_tab.png" alt="ANPE Studio Screenshot" width="850"/>
+</div>
+
 <p align="center">
   <strong>Ready to get started? Download ANPE Studio here:</strong><br/>
   <a href="https://github.com/rcverse/anpe-studio/releases/latest" title="Download Latest Release for Windows"><img src="https://img.shields.io/badge/Windows-0078D6?style=flat&logo=windows&logoColor=white" alt="Download for Windows"></a>   <a href="https://github.com/rcverse/anpe-studio/releases/latest" title="Download Latest Release for macOS"><img src="https://img.shields.io/badge/macOS-000000?style=flat&logo=apple&logoColor=white" alt="Download for macOS"></a>
+</p>
+
+<p align="center">
+  <a href="#-features">Features</a> | <a href="#-getting-started">Getting Started</a> | <a href="#-basic-usage-guide">Usage</a> | <a href="#-troubleshooting">Troubleshooting</a> | <a href="#-license">License</a> | <a href="#-acknowledgements">Acknowledgements</a> | <a href="#-screenshots">Screenshots</a>
 </p>
 
 ## ✨ Features
@@ -32,38 +40,15 @@
 * **🔄 Core Library Updates:** Check for and install updates to the underlying ANPE extraction engine with a single click in Settings.
 * **📜 Detailed Logging:** A toggleable log panel (accessible from the status bar) provides insights into the extraction process and aids in troubleshooting.
 
-## 📸 Screenshots
-
-### Main Input Area
-
-![Main Input Tab](./software_screenshots/input_tab.png)
-
-### Analysis Output Display
-
-![Output Tab with Results](./software_screenshots/output_tab.png)
-
-### Application Settings
-
-![Settings Page](./software_screenshots/setting_page.png)
-
-### Detached Result Viewer
-
-![Detached Result Viewer](./software_screenshots/detached_result_viewer.png)
-
-### Log Panel
-
-![Log Panel Toggled](./software_screenshots/log_toggled.png)
-
 ## 🚀 Getting Started
 
 **Important Note on Installation Size:**
 
-ANPE Studio is designed to be a **self-contained** application, meaning it includes its own Python environment and all necessary (and sometimes large) libraries like spaCy, Benepar, and their associated language models (which can involve PyTorch). This ensures that the application works out-of-the-box for everyone, especially users who may not have Python installed or are not familiar with managing Python packages.
-
-* **Approximate Size:** Due to these bundled components, the installed application can take up a significant amount of disk space:
+ANPE Studio is designed to be a **self-contained** application, meaning it includes its own Python environment and all necessary (and sometimes large) libraries like spaCy, Benepar, and their associated language models (which can involve PyTorch). This ensures that the application works out-of-the-box for everyone, especially users who may not have Python installed or are not familiar with managing Python packages. However, this means that it will take up significant amount of disk space
   * **Windows:** Around 1.8 GB
   * **macOS:** Around 1 GB
-* **Alternative for Python Users:** If you are comfortable with Python environments and package management, you can avoid this large installation. Instead, clone the [ANPE Studio repository](https://github.com/rcverse/anpe-studio) and run the application directly using `python -m anpe_studio` from the repository's root directory after creating a virtual environment and installing dependencies listed in `requirements.txt` into your own Python environment.
+
+* **Alternative for Python Users:** This bundled app packaging is not elegant, but this is an effective workaround. If you are comfortable with Python environments and package management, you can avoid this large installation. Instead, clone the [ANPE Studio repository](https://github.com/rcverse/anpe-studio) and run the application directly using `python -m anpe_studio` from the repository's root directory after creating a virtual environment and installing dependencies listed in `requirements.txt` into your own Python environment.
 
 ### Download ANPE Studio
 
@@ -80,7 +65,7 @@ Visit the **[Releases Page](https://github.com/rcverse/anpe-studio/releases)** a
 
 * Run the downloaded `.dmg` file.
 * Drag the ANPE Studio icon into the application folder.
-* **Running for the First Time (Unnotarized App):** Since ANPE Studio is not yet notarized by Apple, you will need to grant it permission to run.
+* **Running for the First Time (Unnotarized App):** Since ANPE Studio is not notarized, you will need to grant it permission to run.
 
   > ⚠️ Note that currently the setup wizard's UI is not compatible with dark mode. Please disable dark mode when running the setup wizard.
   >
@@ -115,8 +100,6 @@ Visit the **[Releases Page](https://github.com/rcverse/anpe-studio/releases)** a
 
 For a more detailed exploration of all features, please refer to the built-in **Help Guide** (the question mark icon on the right upper corner).
 
----
-
 ## ❓ Troubleshooting
 
 Encountering issues? Here are a few common solutions:
@@ -134,7 +117,7 @@ This project is distributed under the GNU General Public License v3.0. See the [
 
 ANPE Studio is made possible by the excellent work of the developers and communities behind the following open-source projects and tools:
 
-### 🛠️ Core Runtime Libraries
+### Core Runtime Libraries
 
 The application installer bundles these core libraries so you don't have to manage them separately:
 
@@ -144,7 +127,7 @@ The application installer bundles these core libraries so you don't have to mana
 * **[Benepar](https://github.com/nikitakit/self-attentive-parser)**: Enables advanced constituency parsing needed for detailed phrase structure.
 * **[NLTK](https://www.nltk.org/)**: Used by Benepar for managing its language models.
 
-### 📦 Installer Creation & Distribution
+### Installer Creation & Distribution
 
 Creating a user-friendly, distributable application relies on these powerful tools:
 
@@ -157,8 +140,67 @@ I am immensely grateful for the contributions of all these projects to the open-
 
 ## 🎓 Citation
 
-If ANPE Studio aids your research or project work, I kindly request that you cite the core **[ANPE library](https://github.com/rcverse/another-noun-phrase-extractor#citation)** that performs the extraction. Citation details can be found on the ANPE library's repository page.
+If ANPE Studio has been helpful in your research or project, we kindly ask you to cite it.
+
+**To cite ANPE Studio:**
+
+
+*   **BibTeX:**
+    ```bibtex
+    @software{Chen_ANPE_Studio_YYYY,
+      author = {Chen, Nuo},
+      title = {{ANPE Studio: Another Noun Phrase Extractor Studio}},
+      url = {https://github.com/rcverse/anpe-studio},
+      version = {1.0.0},
+      year = {2025}
+    }
+    ```
+*   **Plain Text (APA style):**
+    ```
+    Chen, N. (2025). *ANPE Studio: Another Noun Phrase Extractor Studio* (Version 1.0.0) [Computer software]. Retrieved from https://github.com/rcverse/anpe-studio
+    ```
+
+ANPE Studio utilizes the powerful **ANPE core library** for its underlying noun phrase extraction capabilities. If the specific methods of the core ANPE library are central to your work, or if you wish to credit the foundational algorithms, please also cite the original ANPE library:
+
+**To cite the ANPE core library:**
+
+*   **BibTeX:**
+    ```bibtex
+    @software{Chen_ANPE_2025,
+      author = {Chen, Nuo},
+      title = {{ANPE: Another Noun Phrase Extractor}},
+      url = {https://github.com/rcverse/another-noun-phrase-extractor},
+      version = {1.1.1},
+      year = {2025}
+    }
+    ```
+*   **Plain Text (APA style):**
+    ```
+    Chen, N. (2025). *ANPE: Another Noun Phrase Extractor* (Version 1.1.1) [Computer software]. Retrieved from https://github.com/rcverse/another-noun-phrase-extractor
+    ```
 
 ## 💻 Development
 
 * Please see the [**Developer README (/DEV_README.md)**](/DEV_README.md) for detailed developing-related information.
+
+## 📸 Screenshots
+
+### Main App (Input tab)
+
+![Main Input Tab](./software_screenshots/input_tab.png)
+
+### Main App (Output tab)
+
+![Output Tab with Results](./software_screenshots/output_tab.png)
+
+### App Settings
+
+![Settings Page](./software_screenshots/setting_page.png)
+
+### Detached Result Viewer
+
+![Detached Result Viewer](./software_screenshots/detached_result_viewer.png)
+
+### Log Panel
+
+![Log Panel Toggled](./software_screenshots/log_toggled.png)
