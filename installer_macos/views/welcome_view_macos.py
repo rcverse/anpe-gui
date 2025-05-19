@@ -17,6 +17,7 @@ from PyQt6.QtGui import QPixmap, QMouseEvent, QFont
 
 from .license_dialog import LicenseDialog
 from ..installer_core_macos import _get_bundled_resource_path_macos
+from ..styles import TITLE_LABEL_STYLE # Import the centralized style
 
 # Get logger instance
 logger = logging.getLogger()
@@ -101,7 +102,7 @@ class WelcomeViewWidget(QWidget):
         # --- Welcome Title ---
         title_label = QLabel("Welcome to ANPE Studio Setup")
         title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title_label.setStyleSheet("font-size: 24px; font-weight: 600; color: #1a1a1a; font-family: 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif;")
+        title_label.setStyleSheet(TITLE_LABEL_STYLE) # Apply the centralized style
         main_layout.addWidget(title_label)
         main_layout.addSpacing(15) # Space after title
 

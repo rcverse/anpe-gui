@@ -157,7 +157,6 @@ a = Analysis([SCRIPT_FILE],
              excludes=[
                  'tkinter',
                  'unittest',
-                 'xml',
                  'pydoc_data',
                  'sqlite3',
                  # Exclude potentially unused PyQt6 modules (TEST CAREFULLY)

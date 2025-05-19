@@ -61,7 +61,7 @@ class ProgressViewWidget(QWidget):
         title_layout = QVBoxLayout()
         title_layout.setSpacing(1)  # Set smaller spacing between title and explanatory text
         stage_label = QLabel(self._title)
-        stage_label.setStyleSheet("font-size: 26px; font-weight: bold; color: #0078D7; font-family: 'Segoe UI', Arial, sans-serif;")
+        stage_label.setStyleSheet(TITLE_LABEL_STYLE)
         title_layout.addWidget(stage_label)
         
         # Add explanation text based on the title

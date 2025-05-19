@@ -20,6 +20,7 @@ from PyQt6.QtWidgets import QApplication
 
 from ..widgets.task_list_widget_macos import TaskListWidgetMacOS, TaskStatus
 from ..installer_core_macos import _get_bundled_resource_path_macos
+from ..styles import TITLE_LABEL_STYLE # Import the centralized style
 
 # Get logger instance
 logger = logging.getLogger()
@@ -76,7 +77,7 @@ class ProgressViewWidget(QWidget):
         # Title and description (centered)
         title_label = QLabel(self._title)
         title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title_label.setStyleSheet("font-size: 20px; font-weight: 500; color: #000000; font-family: 'SF Pro Display', 'Helvetica Neue', Arial, sans-serif; background-color: transparent; border: none;")
+        title_label.setStyleSheet(TITLE_LABEL_STYLE) # Apply the centralized style
         header_content_layout.addWidget(title_label)
 
         explanation_text = ""

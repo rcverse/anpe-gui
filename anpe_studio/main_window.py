@@ -23,9 +23,9 @@ from PyQt6.QtWidgets import (
     QPushButton, QLabel, QTextEdit, QFileDialog, QSpinBox,
     QCheckBox, QComboBox, QGroupBox, QFormLayout, QLineEdit,
     QProgressBar, QMessageBox, QSplitter, QFrame, QTabWidget, QGridLayout, QSizePolicy,
-    QButtonGroup, QApplication, QToolButton
+    QButtonGroup, QApplication, QToolButton, QGraphicsDropShadowEffect
 )
-from PyQt6.QtGui import QIcon, QTextCursor, QScreen, QPixmap, QFont, QColor, QCloseEvent # Added QScreen, QPixmap, QFont, QColor, QCloseEvent
+from PyQt6.QtGui import QIcon, QTextCursor, QScreen, QPixmap, QFont, QColor, QCloseEvent, QPalette, QAction, QKeySequence, QShortcut, QDesktopServices # Added QPalette, QAction, QKeySequence, QShortcut, QDesktopServices
 
 from .theme import PRIMARY_COLOR, SECONDARY_COLOR, SUCCESS_COLOR, ERROR_COLOR, WARNING_COLOR, INFO_COLOR, BORDER_COLOR, get_scroll_bar_style, LIGHT_HOVER_BLUE, TEXT_COLOR # Update the import
 from .widgets.help_dialog import HelpDialog # Import the new dialog
@@ -1492,16 +1492,31 @@ class MainWindow(QMainWindow):
         self.qt_log_handler_instance.setFormatter(formatter)
 
         # Configure Python's root logger
-        logger = logging.getLogger()
-        logger.addHandler(self.qt_log_handler_instance)
-        logger.setLevel(logging.DEBUG) # Set desired logging level
+        root_logger = logging.getLogger()
+        # Remove all existing handlers from the root logger
+        # This is to prevent interference from other logging setups (e.g. basicConfig)
+        # that might have added handlers to the root.
+        for handler in list(root_logger.handlers): # Iterate over a copy
+            root_logger.removeHandler(handler)
+        root_logger.addHandler(self.qt_log_handler_instance) # Add our GUI handler
+        root_logger.setLevel(logging.DEBUG) # Set root logger level
+
+        # Additionally, ensure the 'anpe' library logger (and its children)
+        # do not have their own handlers, forcing logs to propagate to root.
+        # This prevents duplicate logs if 'anpe' also sets up console handlers.
+        anpe_logger = logging.getLogger('anpe')
+        for handler in list(anpe_logger.handlers): # Iterate over a copy
+            anpe_logger.removeHandler(handler)
+        anpe_logger.propagate = True # Ensure propagation (default, but good to be explicit)
+        # Optional: ensure 'anpe' logger itself is not filtering if its level was set high
+        # anpe_logger.setLevel(logging.DEBUG) 
         
-        # Remove any existing handlers to prevent duplicate messages
-        for handler in logger.handlers[:]:
-            if not isinstance(handler, QtLogHandler):
-                logger.removeHandler(handler)
+        # Remove any existing handlers to prevent duplicate messages (This loop is now redundant here due to the above specific clear for root_logger)
+        # for handler in logger.handlers[:]:
+        #     if not isinstance(handler, QtLogHandler):
+        #         logger.removeHandler(handler)
         
-        logging.debug("Logging initialized.")
+        logging.debug("Logging initialized for ANPE Studio GUI.") # This will now go through the setup
         return log_widget
     
     def log(self, message: str, level: int = logging.INFO):
@@ -1528,7 +1543,41 @@ class MainWindow(QMainWindow):
         dialog = SettingsDialog(self, model_status=self.model_status)
         dialog.models_changed.connect(self.on_models_changed)
         dialog.model_usage_changed.connect(self.on_model_usage_preference_changed)
+        dialog.restart_application_requested.connect(self.handle_app_restart_request) # ADDED
         dialog.exec()
+
+    @pyqtSlot() # ADDED
+    def handle_app_restart_request(self): # ADDED
+        """Handles the request to restart the application.""" # ADDED
+        logging.info("Restart requested from settings dialog.") # ADDED
+        # Optionally, add confirmation or save unsaved work checks here,
+        # though the settings dialog already prompts the user.
+
+        # Clear pending restart statuses in the log handler before quitting
+        if hasattr(self, 'qt_log_handler_instance') and self.qt_log_handler_instance:
+            try:
+                self.qt_log_handler_instance.clear_all_pending_restart_statuses()
+                logging.debug("Cleared all pending restart statuses in QtLogHandler.")
+            except Exception as e:
+                logging.error(f"Error clearing pending restart statuses in log handler: {e}")
+
+        QApplication.instance().quit() # ADDED
+        logging.info("Application quit successfully. Attempting to restart...") # ADDED
+        
+        # Attempt to restart the application
+        # This method replaces the current process with a new instance.
+        # Note: This might not work perfectly on all platforms or in all environments
+        # (e.g., when run from some IDEs or frozen applications without a simple entry point).
+        try: # ADDED
+            os.execl(sys.executable, sys.executable, *sys.argv) # ADDED
+        except Exception as e: # ADDED
+            logging.error(f"Failed to restart application automatically: {e}", exc_info=True) # ADDED
+            # Fallback: Inform user to restart manually
+            QMessageBox.information( # ADDED
+                self, # ADDED
+                "Restart Required", # ADDED
+                "ANPE Studio needs to be restarted. Please close and relaunch the application manually." # ADDED
+            ) # ADDED
 
     def on_models_changed(self):
         """Slot called when models might have changed via the management dialog."""
@@ -1580,8 +1629,17 @@ class MainWindow(QMainWindow):
         self.status_check_thread = None
         self.status_check_worker = None
 
-        # --- Update UI based on status_dict ---
+        # --- Update UI based on status_dict --- 
         self.model_status = status_dict # Update stored status
+
+        # --- Clear pending restart status for successfully loaded models ---
+        if hasattr(self, 'qt_log_handler_instance') and self.qt_log_handler_instance and 'spacy_models' in status_dict:
+            for model_name in status_dict['spacy_models']:
+                try:
+                    self.qt_log_handler_instance.clear_pending_restart_status_for_model(model_name)
+                except Exception as e:
+                    logging.error(f"Error clearing pending restart status for model {model_name} in log handler: {e}")
+        # -------------------------------------------------------------------
 
         # Update extractor readiness and UI state
         has_spacy = len(status_dict.get('spacy_models', [])) > 0

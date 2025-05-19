@@ -319,7 +319,7 @@ class InstallDefaultsWorker(QObject):
                 self.progress.emit("Default setup failed.")
 
         except ImportError:
-            message = "Error: Could not import ANPE setup utilities."
+            message = "Error: Could not find ANPE setup utilities."
             logging.error(message, exc_info=True)
             self.progress.emit(message)
             self._emit_log_message(f"ERROR: {message}\n{traceback.format_exc()}") # Send error to log panel

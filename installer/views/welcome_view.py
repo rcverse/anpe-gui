@@ -112,7 +112,7 @@ class WelcomeViewWidget(QWidget):
         # --- Welcome Text ---
         title_label = QLabel("Welcome to ANPE Studio Setup")
         title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title_label.setStyleSheet("font-size: 26px; font-weight: bold; color: #0078D7; font-family: 'Segoe UI', Arial, sans-serif;")
+        title_label.setStyleSheet(TITLE_LABEL_STYLE) # Apply the centralized style
         layout.addWidget(title_label)
         
         # Add spacing instead of separator

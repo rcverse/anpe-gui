@@ -18,6 +18,7 @@ from PyQt6.QtGui import QPixmap, QFont, QColor, QTextCursor
 
 # CORRECTED IMPORT: Use macOS specific resource finder
 from ..installer_core_macos import _get_bundled_resource_path_macos
+from ..styles import TITLE_LABEL_STYLE # Import the centralized style
 
 # Get logger instance
 logger = logging.getLogger()
@@ -73,7 +74,7 @@ class CompletionViewWidget(QWidget):
         header_content_layout.addLayout(logo_container_layout)
         self.status_title = QLabel("Setup Complete")
         self.status_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.status_title.setStyleSheet("font-size: 24px; font-weight: 600; color: #1a1a1a; font-family: 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif;")
+        self.status_title.setStyleSheet(TITLE_LABEL_STYLE) # Apply the centralized style
         header_content_layout.addWidget(self.status_title)
         header_centering_layout.addLayout(header_content_layout)
         header_centering_layout.addStretch(1) # Right stretch

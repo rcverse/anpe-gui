@@ -821,11 +821,57 @@ class ModelsPage(QWidget):
         self.install_worker = None
         self.install_worker_thread = None
         
-        # Show message box first
-        if success:
-             QMessageBox.information(self.window(), "Action Complete", message)
-        else:
-             QMessageBox.warning(self.window(), "Action Failed", message)
+        # --- MODIFICATION FOR CUSTOM SUCCESS MESSAGE ---
+        show_standard_message_box = True
+        if success and action == 'install':
+            # Determine model_type for the given alias
+            model_info = next((m for m in self.manageable_models if m['alias'] == alias), None)
+            model_type = model_info.get('type') if model_info else None
+            full_model_name = ""
+            if model_type == 'spacy':
+                full_model_name = SPACY_MODEL_MAP.get(alias, alias)
+                # self.log_text contains all messages from the worker's log_callback
+                if "SUCCESS_RESTART_NEEDED:" in self.log_text:
+                    msg_box = QMessageBox(self.window())
+                    msg_box.setWindowTitle("Installation Successful - Restart Required")
+                    msg_box.setIcon(QMessageBox.Icon.Information)
+
+                    text = (f"The spaCy model '<b>{full_model_name}</b>' has been installed successfully.<br><br>" 
+                           "ANPE Studio must be restarted to fully activate and use this model.<br><br>" 
+                           "<b>Important Note regarding potential warnings:</b><br>" 
+                           "After installation, if you observe a warning in the ANPE Studio console similar to: <br>" 
+                           f"<code>&nbsp;&nbsp;[WARNING] An unexpected error occurred while trying to load spaCy model '{full_model_name}': " 
+                           "[E002] Can't find factory for 'curated_transformer'...</code><br>" 
+                           "This typically occurs because the application needs a full restart to correctly load all new components for the model. " 
+                           "Restarting ANPE Studio should resolve this issue.<br><br>" 
+                           "Please save any unsaved work before restarting.")
+
+                    msg_box.setTextFormat(Qt.TextFormat.RichText)
+                    msg_box.setText(text)
+
+                    ok_button = msg_box.addButton(QMessageBox.StandardButton.Ok)
+                    restart_button = msg_box.addButton("Restart ANPE Studio", QMessageBox.ButtonRole.AcceptRole)
+                    msg_box.setDefaultButton(ok_button)
+                    
+                    msg_box.exec()
+
+                    if msg_box.clickedButton() == restart_button:
+                        # Get the top-level QDialog (SettingsDialog) and emit its signal
+                        settings_dialog_instance = self.window()
+                        if isinstance(settings_dialog_instance, SettingsDialog):
+                            settings_dialog_instance.restart_application_requested.emit()
+                        else:
+                            logging.error("Could not emit restart_application_requested: self.window() is not SettingsDialog.")
+                    
+                    show_standard_message_box = False
+            # No special message for benepar install success, use standard one
+        
+        if show_standard_message_box:
+            if success:
+                 QMessageBox.information(self.window(), "Action Complete", message) # Original message from worker
+            else:
+                 QMessageBox.warning(self.window(), "Action Failed", message) # Original message from worker
+        # --- END MODIFICATION ---
 
         # --- Set Indicator state AFTER message box ---
         if success:
@@ -2388,6 +2434,7 @@ class SettingsDialog(QDialog):
     models_changed = pyqtSignal() 
     # Signal emitted if model usage preference changes
     model_usage_changed = pyqtSignal() 
+    restart_application_requested = pyqtSignal() # ADDED FOR RESTART FUNCTIONALITY
 
     def __init__(self, parent=None, model_status=None):
         super().__init__(parent)

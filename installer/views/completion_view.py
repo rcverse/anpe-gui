@@ -59,9 +59,10 @@ class CompletionViewWidget(QWidget):
         
         # Status Title
         self.status_title = QLabel("Setup Status") # Placeholder text
-        self.status_title.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-        self.status_title.setStyleSheet("font-size: 26px; font-weight: bold; color: #0078D7; font-family: 'Segoe UI', Arial, sans-serif;")
-        header_layout.addWidget(self.status_title, 1)  # Stretch factor 1
+        self.status_title.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter) # Ensure left alignment
+        self.status_title.setStyleSheet(TITLE_LABEL_STYLE) # Apply the centralized style
+        header_layout.addWidget(self.status_title)  # Remove stretch factor
+        header_layout.addStretch(1) # Add stretch after the title
         
         layout.addLayout(header_layout)
         
@@ -450,22 +451,51 @@ class CompletionViewWidget(QWidget):
 
     def _handle_complete(self):
         """Emit signals based on checkbox states and request closing."""
-        # Only emit requests if setup was successful (when checkboxes are visible)
-        if self.shortcut_checkbox.isVisible():
-            self.shortcut_requested.emit(self.shortcut_checkbox.isChecked())
-        if self.launch_checkbox.isVisible():
-            self.launch_requested.emit(self.launch_checkbox.isChecked())
-        # Emit log preservation request if successful
-        if self.preserve_log_checkbox.isVisible():
-            self.preserve_log_requested.emit(self.preserve_log_checkbox.isChecked())
+        self.logger.debug(f"_handle_complete called. options_container.isVisible(): {self.options_container.isVisible()}")
 
-        # Always emit close request
+        # Shortcut checkbox
+        if self.shortcut_checkbox.isVisible():
+            checked_state = self.shortcut_checkbox.isChecked()
+            self.logger.debug(f"Shortcut checkbox is visible, checked: {checked_state}. Emitting shortcut_requested.")
+            self.shortcut_requested.emit(checked_state)
+        else:
+            self.logger.debug("Shortcut checkbox is not visible.")
+
+        # Launch checkbox
+        if self.launch_checkbox.isVisible():
+            checked_state = self.launch_checkbox.isChecked()
+            self.logger.debug(f"Launch checkbox is visible, checked: {checked_state}. Emitting launch_requested.")
+            self.launch_requested.emit(checked_state)
+        else:
+            self.logger.debug("Launch checkbox is not visible.")
+
+        # Preserve log checkbox - TARGET OF INVESTIGATION
+        preserve_log_cb_visible = self.preserve_log_checkbox.isVisible()
+        # Use info level for this specific log to make it stand out for debugging this issue.
+        self.logger.info(f"Preserve log checkbox - Visible: {preserve_log_cb_visible}")
+        if preserve_log_cb_visible:
+            checked_state = self.preserve_log_checkbox.isChecked()
+            self.logger.info(f"Preserve log checkbox - Checked: {checked_state}. Emitting preserve_log_requested.")
+            self.preserve_log_requested.emit(checked_state)
+        else:
+            self.logger.info("Preserve log checkbox is NOT visible. Not emitting preserve_log_requested.")
+
+        self.logger.debug("Emitting close_requested signal.")
         self.close_requested.emit()
 
 # Example usage (for testing the view directly)
 if __name__ == '__main__':
     import sys
+    import logging # Added import for logging
     from PyQt6.QtWidgets import QApplication, QPushButton, QHBoxLayout
+
+    # --- Basic logging setup for test script --- 
+    logging.basicConfig(level=logging.DEBUG, 
+                        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+                        handlers=[logging.StreamHandler(sys.stdout)])
+    logger = logging.getLogger(__name__) # Get a logger for this test script
+    logger.info("Starting CompletionViewWidget test script...")
+    # --- End logging setup ---
 
     app = QApplication(sys.argv)
     container = QWidget()
@@ -501,7 +531,7 @@ if __name__ == '__main__':
     completion_view.preserve_log_requested.connect(lambda checked: print(f"Preserve log requested: {checked}"))
     completion_view.close_requested.connect(lambda: print("Close requested"))
 
-    container.resize(500, 300)
+    container.resize(550, 450) # Increased default size
     container.show()
     completion_view.set_success_state(True) # Start in success state for demo
 

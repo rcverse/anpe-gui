@@ -44,11 +44,12 @@
 
 **Important Note on Installation Size:**
 
-ANPE Studio is designed to be a **self-contained** application, meaning it includes its own Python environment and all necessary (and sometimes large) libraries like spaCy, Benepar, and their associated language models (which can involve PyTorch). This ensures that the application works out-of-the-box for everyone, especially users who may not have Python installed or are not familiar with managing Python packages. However, this means that it will take up significant amount of disk space
-  * **Windows:** Around 1.8 GB
-  * **macOS:** Around 1 GB
+ANPE Studio is designed to be a **self-contained** application, meaning it includes its own Python environment and all necessary (and sometimes large) libraries like spaCy, Benepar, and their associated models (which can involve PyTorch). This ensures that the application works out-of-the-box for everyone, especially users who may not have Python installed or are not familiar with managing Python packages. However, this means that it will take up significant amount of disk space
 
-* **Alternative for Python Users:** This bundled app packaging is not elegant, but this is an effective workaround. If you are comfortable with Python environments and package management, you can avoid this large installation. Instead, clone the [ANPE Studio repository](https://github.com/rcverse/anpe-studio) and run the application directly using `python -m anpe_studio` from the repository's root directory after creating a virtual environment and installing dependencies listed in `requirements.txt` into your own Python environment.
+* **Windows:** Around 1.8 GB
+* **macOS:** Around 1 GB
+
+**Alternative for Python Users:** This bundled app packaging is not elegant, but this is an effective workaround. If you are comfortable with Python environments and package management, you can avoid this large installation. Instead, clone the [ANPE Studio repository](https://github.com/rcverse/anpe-studio) and run the application directly using `python -m anpe_studio` from the repository's root directory after creating a virtual environment and installing dependencies listed in `requirements.txt` into your own Python environment.
 
 ### Download ANPE Studio
 
@@ -67,8 +68,8 @@ Visit the **[Releases Page](https://github.com/rcverse/anpe-studio/releases)** a
 * Drag the ANPE Studio icon into the application folder.
 * **Running for the First Time (Unnotarized App):** Since ANPE Studio is not notarized, you will need to grant it permission to run.
 
-  > ⚠️ Note that currently the setup wizard's UI is not compatible with dark mode. Please disable dark mode when running the setup wizard.
-  >
+  > ⚠️ Note that currently the setup wizard's UI is not compatible with the dark mode. Please disable the dark mode when running the setup wizard.
+  
 
   * After dragging the app to your Applications folder, **right-click (or Ctrl-click)** the ANPE Studio icon and select **'Open'**.
   * You will likely see a warning message. Click **'Open'** again in the warning dialog to confirm you want to run the application.
@@ -144,40 +145,39 @@ If ANPE Studio has been helpful in your research or project, we kindly ask you t
 
 **To cite ANPE Studio:**
 
+* **BibTeX:**
 
-*   **BibTeX:**
-    ```bibtex
-    @software{Chen_ANPE_Studio_YYYY,
-      author = {Chen, Nuo},
-      title = {{ANPE Studio: Another Noun Phrase Extractor Studio}},
-      url = {https://github.com/rcverse/anpe-studio},
-      version = {1.0.0},
-      year = {2025}
-    }
-    ```
-*   **Plain Text (APA style):**
-    ```
-    Chen, N. (2025). *ANPE Studio: Another Noun Phrase Extractor Studio* (Version 1.0.0) [Computer software]. Retrieved from https://github.com/rcverse/anpe-studio
-    ```
+  ```bibtex
+  @software{Chen_ANPE_Studio_YYYY,
+    author = {Chen, Nuo},
+    title = {{ANPE Studio: Another Noun Phrase Extractor Studio}},
+    url = {https://github.com/rcverse/anpe-studio},
+    version = {1.0.0},
+    year = {2025}
+  }
+  ```
+* **Plain Text (APA style):**
+
+  Chen, N. (2025). *ANPE Studio: Another Noun Phrase Extractor Studio* (Version 1.0.0) [Computer software]. Retrieved from https://github.com/rcverse/anpe-studio
 
 ANPE Studio utilizes the powerful **ANPE core library** for its underlying noun phrase extraction capabilities. If the specific methods of the core ANPE library are central to your work, or if you wish to credit the foundational algorithms, please also cite the original ANPE library:
 
 **To cite the ANPE core library:**
 
-*   **BibTeX:**
-    ```bibtex
-    @software{Chen_ANPE_2025,
-      author = {Chen, Nuo},
-      title = {{ANPE: Another Noun Phrase Extractor}},
-      url = {https://github.com/rcverse/another-noun-phrase-extractor},
-      version = {1.1.1},
-      year = {2025}
-    }
-    ```
-*   **Plain Text (APA style):**
-    ```
-    Chen, N. (2025). *ANPE: Another Noun Phrase Extractor* (Version 1.1.1) [Computer software]. Retrieved from https://github.com/rcverse/another-noun-phrase-extractor
-    ```
+* **BibTeX:**
+
+  ```bibtex
+  @software{Chen_ANPE_2025,
+    author = {Chen, Nuo},
+    title = {{ANPE: Another Noun Phrase Extractor}},
+    url = {https://github.com/rcverse/another-noun-phrase-extractor},
+    version = {1.1.1},
+    year = {2025}
+  }
+  ```
+* **Plain Text (APA style):**
+
+  Chen, N. (2025). *ANPE: Another Noun Phrase Extractor* (Version 1.1.1) [Computer software]. Retrieved from https://github.com/rcverse/another-noun-phrase-extractor
 
 ## 💻 Development
 

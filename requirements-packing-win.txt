@@ -1,0 +1,19 @@
+# This file lists the Python packages required for the PyInstaller build environment
+# when creating the Windows installer for ANPE Studio.
+# It is NOT the requirements file used by the installer itself at runtime on the user's machine.
+
+# --- Core Packaging Tool ---
+PyInstaller>=6.0.0 # Or your specific preferred version
+
+# --- GUI Framework (used by setup_windows.pyw and its views/widgets) ---
+PyQt6>=6.0.0       # For the installer's GUI
+
+# --- Windows-specific functionality (used by setup_windows.pyw) ---
+winshell>=0.6.0    # For creating shortcuts, accessing special folders etc.
+pyshortcuts>=1.0.0 # For creating shortcuts (alternative or complementary to winshell)
+
+# Note: Other libraries like 'requests' are not directly imported by the
+# installer scripts (setup_windows.pyw, installer_core.py) or launcher.py.
+# The installer_core.py uses urllib.request for its own downloads and then
+# uses the bundled Python's pip to install packages from 'installer/windows_requirements.txt'
+# into the *target* installed environment. 

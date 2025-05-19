@@ -1,6 +1,6 @@
 from PyQt6.QtWidgets import QWidget, QHBoxLayout, QLabel, QPushButton, QSizePolicy, QGraphicsDropShadowEffect
 from PyQt6.QtCore import Qt, QPoint, pyqtSignal
-from PyQt6.QtGui import QMouseEvent, QPalette, QColor, QFont, QIcon
+from PyQt6.QtGui import QMouseEvent, QPalette, QColor, QFont, QIcon, QPixmap
 
 class CustomTitleBar(QWidget):
     """A modern, elegant custom title bar widget for frameless windows."""
@@ -46,15 +46,8 @@ class CustomTitleBar(QWidget):
     def _setup_ui(self):
         """Set up the user interface elements."""
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(15, 0, 10, 0)  # More left padding for title
+        layout.setContentsMargins(12, 0, 6, 0)  # More left padding for title
         layout.setSpacing(8)
-
-        # Window Icon (optional - uncomment if you have an icon)
-        # self.icon_label = QLabel()
-        # icon_pixmap = QPixmap("path/to/icon.png").scaled(16, 16, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
-        # self.icon_label.setPixmap(icon_pixmap)
-        # layout.addWidget(self.icon_label)
-        # layout.addSpacing(8)
 
         # Title Label with improved typography
         self.title_label = QLabel(self._title)
@@ -69,7 +62,7 @@ class CustomTitleBar(QWidget):
 
         # Control buttons container (for consistent styling)
         button_layout = QHBoxLayout()
-        button_layout.setSpacing(5)
+        button_layout.setSpacing(0)
         button_layout.setContentsMargins(0, 0, 0, 0)
 
         # Minimize Button - modern style with proper alignment
@@ -99,20 +92,20 @@ class CustomTitleBar(QWidget):
                 font-family: 'Segoe UI', Arial;
                 font-size: 10pt; 
                 font-weight: bold; 
-                color: #555555; 
+                color: #3E4042; 
                 border-radius: 0px;
             }
         """
         
         if button_type == "minimize":
             return base_style + """
-                QPushButton:hover { background-color: rgba(0, 0, 0, 0.1); }
-                QPushButton:pressed { background-color: rgba(0, 0, 0, 0.15); }
+                QPushButton:hover { background-color: #DCDFE3; }
+                QPushButton:pressed { background-color: #CED2D6; }
             """
         elif button_type == "close":
             return base_style + """
                 QPushButton:hover { background-color: #E81123; color: white; }
-                QPushButton:pressed { background-color: #F1707A; color: white; }
+                QPushButton:pressed { background-color: #C60C1F; color: white; }
             """
         return base_style
 
@@ -132,15 +125,15 @@ class CustomTitleBar(QWidget):
         # Subtle gradient effect using background-color stylesheet
         self.setStyleSheet(f"""
             CustomTitleBar {{
-                background-color: #f8f8f8;
-                border-top-left-radius: 5px;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #F5F7F9, stop:1 #EFF1F3);
+                border-top: 2px solid {self._accent_color};
+                border-top-left-radius: 5px; /* Radii will apply to the area including the top border */
                 border-top-right-radius: 5px;
-                border-bottom: none;
-                border-image: linear-gradient(to right, #e0e0e0, #d0d0d0, #e0e0e0) 0 0 1 0 stretch;
+                border-bottom: 1px solid #D1D5DB;
             }}
         """)
-        # The palette is still needed for compatibility
-        palette.setColor(QPalette.ColorRole.Window, QColor("#f8f8f8"))
+        # The palette is still needed for compatibility, set to the dominant gradient color or a base
+        palette.setColor(QPalette.ColorRole.Window, QColor("#EFF1F3"))
         self.setPalette(palette)
 
     # --- Window Dragging Logic with improved handling ---
@@ -179,14 +172,14 @@ class CustomTitleBar(QWidget):
         if event.type() == event.Type.ActivationChange:
             if self.window().isActiveWindow():
                 self.title_label.setStyleSheet("""
-                    color: #333333; 
+                    color: #101010; 
                     font-weight: bold;
                     font-family: 'Segoe UI', Arial, sans-serif;
                     font-size: 11pt;
                 """)
             else:
                 self.title_label.setStyleSheet("""
-                    color: #777777; 
+                    color: #606770; 
                     font-weight: bold;
                     font-family: 'Segoe UI', Arial, sans-serif;
                     font-size: 11pt;

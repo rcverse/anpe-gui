@@ -89,7 +89,7 @@ LOG_TEXT_AREA_STYLE = """
 """
 
 # Label Styles
-TITLE_LABEL_STYLE = "font-size: 24px; font-weight: bold; color: #0066b2;"
+TITLE_LABEL_STYLE = "font-size: 26px; font-weight: bold; color: #005A9C;"
 STATUS_LABEL_STYLE = "font-size: 14px; margin-top: 5px; margin-bottom: 5px;"
 INFO_LABEL_STYLE = "color: #666666; font-style: italic;"
 LINK_LABEL_STYLE = "color: #0066b2; text-decoration: none;"

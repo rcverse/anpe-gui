@@ -740,25 +740,79 @@ class SetupMainWindow(QMainWindow):
 
     def _handle_preserve_log_request(self, preserve: bool):
         """Handle the request to preserve or delete the actual installation log file."""
-        logger.debug(f"Entering _handle_preserve_log_request with preserve={preserve}")
+        logger.info(f"Signal received to handle log preservation. Preserve: {preserve}") # Changed to info for better visibility
+        
+        actual_log_file = log_filename  # Get the log filename from utils
+        logger.info(f"Log filename from utils: '{actual_log_file}'")
+
         if not preserve:
-            # Target the log file created by utils.py
-            actual_log_file = log_filename 
-            if actual_log_file and os.path.exists(actual_log_file):
-                try:
-                    os.remove(actual_log_file)
-                    print(f"Removed installation log file: {actual_log_file}")
-                    logger.info(f"Removed installation log file: {actual_log_file}")
-                except Exception as e:
-                    # Log error but don't necessarily bother the user with a popup
-                    print(f"Error removing installation log file: {e}", file=sys.stderr)
-                    logger.error(f"Error removing installation log file '{actual_log_file}': {e}")
-            elif actual_log_file:
-                logger.debug(f"Installation log file not found, skipping removal: {actual_log_file}")
-            else:
-                 logger.warning("Could not determine installation log file path from utils.")
+            logger.info("Attempting to remove installation log file.")
+            if actual_log_file and isinstance(actual_log_file, str) and actual_log_file.strip(): # Check if it's a non-empty string
+                # Convert actual_log_file to an absolute path for reliable comparison with handler.baseFilename
+                abs_actual_log_file = os.path.abspath(actual_log_file)
+                logger.info(f"Resolved absolute log file path for deletion: '{abs_actual_log_file}'")
+
+                # --- Gracefully shutdown logging to the target file ---
+                logger.info(f"Attempting to shutdown logging for file: {abs_actual_log_file}")
+                root_logger = logging.getLogger()
+                found_and_removed_handler = False
+                for handler in list(root_logger.handlers): # Iterate over a copy
+                    if isinstance(handler, logging.FileHandler):
+                        # Ensure handler.baseFilename is also absolute for comparison
+                        handler_base_filename_abs = os.path.abspath(handler.baseFilename)
+                        if handler_base_filename_abs == abs_actual_log_file:
+                            logger.info(f"Found matching FileHandler for {abs_actual_log_file}. Closing and removing it.")
+                            handler.close()
+                            root_logger.removeHandler(handler)
+                            found_and_removed_handler = True
+                            # It's possible basicConfig sets up only one FileHandler.
+                            # If multiple file handlers could point to the same file (unlikely with basicConfig),
+                            # you might not want to break here. For this scenario, breaking is likely safe.
+                            break 
+                    # The check for StreamHandler writing to a file is less common with basicConfig
+                    # but retained for completeness if custom handlers are ever added.
+                    elif isinstance(handler, logging.StreamHandler) and hasattr(handler.stream, 'name'):
+                        try:
+                            # Ensure stream name can be resolved to an absolute path if it's a file path
+                            stream_name_abs = os.path.abspath(handler.stream.name)
+                            if stream_name_abs == abs_actual_log_file:
+                                logger.info(f"Found matching StreamHandler writing to file {abs_actual_log_file}. Closing and removing it.")
+                                handler.close()
+                                root_logger.removeHandler(handler)
+                                found_and_removed_handler = True
+                                break
+                        except Exception as e:
+                            logger.debug(f"Could not compare stream name for handler {handler}: {e}")
+                
+                if found_and_removed_handler:
+                    logger.info(f"Successfully closed and removed log handler for {abs_actual_log_file}.")
+                else:
+                    logger.warning(f"No specific file handler found for {abs_actual_log_file} among root logger's handlers. This might be okay if logging was already shut down or configured differently.")
+
+                log_exists = os.path.exists(abs_actual_log_file) # Use abs_actual_log_file
+                logger.info(f"Does log file exist at '{abs_actual_log_file}' after attempting logger shutdown? {log_exists}")
+                
+                if log_exists:
+                    try:
+                        os.remove(abs_actual_log_file) # Use abs_actual_log_file
+                        # Verify removal
+                        if not os.path.exists(abs_actual_log_file): # Use abs_actual_log_file
+                            logger.info(f"Successfully removed installation log file: {abs_actual_log_file}")
+                            print(f"Successfully removed installation log file: {abs_actual_log_file}")
+                        else:
+                            logger.error(f"os.remove was called on {abs_actual_log_file}, but it still exists!")
+                            print(f"ERROR: os.remove was called on {abs_actual_log_file}, but it still exists!", file=sys.stderr)
+                    except Exception as e:
+                        print(f"Error removing installation log file: {e}", file=sys.stderr)
+                        logger.error(f"Error removing installation log file '{abs_actual_log_file}': {e}", exc_info=True) # Added exc_info
+                else:
+                    logger.warning(f"Installation log file not found at '{abs_actual_log_file}' (after logger shutdown), skipping removal.")
+            elif actual_log_file: # It has a value, but not a valid non-empty string
+                logger.error(f"Installation log file path from utils ('{actual_log_file}') is not a valid non-empty string. Cannot remove.")
+            else: # log_filename was None or empty from the start
+                 logger.error("Could not determine installation log file path from utils (log_filename is None or empty). Cannot remove.")
         else:
-            logger.info(f"Preserving installation log file ({log_filename}) as requested.")
+            logger.info(f"Preserving installation log file ('{os.path.abspath(actual_log_file) if actual_log_file else 'N/A'}') as requested.")
         logger.debug("Leaving _handle_preserve_log_request")
 
     def closeEvent(self, event):
