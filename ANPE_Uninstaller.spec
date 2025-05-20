@@ -27,9 +27,12 @@ a = Analysis([
     ],
     pathex=[],
     binaries=[], # No extra binaries needed for Tkinter
-    datas=[], # No external data files needed anymore
+    datas=[
+        ('installer/logo_data.py', '.'),  # Include logo_data.py explicitly
+    ],
     hiddenimports=[
         # Removed PIL imports as they are no longer used
+        'logo_data',  # Include our logo data module
     ],
     hookspath=[],
     hooksconfig={},

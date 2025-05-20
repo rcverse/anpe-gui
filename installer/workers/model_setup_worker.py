@@ -38,6 +38,8 @@ class ModelSetupWorker(QObject):
         self._process = None
         self._current_task = None
         self._completed_tasks = set()
+        self._processing_tasks = set()  # Track tasks in PROCESSING state
+        self._needs_action_tasks = set()  # Track tasks needing action
 
         # Define tasks to match the actual process in setup_models.py
         self._tasks = {
@@ -175,67 +177,111 @@ class ModelSetupWorker(QObject):
         """Update the active task based on log line content."""
         line_lower = line.strip().lower()
         
-        # Handle model check results - non-linear task processing
-        # Set corresponding task to PROCESSING if checking that specific model
-        if "checking spacy model" in line_lower:
-            self._set_task_status("install_spacy", TaskStatus.PROCESSING)
-        elif "checking benepar model" in line_lower:
-            self._set_task_status("install_benepar", TaskStatus.PROCESSING)
+        # Check if we need to install models
+        if "one or more models are missing" in line_lower:
+            # Mark check_models as completed
+            self._set_task_status("check_models", TaskStatus.COMPLETED)
+            self.status_update.emit("Some models need installation")
+            
+            # Use NEEDS_ACTION for models that need to be installed
+            if "spacy model not found" in line_lower or "installing spacy" in line_lower:
+                # Use NEEDS_ACTION instead of PROCESSING for initial detection
+                self._set_task_status("install_spacy", TaskStatus.NEEDS_ACTION)
+                self.status_update.emit("SpaCy model requires installation")
+            
+            if "benepar model not found" in line_lower or "installing benepar" in line_lower:
+                # Use NEEDS_ACTION instead of PROCESSING for initial detection
+                self._set_task_status("install_benepar", TaskStatus.NEEDS_ACTION)
+                self.status_update.emit("Benepar model requires installation")
+            
+            return
+            
+        # Handle model check results - broader pattern matching for specific model checks
+        if any(pattern in line_lower for pattern in ["checking spacy", "spacy model", "en_core_web"]):
+            if "install_spacy" not in self._processing_tasks and "install_spacy" not in self._completed_tasks:
+                self._set_task_status("install_spacy", TaskStatus.PROCESSING)
+                self.status_update.emit("Checking SpaCy model...")
+        
+        if any(pattern in line_lower for pattern in ["checking benepar", "benepar model", "benepar_en"]):
+            if "install_benepar" not in self._processing_tasks and "install_benepar" not in self._completed_tasks:
+                self._set_task_status("install_benepar", TaskStatus.PROCESSING)
+                self.status_update.emit("Checking Benepar model...")
             
         # Handle model presence detection
-        if "spacy model is already present" in line_lower:
+        if any(pattern in line_lower for pattern in ["spacy model is already present", "using existing spacy model"]):
             self._set_task_status("install_spacy", TaskStatus.COMPLETED)
             self.status_update.emit("SpaCy model is already installed")
             self.log_update.emit("SpaCy model found. Installation not required.")
-        elif "benepar model is already present" in line_lower:
+            
+        elif any(pattern in line_lower for pattern in ["benepar model is already present", "using existing benepar model"]):
             self._set_task_status("install_benepar", TaskStatus.COMPLETED)
             self.status_update.emit("Benepar model is already installed")
             self.log_update.emit("Benepar model found. Installation not required.")
-        # Handle model not found as normal process, not error
-        elif "spacy model not found" in line_lower:
-            # Don't mark as failed, just keep as processing
+            
+        # Model not found triggers - expanded pattern matching
+        elif any(pattern in line_lower for pattern in [
+            "spacy model not found", "need to download spacy", "missing spacy", "spacy model installation"
+        ]):
+            # If already in NEEDS_ACTION state and actual download begins, set to PROCESSING
+            if "install_spacy" in self._needs_action_tasks:
+                self._set_task_status("install_spacy", TaskStatus.PROCESSING)
+            else:
+                self._set_task_status("install_spacy", TaskStatus.NEEDS_ACTION)
             self.status_update.emit("SpaCy model needs to be downloaded")
-        elif "benepar model not found" in line_lower:
-            # Don't mark as failed, just keep as processing
+        
+        elif any(pattern in line_lower for pattern in [
+            "benepar model not found", "need to download benepar", "missing benepar", "benepar model installation"
+        ]):
+            # If already in NEEDS_ACTION state and actual download begins, set to PROCESSING
+            if "install_benepar" in self._needs_action_tasks:
+                self._set_task_status("install_benepar", TaskStatus.PROCESSING)
+            else:
+                self._set_task_status("install_benepar", TaskStatus.NEEDS_ACTION)
             self.status_update.emit("Benepar model needs to be downloaded")
             
-        # Handle model download start
-        if "downloading spacy model" in line_lower:
+        # Handle model download - expanded pattern matching - clear transition to PROCESSING
+        if any(pattern in line_lower for pattern in [
+            "downloading spacy", "install spacy", "installing spacy", "download spacy", "en_core_web"
+        ]):
+            # When download actually starts, transition from NEEDS_ACTION to PROCESSING
             self._set_task_status("install_spacy", TaskStatus.PROCESSING)
             self.status_update.emit("Downloading SpaCy (text processing) model...")
-        elif "download benepar" in line_lower:
+            
+        elif any(pattern in line_lower for pattern in [
+            "downloading benepar", "install benepar", "installing benepar", "download benepar", "benepar_en"
+        ]):
+            # When download actually starts, transition from NEEDS_ACTION to PROCESSING
             self._set_task_status("install_benepar", TaskStatus.PROCESSING)
             self.status_update.emit("Downloading Benepar (parsing) model...")
             
-        # Special case for model check: Handle 'one or more models are missing' as a normal status, not failure
-        if "one or more models are missing" in line_lower and self._current_task == "check_models":
-            # Mark check_models as completed (not failed) and we'll track individual model tasks separately
-            self._set_task_status("check_models", TaskStatus.COMPLETED)
-            self.status_update.emit("Some models need installation")
-            return
-            
-        # Check for error messages first
+        # Check for error messages first - with broader pattern matching
         if any(err in line_lower for err in ["error", "failed", "exception", "critical"]):
-            # Identify which task this error applies to
-            if "spacy" in line_lower and "install_spacy" in self._tasks:
+            if any(model in line_lower for model in ["spacy", "en_core_web"]) and "install_spacy" in self._tasks:
                 self._set_task_status("install_spacy", TaskStatus.FAILED)
-            elif "benepar" in line_lower and "install_benepar" in self._tasks:
+            elif any(model in line_lower for model in ["benepar", "benepar_en"]) and "install_benepar" in self._tasks:
                 self._set_task_status("install_benepar", TaskStatus.FAILED)
             elif self._current_task:
                 # Default fallback if we can't identify the specific model
                 self._set_task_status(self._current_task, TaskStatus.FAILED)
             return
             
-        # Check for successful installation messages
-        if "successfully downloaded and verified spacy model" in line_lower:
+        # Check for successful installation messages - with broader pattern matching
+        if any(pattern in line_lower for pattern in [
+            "successfully downloaded spacy", "spacy model installed", "successfully installed spacy"
+        ]):
             self._set_task_status("install_spacy", TaskStatus.COMPLETED)
             self.status_update.emit("SpaCy model installed successfully")
-        elif "successfully downloaded and verified benepar model" in line_lower:
+            
+        elif any(pattern in line_lower for pattern in [
+            "successfully downloaded benepar", "benepar model installed", "successfully installed benepar"
+        ]):
             self._set_task_status("install_benepar", TaskStatus.COMPLETED)
             self.status_update.emit("Benepar model installed successfully")
             
         # Check for overall completion
-        if "model setup process completed successfully" in line_lower:
+        if any(pattern in line_lower for pattern in [
+            "model setup process completed", "all models installed", "setup complete"
+        ]):
             # Complete any remaining tasks
             for task_id in self._tasks:
                 if task_id not in self._completed_tasks:
@@ -293,26 +339,45 @@ class ModelSetupWorker(QObject):
         """
         if task_id not in self._tasks:
             return
+        
+        # Don't change status if already completed (avoid regressing)
+        if task_id in self._completed_tasks and status in [TaskStatus.PROCESSING, TaskStatus.NEEDS_ACTION]:
+            return
             
-        # Update task status
+        # Update task status through signal
         self.task_status_update.emit(task_id, status)
         
-        # Track current task
+        # Track current task and various status sets
         if status == TaskStatus.PROCESSING:
             self._current_task = task_id
+            self._processing_tasks.add(task_id)
+            self._needs_action_tasks.discard(task_id)  # Remove from needs_action when processing
             
             # Update status message when changing tasks
             task_name = self._tasks[task_id]
             if task_id == "check_models":
                 self.status_update.emit("Checking for language models...")
             elif task_id == "install_spacy":
-                self.status_update.emit("Downloading spaCy (text processing) model...")
+                self.status_update.emit("Processing spaCy model...")
             elif task_id == "install_benepar":
-                self.status_update.emit("Downloading Benepar (parsing) model...")
+                self.status_update.emit("Processing Benepar model...")
+            
+        # Track needs action tasks
+        elif status == TaskStatus.NEEDS_ACTION:
+            self._needs_action_tasks.add(task_id)
+            self._processing_tasks.discard(task_id)
+            
+            # Update status message for tasks needing action
+            if task_id == "install_spacy":
+                self.status_update.emit("SpaCy model requires installation")
+            elif task_id == "install_benepar":
+                self.status_update.emit("Benepar model requires installation")
             
         # Track completed tasks
-        if status == TaskStatus.COMPLETED:
+        elif status == TaskStatus.COMPLETED:
             self._completed_tasks.add(task_id)
+            self._processing_tasks.discard(task_id)
+            self._needs_action_tasks.discard(task_id)
             
             # Update status message for completed tasks
             if task_id == "check_models":
@@ -324,6 +389,8 @@ class ModelSetupWorker(QObject):
                 
         elif status == TaskStatus.FAILED:
             self._completed_tasks.discard(task_id)
+            self._processing_tasks.discard(task_id)
+            self._needs_action_tasks.discard(task_id)
             
             # Update status message for failed tasks
             if task_id == "check_models":

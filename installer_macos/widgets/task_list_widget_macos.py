@@ -19,6 +19,7 @@ class TaskStatus:
     PROCESSING = 1
     COMPLETED = 2
     FAILED = 3
+    NEEDS_ACTION = 4  # New status for tasks requiring further action
 
 class TaskItemMacOS(QWidget): # Renamed
     """A widget representing a single task with status indicator (macOS styled)."""
@@ -89,15 +90,45 @@ class TaskItemMacOS(QWidget): # Renamed
                     self.status_icon.setText("✓"); self.status_icon.setStyleSheet("color: #3B7D23; font-weight: bold;")
             except Exception: # Fallback if get_resource_path fails
                 self.status_icon.setText("✓"); self.status_icon.setStyleSheet("color: #3B7D23; font-weight: bold;")
-
+                
+        elif status == TaskStatus.NEEDS_ACTION:
+            # Use black text to make it stand out from pending tasks
+            self.task_label.setStyleSheet(f"color: #333333; font-weight: normal; {base_style}")
+            
+            # Add an info icon or special indicator if desired
+            try:
+                # Try to use info.png icon if available
+                info_icon_path_obj = _get_bundled_resource_path_macos("info.png")
+                info_icon_path = str(info_icon_path_obj) if info_icon_path_obj else None
+                if info_icon_path and os.path.exists(info_icon_path):
+                    pixmap = QPixmap(info_icon_path)
+                    if not pixmap.isNull():
+                        self.status_icon.setPixmap(pixmap.scaled(16, 16, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+                    else:
+                        # Text fallback if icon load fails
+                        self.status_icon.setText("i")
+                        self.status_icon.setStyleSheet("color: #005A9C; font-weight: bold;")
+                else:
+                    # Text fallback if icon not found
+                    self.status_icon.setText("i")
+                    self.status_icon.setStyleSheet("color: #005A9C; font-weight: bold;")
+            except Exception: # Fallback if get_resource_path fails
+                self.status_icon.setText("i")
+                self.status_icon.setStyleSheet("color: #005A9C; font-weight: bold;")
+                
+            # ONLY set text if status_text is provided and different from current
+            if status_text and self.task_label.text() != status_text:
+                logger.debug(f"TaskItem {self._task_name}: Setting label text to '{status_text}'")
+                self.task_label.setText(status_text)
+                
         elif status == TaskStatus.FAILED:
             original_text = self.task_label.text()
             # Special case check (adjust if needed)
-            if "checking model presence" in original_text.lower(): 
+            if "checking model presence" in original_text.lower() or "check" in self._task_name.lower(): 
                  self.task_label.setText("Models need installation")
-                 self.task_label.setStyleSheet(f"color: #888888; font-weight: normal; {base_style}") 
-                 self.status_icon.clear() 
-                 return 
+                 # Use NEEDS_ACTION styling instead of custom styling
+                 self.update_status(TaskStatus.NEEDS_ACTION, "Models need installation")
+                 return # Skip the rest of the FAILED styling
 
             # Apply standard FAILED styling for other failures
             self.task_label.setStyleSheet(f"color: #DD3333; font-weight: normal; {base_style}") 

@@ -101,6 +101,9 @@ class ModelsPage(QWidget):
         self.status_check_thread = None   # <<< ADDED Status Check Worker Thread
         self.status_check_worker = None   # <<< ADDED Status Check Worker
         
+        # Add a timer for debouncing refresh_status calls
+        self._pending_refresh_timer = None
+        
         self.status_labels = {} # key: full_model_name, value: QLabel
         
         # For log dialog
@@ -601,14 +604,33 @@ class ModelsPage(QWidget):
 
     @pyqtSlot()
     def refresh_status(self):
-        """Starts the asynchronous check for model statuses."""
+        """Debounced method to start the asynchronous check for model statuses."""
+        # If a worker is already running, log warning and return
         if self.is_worker_running():
             logging.warning("ModelsPage: refresh_status called while another worker is running.")
-            # Optionally provide feedback, e.g., flash the status label
-            # self.model_action_status_label.setText("Operation already in progress...")
-            # QTimer.singleShot(2000, lambda: self.model_action_status_label.setText("Previous status message...")) # Restore after delay
-            return # Don't start a new check if one is running
+            return 
 
+        # Cancel any pending refresh timer
+        if self._pending_refresh_timer is not None and self._pending_refresh_timer.isActive():
+            logging.debug("ModelsPage: Cancelling pending refresh timer")
+            self._pending_refresh_timer.stop()
+            self._pending_refresh_timer = None
+
+        # Create a new timer for the actual refresh with debouncing
+        self._pending_refresh_timer = QTimer()
+        self._pending_refresh_timer.setSingleShot(True)
+        self._pending_refresh_timer.timeout.connect(self._do_refresh_status)
+        logging.debug("ModelsPage: Starting debounced refresh timer (50ms)")
+        self._pending_refresh_timer.start(50)  # 50ms debounce time
+
+    def _do_refresh_status(self):
+        """Actual implementation of status refresh, called after debounce."""
+        logging.debug("ModelsPage: Executing debounced refresh_status")
+        
+        # Clear the timer reference
+        self._pending_refresh_timer = None
+        
+        # Original refresh_status implementation
         logging.debug("ModelsPage: Starting asynchronous status refresh.")
         self.model_action_status_label.setText("Refreshing status...")
         self._set_buttons_enabled(False) # Disable buttons during check
@@ -640,7 +662,6 @@ class ModelsPage(QWidget):
         # Use lambda functions to ensure the correct context for setattr
         self.status_check_worker.finished.connect(lambda: setattr(self, 'status_check_worker', None))
         self.status_check_thread.finished.connect(lambda: setattr(self, 'status_check_thread', None))
-
 
         self.status_check_thread.start()
 
@@ -695,6 +716,19 @@ class ModelsPage(QWidget):
         else:
             # If another worker started *while* the check was running, keep buttons disabled
             logging.warning("ModelsPage: Another worker appears to be running after status check finished. Keeping buttons disabled.")
+
+        # --- Pass status data to MainWindow through parent SettingsDialog ---
+        # Find the SettingsDialog parent by traversing the widget hierarchy
+        parent_widget = self
+        while parent_widget:
+            parent_widget = parent_widget.parent()
+            if parent_widget and isinstance(parent_widget, SettingsDialog):
+                logging.debug("ModelsPage: Emitting models_changed signal with status data to MainWindow")
+                parent_widget.models_changed.emit(status_data)
+                break
+        else:
+            logging.warning("ModelsPage: Parent SettingsDialog not found in widget hierarchy, can't emit models_changed with status")
+        # --------------------------------------------------------------
 
         # --- Schedule deletion for the original worker/thread objects ---
         # This happens after the slot finishes, ensuring they aren't needed anymore.
@@ -836,14 +870,8 @@ class ModelsPage(QWidget):
                     msg_box.setWindowTitle("Installation Successful - Restart Required")
                     msg_box.setIcon(QMessageBox.Icon.Information)
 
-                    text = (f"The spaCy model '<b>{full_model_name}</b>' has been installed successfully.<br><br>" 
+                    text = (f"The spaCy model '<b>{full_model_name}</b>' has been installed successfully.<br>" 
                            "ANPE Studio must be restarted to fully activate and use this model.<br><br>" 
-                           "<b>Important Note regarding potential warnings:</b><br>" 
-                           "After installation, if you observe a warning in the ANPE Studio console similar to: <br>" 
-                           f"<code>&nbsp;&nbsp;[WARNING] An unexpected error occurred while trying to load spaCy model '{full_model_name}': " 
-                           "[E002] Can't find factory for 'curated_transformer'...</code><br>" 
-                           "This typically occurs because the application needs a full restart to correctly load all new components for the model. " 
-                           "Restarting ANPE Studio should resolve this issue.<br><br>" 
                            "Please save any unsaved work before restarting.")
 
                     msg_box.setTextFormat(Qt.TextFormat.RichText)
@@ -931,9 +959,9 @@ class ModelsPage(QWidget):
         else:
             logging.warning("on_model_action_finished: Keeping buttons disabled as another worker is active.")
             
-        # Signal that models *might* have changed (parent can decide to refresh if needed)
-        logging.debug("Emitting models_changed signal after model action.")
-        self.models_changed.emit() 
+        # Trigger a refresh to update UI immediately and get status to share with MainWindow
+        logging.debug("Triggering refresh status after model action.")
+        QTimer.singleShot(0, self.refresh_status)
         # ----------------------------------------------------
 
         logging.debug("on_model_action_finished completed.")
@@ -1115,10 +1143,7 @@ class ModelsPage(QWidget):
         else:
             logging.warning("on_clean_finished: Keeping buttons disabled as another worker is active.")
 
-        # Signal that models *might* have changed
-        logging.debug("Emitting models_changed signal after clean.")
-        self.models_changed.emit()
-        # --- Trigger refresh to update UI ---
+        # --- Trigger refresh to update UI and get status to share with MainWindow ---
         logging.debug("Triggering refresh status after clean action.")
         QTimer.singleShot(0, self.refresh_status)
         # ------------------------------------
@@ -1292,10 +1317,7 @@ class ModelsPage(QWidget):
         else:
             logging.warning("on_install_defaults_finished: Keeping buttons disabled as another worker is active.")
 
-        # Signal that models *might* have changed
-        logging.debug("Emitting models_changed signal after install defaults.")
-        self.models_changed.emit()
-        # --- Trigger refresh to update UI ---
+        # --- Trigger refresh to update UI and get status to share with MainWindow ---
         logging.debug("Triggering refresh status after install defaults action.")
         QTimer.singleShot(0, self.refresh_status)
         # ------------------------------------
@@ -1482,6 +1504,7 @@ class ModelsPage(QWidget):
         # else:
         #     logging.debug(f"is_worker_running: install={install_active}, clean={clean_active}, defaults={defaults_active}, status={status_check_active} -> {running}")
         return running
+
 
     def _update_button_after_action(self, action: str, alias: Optional[str], success: bool):
         """Update the specific button(s) involved in the last model action, or trigger refresh."""
@@ -2430,8 +2453,8 @@ class AboutPage(QWidget):
 class SettingsDialog(QDialog):
     """Dialog window for managing ANPE settings."""
 
-    # Signal emitted when an action might require the main window to re-check things
-    models_changed = pyqtSignal() 
+    # Signal emitted when an action might require the main window to update status
+    models_changed = pyqtSignal(dict)  # Now includes complete status data
     # Signal emitted if model usage preference changes
     model_usage_changed = pyqtSignal() 
     restart_application_requested = pyqtSignal() # ADDED FOR RESTART FUNCTIONALITY
@@ -2643,6 +2666,16 @@ class SettingsDialog(QDialog):
                 # Log the error but don't assume worker is active, to prevent blocking close indefinitely
                 logging.error(f"Error checking AboutPage worker status in closeEvent: {e}")
                 about_page_worker_active = False # Default to false on error here
+
+        # Clean up the debounce timer if it exists
+        if self.models_page and hasattr(self.models_page, '_pending_refresh_timer') and self.models_page._pending_refresh_timer is not None:
+            try:
+                if self.models_page._pending_refresh_timer.isActive():
+                    logging.debug("SettingsDialog: Stopping pending refresh timer during close")
+                    self.models_page._pending_refresh_timer.stop()
+                self.models_page._pending_refresh_timer = None
+            except Exception as e:
+                logging.error(f"Error cleaning up debounce timer: {e}")
 
         if model_worker_active or core_worker_active or about_page_worker_active:
             logging.warning("Attempted to close SettingsDialog while worker thread is running.")

@@ -14,6 +14,7 @@ class TaskStatus:
     PROCESSING = 1
     COMPLETED = 2
     FAILED = 3
+    NEEDS_ACTION = 4  # New status for tasks requiring further action
 
 class TaskItem(QFrame):
     """A widget representing a single task with status indicator."""
@@ -54,9 +55,11 @@ class TaskItem(QFrame):
         # Update label style based on status
         if status == TaskStatus.PENDING:
             self.task_label.setStyleSheet("color: #888888; font-weight: normal; font-size: 14px;") # Grey out pending
+            
         elif status == TaskStatus.PROCESSING:
             self.task_label.setStyleSheet("color: #005A9C; font-weight: bold; font-size: 14px;")
             # Maybe add a spinner/busy indicator later?
+            
         elif status == TaskStatus.COMPLETED:
             self.task_label.setStyleSheet("color: #3B7D23; font-weight: normal; font-size: 14px;") # Green text for success
             # Load success icon using QPixmap
@@ -73,13 +76,33 @@ class TaskItem(QFrame):
                 # Fallback if icon not found
                 self.status_icon.setText("✓")
                 self.status_icon.setStyleSheet("color: #3B7D23; font-weight: bold;")
+                
+        elif status == TaskStatus.NEEDS_ACTION:
+            # Use black text to make it stand out from pending tasks
+            self.task_label.setStyleSheet("color: #333333; font-weight: normal; font-size: 14px;")
+            
+            # Add an info icon or special indicator if desired
+            info_icon_path = get_resource_path("assets/info.png")  # Use info icon if available
+            if os.path.exists(info_icon_path):
+                pixmap = QPixmap(info_icon_path)
+                if not pixmap.isNull():
+                    self.status_icon.setPixmap(pixmap.scaled(16, 16, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+                else:
+                    # Text fallback if icon load fails
+                    self.status_icon.setText("i")
+                    self.status_icon.setStyleSheet("color: #005A9C; font-weight: bold;")
+            else:
+                # Text fallback if icon not found
+                self.status_icon.setText("i")
+                self.status_icon.setStyleSheet("color: #005A9C; font-weight: bold;")
+                
         elif status == TaskStatus.FAILED:
             # Special case: Model check 'failure' is expected if not installed
             # Use self._task_name for robustness, as self.task_label.text() might have been modified.
             if "checking model presence" in self._task_name.lower():
                 self.task_label.setText("Models need installation")
-                self.task_label.setStyleSheet("color: #888888; font-weight: normal; font-size: 14px;") # Neutral (like PENDING)
-                self.status_icon.clear() # No icon for this state
+                # Use NEEDS_ACTION styling instead of custom styling
+                self.update_status(TaskStatus.NEEDS_ACTION)
                 return # Skip the rest of the FAILED styling
 
             # Apply standard FAILED styling for other failures
@@ -144,6 +167,10 @@ class TaskItem(QFrame):
                 self.task_label.setText(f"Upgraded {text[10:]}")
             elif text.lower().startswith("copying "):
                 self.task_label.setText(f"Copied {text[8:]}")
+        elif status == TaskStatus.NEEDS_ACTION:
+            # For NEEDS_ACTION, we would usually set a specific text explaining what action is needed
+            # But we'll assume the text has already been set before calling update_status
+            pass
         elif status == TaskStatus.FAILED:
             # Prefix with "Failed: " except for specific cases
             text = self.task_label.text()

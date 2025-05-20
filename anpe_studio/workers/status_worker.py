@@ -46,6 +46,9 @@ class ModelStatusChecker(QObject):
             # Determine if core models are present
             has_spacy = len(status['spacy_models']) > 0
             has_benepar = len(status['benepar_models']) > 0
+            
+            # Debug log for troubleshooting
+            logging.debug(f"ModelStatusChecker: Model detection results - spaCy: {has_spacy} (models={status['spacy_models']}), Benepar: {has_benepar} (models={status['benepar_models']})")
 
             if not (has_spacy and has_benepar): 
                 missing = []
@@ -57,10 +60,12 @@ class ModelStatusChecker(QObject):
                 logging.warning(f"ModelStatusChecker: {warning_msg}")
                 # Emit status_checked even with missing models, let receiver decide how to handle
                 self.progress_update.emit('complete')
+                logging.info(f"Background status check complete: {status}")
                 self.status_checked.emit(status)
             else:
                 logging.info("ModelStatusChecker: All required models/data found.")
                 self.progress_update.emit('complete')
+                logging.info(f"Background status check complete: {status}")
                 self.status_checked.emit(status) # Emit successful status
 
         except ImportError as ie:

@@ -21,6 +21,7 @@ class QtLogHandler(logging.Handler, QObject):
         """
         logging.Handler.__init__(self)
         QObject.__init__(self)
+        self._pending_restart_models = set() # Added to store models needing restart
         
         # Set formatter
         formatter = logging.Formatter('%(levelname)s: %(message)s')
@@ -42,4 +43,4 @@ class QtLogHandler(logging.Handler, QObject):
         except Exception as e:
             # Fall back to stderr if something goes wrong
             print(f"Error in log handler: {e}", file=sys.stderr)
-            print(record.getMessage(), file=sys.stderr) 
+            print(record.getMessage(), file=sys.stderr)

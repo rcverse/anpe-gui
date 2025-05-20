@@ -182,7 +182,7 @@ class MainWindow(QMainWindow):
         if initial_error:
             # Handle initialization error state
             status_type = 'warning' if initial_error.startswith("Missing required models:") else 'error'
-            status_message = f"{initial_error}. Use 'Manage Models' (gear icon) to install." if status_type == 'warning' else f"ANPE Initialization Failed! {initial_error}"
+            status_message = f"{initial_error}. Go to settings to install." if status_type == 'warning' else f"ANPE Initialization Failed! {initial_error}"
             self.status_bar.showMessage(status_message, 0, status_type=status_type)
             # Process button will remain disabled (default state)
             # Settings button should be enabled (default state after setup_ui)
@@ -213,7 +213,7 @@ class MainWindow(QMainWindow):
                 if not has_spacy: missing.append("spaCy")
                 if not has_benepar: missing.append("Benepar")
                 status_type = 'warning'
-                status_message = f"Missing required models: {', '.join(missing)}. Use 'Manage Models' (gear icon) to install."
+                status_message = f"Missing required models: {', '.join(missing)}. Go to settings to install."
                 self.status_bar.showMessage(status_message, 0, status_type=status_type) 
                 if hasattr(self, 'process_button'): self.process_button.setEnabled(False)
                 logging.warning("MainWindow initialized, but required models are missing.")
@@ -727,7 +727,7 @@ class MainWindow(QMainWindow):
         """)
         self.process_button.clicked.connect(self.start_processing)
         # Add tooltip to explain disabled state
-        self.process_button.setToolTip("Process the input text or files. \\n(Disabled if initializing, processing, or models are missing - check Status Bar)")
+        self.process_button.setToolTip("Process the input text or files.")
         process_reset_layout.addWidget(self.process_button)
         
         self.input_layout.addLayout(process_reset_layout)
@@ -964,8 +964,7 @@ class MainWindow(QMainWindow):
                 QMessageBox.warning(self, "No Input", "Please select at least one file.")
                 return
             # 3. Run Batch Processing
-            self.log_panel.clear_log() # Clear log for new run
-            log_message = f"Starting batch processing for {len(files)} files..."
+            log_message = f">>>> Processing {len(files)} files..."
             self.log(log_message)
             status_type = 'busy'
             status_message = f"Processing {len(files)} files..."
@@ -982,8 +981,7 @@ class MainWindow(QMainWindow):
                 QMessageBox.warning(self, "No Input", "Please enter text to process.")
                 return
             # 3. Run Single Processing
-            self.log_panel.clear_log() # Clear log for new run
-            self.log("Starting single text processing...")
+            self.log(">>>> Starting single text processing...")
             status_type = 'busy'
             status_message = "Processing text..."
             # Get preferences from the config dict
@@ -1579,42 +1577,42 @@ class MainWindow(QMainWindow):
                 "ANPE Studio needs to be restarted. Please close and relaunch the application manually." # ADDED
             ) # ADDED
 
-    def on_models_changed(self):
+    def on_models_changed(self, status_dict):
         """Slot called when models might have changed via the management dialog."""
-        logging.info("Models may have changed via dialog. Re-evaluating state synchronously...")
-        self.status_bar.showMessage("Settings updated. Re-evaluating readiness...", 3000, status_type='info')
-
-        # --- Perform status check in background --- 
-        # Disable buttons during check
-        if hasattr(self, 'process_button'): self.process_button.setEnabled(False)
-        if hasattr(self, 'model_manage_button'): self.model_manage_button.setEnabled(False)
-        # self.status_bar.showMessage("Checking model status...", status_type='busy') # OLD
-        self.status_bar.set_checking() # NEW - Assumes StatusBar will have this method
+        logging.info(f"Models changed via dialog. Received status data: {status_dict}")
+        self.status_bar.showMessage("Model status updated...", 3000, status_type='info')
         
-        # Create and run worker
-        self.status_check_thread = QThread()
-        # self.status_check_worker = StatusCheckWorker() # OLD
-        self.status_check_worker = ModelStatusChecker() # NEW
-        self.status_check_worker.moveToThread(self.status_check_thread)
+        # Store the received model status
+        self.model_status = status_dict
         
-        # Connect signals
-        # self.status_check_worker.finished.connect(self.on_status_check_finished) # OLD
-        # self.status_check_worker.error.connect(self.on_status_check_error) # OLD
-        self.status_check_worker.status_checked.connect(self.on_status_check_finished) # NEW
-        self.status_check_worker.error_occurred.connect(self.on_status_check_error) # NEW
-        self.status_check_thread.started.connect(self.status_check_worker.run)
+        # Determine if extractor is ready based on model presence
+        has_spacy = len(status_dict.get('spacy_models', [])) > 0
+        has_benepar = len(status_dict.get('benepar_models', [])) > 0
+        self.extractor_ready = has_spacy and has_benepar
         
-        # Cleanup
-        # self.status_check_worker.finished.connect(self.status_check_thread.quit) # OLD
-        # self.status_check_worker.error.connect(self.status_check_thread.quit) # OLD
-        self.status_check_worker.status_checked.connect(self.status_check_thread.quit) # NEW
-        self.status_check_worker.error_occurred.connect(self.status_check_thread.quit) # NEW
-        self.status_check_thread.finished.connect(self.status_check_thread.deleteLater)
-        # REMOVE these lines: Worker deleteLater is handled inside the finished/error slots now
-        # self.status_check_worker.status_checked.connect(self.status_check_worker.deleteLater) # NEW
-        # self.status_check_worker.error_occurred.connect(self.status_check_worker.deleteLater) # NEW
+        # Update UI based on status 
+        error = status_dict.get('error')
+        if error:
+            status_type = 'warning' if error.startswith("Missing required models:") else 'error'
+            status_message = f"{error}. Go to settings to install." if status_type == 'warning' else f"Error: {error}"
+            self.status_bar.showMessage(status_message, 0, status_type=status_type)
+        else:
+            if self.extractor_ready:
+                self.status_bar.showMessage("ANPE Ready", 3000, status_type='ready')
+            else:
+                missing = []
+                if not has_spacy: missing.append("spaCy")
+                if not has_benepar: missing.append("Benepar")
+                status_message = f"Missing required models: {', '.join(missing)}. Go to settings to install."
+                self.status_bar.showMessage(status_message, 0, status_type='warning')
         
-        self.status_check_thread.start()
+        # Update Process button state
+        if hasattr(self, 'process_button'): 
+            self.process_button.setEnabled(self.extractor_ready)
+            
+        # Ensure model manage button is enabled
+        if hasattr(self, 'model_manage_button'):
+            self.model_manage_button.setEnabled(True)
 
     @pyqtSlot(dict) # New slot for successful status check 
     def on_status_check_finished(self, status_dict):
@@ -1632,15 +1630,6 @@ class MainWindow(QMainWindow):
         # --- Update UI based on status_dict --- 
         self.model_status = status_dict # Update stored status
 
-        # --- Clear pending restart status for successfully loaded models ---
-        if hasattr(self, 'qt_log_handler_instance') and self.qt_log_handler_instance and 'spacy_models' in status_dict:
-            for model_name in status_dict['spacy_models']:
-                try:
-                    self.qt_log_handler_instance.clear_pending_restart_status_for_model(model_name)
-                except Exception as e:
-                    logging.error(f"Error clearing pending restart status for model {model_name} in log handler: {e}")
-        # -------------------------------------------------------------------
-
         # Update extractor readiness and UI state
         has_spacy = len(status_dict.get('spacy_models', [])) > 0
         has_benepar = len(status_dict.get('benepar_models', [])) > 0
@@ -1649,7 +1638,7 @@ class MainWindow(QMainWindow):
         
         # Show final message (clear_progress will override label text, so showMessage is less critical here)
         final_status_type = 'ready' if self.extractor_ready else 'warning'
-        final_message = "ANPE Ready" if self.extractor_ready else f"Missing required models: {', '.join(m for m, h in [('spaCy', has_spacy), ('Benepar', has_benepar)] if not h)}. Use 'Manage Models' to install."
+        final_message = "ANPE Ready" if self.extractor_ready else f"Missing required models: {', '.join(m for m, h in [('spaCy', has_spacy), ('Benepar', has_benepar)] if not h)}. Go to settings to install."
         self.status_bar.showMessage(final_message, 0 if final_status_type == 'warning' else 3000, status_type=final_status_type)
 
         if hasattr(self, 'process_button'): self.process_button.setEnabled(self.extractor_ready)

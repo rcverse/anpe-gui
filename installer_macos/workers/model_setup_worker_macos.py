@@ -41,6 +41,8 @@ class ModelSetupWorkerMacOS(QObject):
         self._current_task_id = None # Keep track of overall phase (spacy/benepar)
         self._active_task_id = None # Specific task ID for status updates (spacy_model/benepar_model)
         self._completed_tasks = set() # Tracks completed task IDs
+        self._processing_tasks = set() # Tracks tasks in PROCESSING state
+        self._needs_action_tasks = set() # Tracks tasks in NEEDS_ACTION state
         self._error_message = "" # Store last significant error
         
         # Define GRANULAR tasks
@@ -225,14 +227,20 @@ class ModelSetupWorkerMacOS(QObject):
                 self._advance_to_next_task()
                 if status_to_emit: self.status_update.emit(status_to_emit or "spaCy model found.")
             elif "spacy model not found" in line_lower: # Explicit not found
-                self._set_task_status("check_spacy", TaskStatus.COMPLETED, "spaCy model not found, proceeding to install.")
+                self._set_task_status("check_spacy", TaskStatus.COMPLETED, "spaCy model not found.")
+                # Set install task to NEEDS_ACTION instead of directly proceeding to install
+                self._set_task_status("install_spacy", TaskStatus.NEEDS_ACTION, "spaCy model needs to be installed")
                 self._advance_to_next_task() # Moves to install_spacy
-                if status_to_emit: self.status_update.emit(status_to_emit or "spaCy model not found, attempting download.")
+                if status_to_emit: self.status_update.emit(status_to_emit or "spaCy model not found, installation needed.")
             # If "not found" is part of a download attempt, install_spacy will pick it up
 
         # --- SpaCy Install ---
         elif self._active_task_id == "install_spacy":
+            # If task is in NEEDS_ACTION state and actual download begins, update to PROCESSING
             if "installing spacy model" in line_lower or "downloading spacy model" in line_lower or "en_core_web_" in line_lower:
+                if "install_spacy" in self._needs_action_tasks:
+                    # Clear NEEDS_ACTION state when starting actual download
+                    self._needs_action_tasks.discard("install_spacy")
                 self._set_task_status("install_spacy", TaskStatus.PROCESSING, "Installing spaCy model...")
                 if status_to_emit: self.status_update.emit(status_to_emit)
             elif "successfully downloaded and verified spacy model" in line_lower or "spacy model installed successfully" in line_lower:
@@ -252,13 +260,19 @@ class ModelSetupWorkerMacOS(QObject):
                 self._advance_to_next_task()
                 if status_to_emit: self.status_update.emit(status_to_emit or "Benepar model found.")
             elif "benepar model not found" in line_lower: # Explicit not found
-                self._set_task_status("check_benepar", TaskStatus.COMPLETED, "Benepar model not found, proceeding to install.")
+                self._set_task_status("check_benepar", TaskStatus.COMPLETED, "Benepar model not found.")
+                # Set install task to NEEDS_ACTION instead of directly proceeding to install
+                self._set_task_status("install_benepar", TaskStatus.NEEDS_ACTION, "Benepar model needs to be installed")
                 self._advance_to_next_task() # Moves to install_benepar
-                if status_to_emit: self.status_update.emit(status_to_emit or "Benepar model not found, attempting download.")
+                if status_to_emit: self.status_update.emit(status_to_emit or "Benepar model not found, installation needed.")
 
         # --- Benepar Install ---
         elif self._active_task_id == "install_benepar":
+            # If task is in NEEDS_ACTION state and actual download begins, update to PROCESSING
             if "installing benepar model" in line_lower or "downloading benepar model" in line_lower or "benepar_en" in line_lower:
+                if "install_benepar" in self._needs_action_tasks:
+                    # Clear NEEDS_ACTION state when starting actual download
+                    self._needs_action_tasks.discard("install_benepar")
                 self._set_task_status("install_benepar", TaskStatus.PROCESSING, "Installing Benepar model...")
                 if status_to_emit: self.status_update.emit(status_to_emit)
             elif "successfully downloaded and verified benepar model" in line_lower or "benepar model installed successfully" in line_lower:
@@ -268,6 +282,9 @@ class ModelSetupWorkerMacOS(QObject):
         
         # Fallback for general download messages if not caught by specific model install
         elif "downloading model file" in line_lower and self._active_task_id and "install" in self._active_task_id:
+            # Always transition from NEEDS_ACTION to PROCESSING when actual download starts
+            if self._active_task_id in self._needs_action_tasks:
+                self._needs_action_tasks.discard(self._active_task_id)
             self._set_task_status(self._active_task_id, TaskStatus.PROCESSING, f"Downloading: {current_task_description}...")
             if status_to_emit: self.status_update.emit(status_to_emit)
 
@@ -400,15 +417,30 @@ class ModelSetupWorkerMacOS(QObject):
         if task_id not in self._tasks:
             logger.warning(f"Attempted to set status for unknown task_id: {task_id}")
             return
-                
+        
+        # Don't change status if already completed
+        if task_id in self._completed_tasks and status != TaskStatus.COMPLETED:
+            logger.debug(f"Task {task_id} is already completed, not changing to {status}")
+            return
+            
         # Emit signal for UI update (TaskItemMacOS will handle the text display)
         self.task_status_update.emit(task_id, status, status_text)
 
-        # Track completion state
-        if status == TaskStatus.COMPLETED:
+        # Track task state in appropriate collections
+        if status == TaskStatus.PROCESSING:
+            self._processing_tasks.add(task_id)
+            self._needs_action_tasks.discard(task_id)
+        elif status == TaskStatus.NEEDS_ACTION:
+            self._needs_action_tasks.add(task_id)
+            self._processing_tasks.discard(task_id)
+        elif status == TaskStatus.COMPLETED:
             self._completed_tasks.add(task_id)
+            self._processing_tasks.discard(task_id)
+            self._needs_action_tasks.discard(task_id)
         elif status == TaskStatus.FAILED:
             self._completed_tasks.discard(task_id) 
+            self._processing_tasks.discard(task_id)
+            self._needs_action_tasks.discard(task_id)
 
     def _mark_all_tasks_failed(self):
         """Mark all defined tasks as failed if they aren't completed."""

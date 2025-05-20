@@ -623,9 +623,12 @@ class SetupMainWindow(QMainWindow):
 
             # Register application and uninstaller link, passing the verified shortcut paths
             self._register_app_and_create_uninstaller(install_root_abs, icon_path_abs, final_desktop_path, final_startmenu_path)
+            
+            # Refresh the desktop to make shortcuts immediately visible
+            self._refresh_desktop()
 
             print("Shortcut creation, renaming, and registration process completed.")
-            logger.debug("make_shortcut, rename operations, and registry calls completed successfully.")
+            logger.debug("make_shortcut, rename operations, registry calls completed successfully.")
         except Exception as e:
             print(f"make_shortcut or subsequent operations failed: {e}")
             import traceback
@@ -690,6 +693,21 @@ class SetupMainWindow(QMainWindow):
             traceback.print_exc()
             QMessageBox.warning(self, "Registration Error", f"Failed to register application components.\nError: {e}")
             # Continue without failing - this is an optional part of the installation
+
+    def _refresh_desktop(self):
+        """Refresh the Windows desktop to make new shortcuts immediately visible."""
+        try:
+            import ctypes
+            # Use SHChangeNotify to tell the Windows shell that we've made changes
+            # SHCNE_ASSOCCHANGED is a general refresh notification
+            SHCNE_ASSOCCHANGED = 0x08000000
+            SHCNF_IDLIST = 0
+            ctypes.windll.shell32.SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, None, None)
+            logger.info("Desktop refresh notification sent successfully")
+            print("Desktop refreshed to show new shortcuts.")
+        except Exception as e:
+            logger.error(f"Failed to refresh desktop: {e}", exc_info=True)
+            print(f"Note: Could not refresh desktop view: {e}")
 
     def _launch_anpe(self, launch: bool):
         """Handle the request to launch ANPE by running anpe.exe."""
