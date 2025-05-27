@@ -271,3 +271,6 @@ Uninstalling the application requires two steps:
 2.  **Delete Application Support Data:** Manually navigate to `~/Library/Application Support/` (In Finder, use Go -> Go to Folder... and enter `~/Library/Application Support/`) and delete the `ANPE GUI` directory. This removes the downloaded Python environment, dependencies, and models.
 
 *(Note: Standard macOS applications do not typically have dedicated uninstallers; users are expected to delete the .app and potentially clean up Application Support data manually).* 
+
+
+create-dmg --volname "ANPE Studio Installer" --volicon "/Volumes/Mac Data/anpe_gui/anpe-gui/installer_assets/VolumeIcon.icns" --background "/Volumes/Mac Data/anpe_gui/anpe-gui/installer_assets/background.png" --window-pos 200 120 --window-size 600 400 --icon-size 100 --text-size 12 --icon "ANPE Studio.app" 150 180 --hide-extension "ANPE Studio.app" --app-drop-link 450 180 --icon "Extras" 100 500 "ANPE_Studio_Installer.dmg" "dmg_staging/"
